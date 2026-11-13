@@ -17,11 +17,10 @@ export default async function HomePage({
   const reviewDate =
     date && isValidISODate(date) ? date : todayISO();
 
-  const [review, students, settings] = await Promise.all([
-    getReviewByDate(reviewDate),
-    listStudents(),
-    getSettings(),
-  ]);
+  // 串行读取，避免 Supabase 连接池在并发查询时卡住
+  const review = await getReviewByDate(reviewDate);
+  const students = await listStudents();
+  const settings = await getSettings();
 
   return (
     <Workspace

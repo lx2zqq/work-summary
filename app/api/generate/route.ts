@@ -20,13 +20,13 @@ import {
 export const maxDuration = 60;
 
 async function buildContext(input: GenerateRequest): Promise<PromptContext> {
-  const [settings, students, recentReviews] = await Promise.all([
-    getSettings(),
-    listStudents(),
+  // 串行读取，避免 Supabase 连接池在并发查询时卡住
+  const settings = await getSettings();
+  const students = await listStudents();
+  const recentReviews =
     input.mode === "final"
-      ? getRecentReviews(input.date, 2)
-      : Promise.resolve([] as Array<{ date: string; text: string }>),
-  ]);
+      ? await getRecentReviews(input.date, 2)
+      : [];
 
   return {
     mode: input.mode,
