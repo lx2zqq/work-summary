@@ -1,7 +1,4 @@
-"use client";
-
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import {
   ClipboardList,
   History,
@@ -10,7 +7,6 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { DoodleStar, MascotFace } from "@/components/mascots";
-import { cn } from "@/lib/utils";
 
 type NavItem = {
   href: string;
@@ -26,11 +22,6 @@ const NAV: NavItem[] = [
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname();
-
-  const isActive = (href: string) =>
-    href === "/" ? pathname === "/" : pathname.startsWith(href);
-
   return (
     <div className="min-h-dvh">
       <header className="sticky top-0 z-30 border-b-2 border-line/70 bg-cream/90 pt-[env(safe-area-inset-top)] backdrop-blur-md">
@@ -52,19 +43,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
           <nav className="hidden items-center gap-1.5 md:flex">
             {NAV.map((item) => {
-              const active = isActive(item.href);
               const Icon = item.icon;
               return (
                 <Link
                   key={item.href}
                   href={item.href}
-                  aria-current={active ? "page" : undefined}
-                  className={cn(
-                    "flex items-center gap-2 rounded-full px-4 py-2 text-sm font-bold transition-all",
-                    active
-                      ? "bg-brand-soft text-brand-deep ring-2 ring-brand/50"
-                      : "text-ink-soft hover:bg-cream-deep hover:text-ink",
-                  )}
+                  className="flex items-center gap-2 rounded-full px-4 py-2 text-sm font-bold text-ink-soft transition-all hover:bg-cream-deep hover:text-ink"
                 >
                   <Icon className="h-4 w-4" />
                   {item.label}
@@ -82,24 +66,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <nav className="fixed inset-x-0 bottom-0 z-30 border-t-2 border-line/70 bg-paper/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md md:hidden">
         <div className="grid grid-cols-4">
           {NAV.map((item) => {
-            const active = isActive(item.href);
             const Icon = item.icon;
             return (
               <Link
                 key={item.href}
                 href={item.href}
-                aria-current={active ? "page" : undefined}
-                className={cn(
-                  "flex flex-col items-center gap-0.5 py-2 text-[11px] font-bold transition-colors",
-                  active ? "text-brand-deep" : "text-ink-soft",
-                )}
+                className="flex flex-col items-center gap-0.5 py-2 text-[11px] font-bold text-ink-soft transition-colors"
               >
-                <span
-                  className={cn(
-                    "flex h-7 w-7 items-center justify-center rounded-full transition-colors",
-                    active ? "bg-brand-soft" : "bg-transparent",
-                  )}
-                >
+                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-transparent transition-colors">
                   <Icon className="h-[18px] w-[18px]" />
                 </span>
                 {item.label}
