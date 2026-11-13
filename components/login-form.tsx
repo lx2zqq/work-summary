@@ -38,7 +38,7 @@ export function LoginForm({ next }: { next: string }) {
 
       toast.success("欢迎回来");
       // 登录态是服务端 HttpOnly Cookie，整页跳转能确保浏览器先保存 Cookie，
-      // 也避免 Next 客户端路由缓存让 proxy 看起来还没登录。
+      // 也避免 Next 客户端路由缓存让服务端看起来还没登录。
       window.location.replace(next);
     } catch {
       setError("网络好像不太顺，再试一次");
