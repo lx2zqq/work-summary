@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <rect width="512" height="512" fill="#fff8ee"/>
+  <circle cx="256" cy="256" r="196" fill="#f3a9bd" stroke="#5b463c" stroke-width="10"/>
+  <image href="/mascots/chiikawa-happy.png" x="76" y="76" width="360" height="360" preserveAspectRatio="xMidYMid meet"/>
+</svg>

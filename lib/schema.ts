@@ -1,0 +1,143 @@
+import { z } from "zod";
+import { MAX_FOLLOW_UP_ROUNDS } from "./types";
+
+// 手动重新生成会重置追问轮次但保留历史问答，所以不能按单次 3×3 来限制
+const MAX_QA_HISTORY = 200;
+const QA_HISTORY_TOO_LONG = "问答记录太长了，请刷新页面后重试";
+
+export const sectionKeySchema = z.enum([
+  "xueqing",
+  "jiaoxiao",
+  "yeji",
+  "richang",
+  "xiaocheng",
+  "kunnan",
+  "jiaoyan",
+]);
+
+export const reviewStyleSchema = z.enum(["concise", "detailed"]);
+
+export const studentStatusSchema = z.enum([
+  "在读",
+  "停课",
+  "潜在",
+  "已结课",
+]);
+
+const sectionItemsSchema = z.array(z.string().max(600)).max(30).optional();
+
+const questionSchema = z.object({
+  id: z.string().max(40).optional(),
+  text: z.string().min(1).max(200),
+  options: z.array(z.string().max(30)).max(6).optional(),
+  multiple: z.boolean().optional(),
+  target: z
+    .union([sectionKeySchema, z.literal("general")])
+    .optional(),
+  reason: z.string().max(200).optional(),
+});
+
+export const draftSchema = z.object({
+  sections: z
+    .object({
+      xueqing: sectionItemsSchema,
+      jiaoxiao: sectionItemsSchema,
+      yeji: sectionItemsSchema,
+      richang: sectionItemsSchema,
+      xiaocheng: sectionItemsSchema,
+      kunnan: sectionItemsSchema,
+      jiaoyan: sectionItemsSchema,
+    })
+    .optional(),
+  questions: z.array(questionSchema).max(8).optional(),
+  notes: z.array(z.string().max(300)).max(8).optional(),
+});
+
+export const generateRequestSchema = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  rawInput: z
+    .string()
+    .trim()
+    .min(1, "请先写一点今天做了什么")
+    .max(6000, "内容太长了，先控制在 6000 字以内"),
+  style: reviewStyleSchema.default("concise"),
+  answers: z
+    .array(
+      z.object({
+        question: z.string().trim().min(1).max(300),
+        answer: z.string().trim().min(1).max(600),
+      }),
+    )
+    .max(MAX_QA_HISTORY, QA_HISTORY_TOO_LONG)
+    .default([]),
+  mode: z.enum(["questions", "final", "restyle"]).default("final"),
+  round: z.number().int().min(0).max(MAX_FOLLOW_UP_ROUNDS).default(0),
+  currentDraft: draftSchema.optional(),
+}).refine(
+  (value) => value.mode !== "restyle" || Boolean(value.currentDraft),
+  {
+    message: "切换文风需要当前草稿",
+    path: ["currentDraft"],
+  },
+);
+
+export const saveReviewSchema = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  rawInput: z.string().max(6000).default(""),
+  draft: draftSchema,
+  style: reviewStyleSchema.default("concise"),
+  conversation: z
+    .array(
+      z.object({
+        question: z.string().max(300),
+        answer: z.string().max(600),
+      }),
+    )
+    .max(MAX_QA_HISTORY, QA_HISTORY_TOO_LONG)
+    .default([]),
+  round: z.number().int().min(0).max(MAX_FOLLOW_UP_ROUNDS).default(0),
+});
+
+export const studentInputSchema = z.object({
+  name: z.string().trim().min(1, "请填写学生姓名").max(20, "姓名太长了"),
+  grade: z
+    .string()
+    .trim()
+    .max(20)
+    .nullish()
+    .transform((value) => (value ? value : null)),
+  subjects: z
+    .string()
+    .trim()
+    .max(60)
+    .nullish()
+    .transform((value) => (value ? value : null)),
+  status: studentStatusSchema.default("在读"),
+  note: z
+    .string()
+    .trim()
+    .max(300)
+    .nullish()
+    .transform((value) => (value ? value : null)),
+});
+
+export const settingsPatchSchema = z
+  .object({
+    defaultStyle: reviewStyleSchema.optional(),
+    showJiaoyan: z.boolean().optional(),
+    showKunnan: z.boolean().optional(),
+    showFixedPhrase: z.boolean().optional(),
+  })
+  .refine((value) => Object.keys(value).length > 0, {
+    message: "没有要更新的设置",
+  });
+
+export const loginSchema = z.object({
+  password: z.string().min(1).max(100),
+});
+
+export type DraftInput = z.infer<typeof draftSchema>;
+export type GenerateRequest = z.infer<typeof generateRequestSchema>;
+export type SaveReviewRequest = z.infer<typeof saveReviewSchema>;
+export type StudentInput = z.infer<typeof studentInputSchema>;
+export type SettingsPatch = z.infer<typeof settingsPatchSchema>;

@@ -1,0 +1,216 @@
+@import "tailwindcss";
+
+@theme inline {
+  --font-sans: ui-rounded, "PingFang SC", "Hiragino Sans GB",
+    "Microsoft YaHei", "Noto Sans CJK SC", "Source Han Sans SC",
+    -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+
+  --color-cream: #fff8ee;
+  --color-cream-deep: #f7ecdd;
+  --color-paper: #fffdf8;
+  --color-ink: #4a3b35;
+  --color-ink-soft: #7d6a61;
+  --color-brand: #f3a9bd;
+  --color-brand-deep: #c96b85;
+  --color-brand-soft: #fde8ef;
+  --color-line: #eadccd;
+  --color-sky: #b9def0;
+  --color-sky-soft: #eaf7fc;
+  --color-butter: #f5dda2;
+  --color-butter-soft: #fdf4da;
+  --color-mint: #cfe8d8;
+  --color-mint-soft: #eef8f2;
+  --color-cocoa: #5b463c;
+}
+
+:root {
+  color-scheme: light;
+  --background: #fff8ee;
+  --foreground: #4a3b35;
+}
+
+* {
+  border-color: var(--color-line);
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  min-height: 100dvh;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: #f7c8d6;
+  color: #4a3b35;
+}
+
+/* 奶油纸张 + 小圆点，让页面像一本手帐 */
+.app-bg {
+  background-color: var(--color-cream);
+  background-image:
+    radial-gradient(
+      circle at 1px 1px,
+      rgba(122, 92, 74, 0.08) 1px,
+      transparent 0
+    ),
+    radial-gradient(
+      ellipse 55% 38% at 50% -8%,
+      rgba(243, 169, 189, 0.22),
+      transparent 70%
+    ),
+    radial-gradient(
+      ellipse 38% 30% at 100% 0%,
+      rgba(185, 222, 240, 0.2),
+      transparent 70%
+    );
+  background-size: 22px 22px, auto, auto;
+  background-position: 0 0, 0 0, 0 0;
+}
+
+.paper-card {
+  background-color: var(--color-paper);
+  border: 2px solid rgba(91, 70, 60, 0.14);
+  border-radius: 26px;
+  box-shadow:
+    0 4px 0 rgba(91, 70, 60, 0.06),
+    0 18px 36px -30px rgba(91, 70, 60, 0.5);
+}
+
+.paper-card-inset {
+  background-color: var(--color-cream);
+  border: 2px solid rgba(91, 70, 60, 0.1);
+  border-radius: 20px;
+}
+
+.washi-tape {
+  position: absolute;
+  top: -10px;
+  left: 50%;
+  z-index: 2;
+  width: 76px;
+  height: 22px;
+  transform: translateX(-50%) rotate(-2deg);
+  border-radius: 3px;
+  background: repeating-linear-gradient(
+    45deg,
+    #f8c9d7 0 7px,
+    #fde8ef 7px 14px
+  );
+  box-shadow: 0 2px 3px rgba(91, 70, 60, 0.08);
+  opacity: 0.95;
+  pointer-events: none;
+}
+
+.notebook-lines {
+  background-image: radial-gradient(
+    circle at 1px 1px,
+    rgba(122, 92, 74, 0.1) 1px,
+    transparent 0
+  );
+  background-size: 20px 20px;
+  background-position: 0 0;
+  line-height: 2;
+}
+
+.review-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.9;
+  font-size: 15px;
+  letter-spacing: 0.01em;
+  tab-size: 2;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+@keyframes soft-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.loading-dot {
+  animation: soft-pulse 1.4s ease-in-out infinite;
+}
+
+.loading-dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.loading-dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes mascot-float {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-1deg);
+  }
+  50% {
+    transform: translateY(-5px) rotate(1deg);
+  }
+}
+
+.mascot-float {
+  animation: mascot-float 5s ease-in-out infinite;
+}
+
+@keyframes mascot-blink {
+  0%,
+  92%,
+  100% {
+    transform: scaleY(1);
+  }
+  95% {
+    transform: scaleY(0.12);
+  }
+}
+
+.mascot-blink {
+  animation: mascot-blink 4.8s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.page-enter {
+  animation: pop-in 0.35s ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mascot-float,
+  .mascot-blink,
+  .loading-dot,
+  .page-enter {
+    animation: none;
+  }
+}
