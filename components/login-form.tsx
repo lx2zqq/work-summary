@@ -1,14 +1,12 @@
 "use client";
 
 import { LockKeyhole } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 
 export function LoginForm({ next }: { next: string }) {
-  const router = useRouter();
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -39,8 +37,9 @@ export function LoginForm({ next }: { next: string }) {
       }
 
       toast.success("欢迎回来");
-      router.replace(next);
-      router.refresh();
+      // 登录态是服务端 HttpOnly Cookie，整页跳转能确保浏览器先保存 Cookie，
+      // 也避免 Next 客户端路由缓存让 proxy 看起来还没登录。
+      window.location.replace(next);
     } catch {
       setError("网络好像不太顺，再试一次");
     } finally {
