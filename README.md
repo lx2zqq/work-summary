@@ -8,7 +8,7 @@
 - 五个核心栏目为空时会主动确认，答“没有”就保持空栏
 - 生成后可以逐条修改、移动到其他栏目、删除
 - 一键复制，纯文本 + emoji，粘贴到钉钉不会带 Markdown 符号
-- 支持语音输入，边说边转文字，识别结果追加到流水账末尾
+- 支持语音输入：电脑端边说边转文字；安卓微信等不支持 Web Speech 的环境自动改用录音转写（需配置硅基流动 Key）
 - 历史存档，第二天生成时会参考最近两天的内容
 - 手机 / 电脑都能用，支持添加到主屏幕
 
@@ -71,6 +71,9 @@ npm run dev
 | `REVIEW_DEEPSEEK_API_KEY` | 是（不填会走兜底草稿） | 项目专用 DeepSeek Key，只在服务端读取 |
 | `REVIEW_DEEPSEEK_MODEL` | 否 | 默认 `deepseek-flash`，换模型只改这里 |
 | `REVIEW_DEEPSEEK_BASE_URL` | 否 | 默认 `https://api.deepseek.com`，走代理时改这里 |
+| `REVIEW_ASR_API_KEY` | 否 | 硅基流动 SiliconFlow Key；不填则录音转写不可用，不影响手动打字 |
+| `REVIEW_ASR_BASE_URL` | 否 | 默认 `https://api.siliconflow.cn/v1` |
+| `REVIEW_ASR_MODEL` | 否 | 默认 `FunAudioLLM/SenseVoiceSmall` |
 | `APP_PASSWORD` | 是 | 登录密码，服务端比较 |
 | `AUTH_SECRET` | 是 | Cookie 签名密钥，建议 `openssl rand -hex 32` 重新生成 |
 | `DATABASE_URL` | 生产必填 | Supabase / Postgres 连接串；本地留空则用 PGlite |
@@ -148,6 +151,9 @@ git push -u origin main
 | `REVIEW_DEEPSEEK_API_KEY` | 项目专用 DeepSeek Key |
 | `REVIEW_DEEPSEEK_MODEL` | `deepseek-flash` |
 | `REVIEW_DEEPSEEK_BASE_URL` | `https://api.deepseek.com` |
+| `REVIEW_ASR_API_KEY` | 硅基流动 SiliconFlow Key（可选，用于安卓微信录音转写） |
+| `REVIEW_ASR_BASE_URL` | `https://api.siliconflow.cn/v1` |
+| `REVIEW_ASR_MODEL` | `FunAudioLLM/SenseVoiceSmall` |
 | `APP_PASSWORD` | 新的强访问密码，至少 20 位，不要沿用本地旧密码 |
 | `AUTH_SECRET` | 新生成的随机串，不要和本地共用 |
 | `DATABASE_URL` | Supabase **Transaction pooler** URI，端口 6543 |
@@ -161,7 +167,7 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 `DATABASE_URL` 记得替换密码、保留 `sslmode=require`，删除 `pgbouncer=true` 和 `connection_limit=1`。**不要配置 `PGLITE_DATA_DIR`**。
 
 6. 点 **Deploy**。部署完成后打开 `https://你的项目.vercel.app`，用新的 `APP_PASSWORD` 登录。
-7. 第一次进入后添加林小满（以及后续学生），写一条测试流水账，确认“追问 → 正文 → 复制”和语音输入都正常。
+7. 第一次进入后添加林小满（以及后续学生），写一条测试流水账，确认“追问 → 正文 → 复制”和语音输入都正常；安卓微信里再测一次录音转写。
 8. 以后改了环境变量，需要在 Deployments 里 **Redeploy** 才会生效。
 
 > 生成接口设置了 `maxDuration = 60`。如果 Vercel Hobby 仍频繁超时，先确认是否开启 Fluid Compute；仍不行就考虑升级或换普通 Node 服务器。
@@ -172,7 +178,10 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 
 - Vercel 默认提供 HTTPS，直接用手机浏览器打开部署域名。
 - iPhone Safari：分享 → **添加到主屏幕**；Android Chrome：菜单 → **安装应用 / 添加到主屏幕**。
-- 语音输入必须使用 HTTPS，且浏览器要支持语音识别；Chrome 的语音服务依赖 Google 网络，国内可能连接失败，失败时继续手打即可。
+- 语音输入必须使用 HTTPS。
+- 电脑/支持的浏览器使用自带 Web Speech API，边说边转文字；Chrome 的语音服务依赖 Google 网络，国内可能连接失败。
+- 安卓微信不支持 Web Speech API，会自动切换为“录音转写”：录完上传到服务端，由硅基流动 SenseVoiceSmall 转成文字。首次使用需允许麦克风，单次最长 60 秒。
+- 没配置 `REVIEW_ASR_API_KEY` 时，录音转写会提示服务未配置，直接打字即可。
 
 ### 5. 后续更新
 
@@ -236,7 +245,8 @@ PYTHONIOENCODING=utf-8 APP_PASSWORD=你的访问密码 python scripts/ui-test.py
 ## 隐私与安全
 
 - 学生姓名、家长沟通内容会发送给 DeepSeek API。当前版本按你的选择**不做脱敏**。
-- 语音输入使用浏览器自带的 Web Speech API，音频可能由 Chrome（Google）或 Safari（Apple）的语音服务处理，不经过本项目服务器。
+- 电脑端语音输入使用浏览器自带的 Web Speech API，音频可能由 Chrome（Google）或 Safari（Apple）的语音服务处理，不经过本项目服务器。
+- 安卓微信等录音转写场景，录音会先上传到本项目服务端，再由服务端发送给硅基流动 SiliconFlow 转写；本项目不会把录音写入数据库。介意的话可以直接打字。
 - DeepSeek Key 只在服务端读取，不会出现在浏览器 bundle 里。
 - 页面有单密码保护；Cookie 是 HttpOnly + SameSite=Lax，生产环境自动加 Secure。
 - 生产环境的历史记录存在 Supabase；本地开发存在 `.data/pglite`。
@@ -282,6 +292,10 @@ tests/              Vitest 单测
 **生成时提示“服务端还没有配置 REVIEW_DEEPSEEK_API_KEY”**
 
 在 `.env.local` 里填 `REVIEW_DEEPSEEK_API_KEY`，然后重启 `npm run dev`。Vercel 上要重新部署或至少 redeploy 让新环境变量生效。
+
+**安卓微信点语音提示“没有听到声音”或很快自动停止**
+
+这是微信内核不支持 Web Speech API 导致的。新版会自动切换为录音转写：再点一次麦克风，允许麦克风权限，说完点“停止并转写”。如果提示“服务端还没有配置 REVIEW_ASR_API_KEY”，先去 [硅基流动](https://cloud.siliconflow.cn/) 注册、实名认证，再到控制台创建 API 密钥，填到 `.env.local` 或 Vercel 环境变量后重启/重新部署。
 
 **提示 401 / 模型不存在**
 

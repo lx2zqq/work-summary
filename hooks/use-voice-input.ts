@@ -91,10 +91,16 @@ function getServerSnapshot() {
 
 type Options = {
   onAppend: (text: string) => void;
+  // 浏览器语音识别不可用时通知外层，外层可以切换到录音转写
+  onUnavailable?: () => void;
   lang?: string;
 };
 
-export function useVoiceInput({ onAppend, lang = "zh-CN" }: Options) {
+export function useVoiceInput({
+  onAppend,
+  onUnavailable,
+  lang = "zh-CN",
+}: Options) {
   const [listening, setListening] = useState(false);
   const [interim, setInterim] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -111,12 +117,26 @@ export function useVoiceInput({ onAppend, lang = "zh-CN" }: Options) {
   const sessionStartedAtRef = useRef(0);
   const sessionIdRef = useRef(0);
   const receivedResultRef = useRef(false);
+  const everStartedRef = useRef(false);
+  const unavailableNotifiedRef = useRef(false);
   const onAppendRef = useRef(onAppend);
+  const onUnavailableRef = useRef(onUnavailable);
 
   // 用 ref 保存最新回调，避免识别过程中用户继续打字时追加到旧文本
   useEffect(() => {
     onAppendRef.current = onAppend;
   }, [onAppend]);
+
+  useEffect(() => {
+    onUnavailableRef.current = onUnavailable;
+  }, [onUnavailable]);
+
+  const notifyUnavailable = useCallback(() => {
+    if (unavailableNotifiedRef.current) return;
+
+    unavailableNotifiedRef.current = true;
+    onUnavailableRef.current?.();
+  }, []);
 
   const clearRestartTimer = useCallback(() => {
     if (restartTimerRef.current) {
@@ -162,6 +182,9 @@ export function useVoiceInput({ onAppend, lang = "zh-CN" }: Options) {
     setError(null);
     setInterim("");
     receivedResultRef.current = false;
+    everStartedRef.current = false;
+    unavailableNotifiedRef.current = false;
+    sessionStartedAtRef.current = 0;
 
     const sessionId = sessionIdRef.current + 1;
     sessionIdRef.current = sessionId;
@@ -174,6 +197,7 @@ export function useVoiceInput({ onAppend, lang = "zh-CN" }: Options) {
 
     recognition.onstart = () => {
       if (!activeRef.current || sessionIdRef.current !== sessionId) return;
+      everStartedRef.current = true;
       sessionStartedAtRef.current = Date.now();
       setListening(true);
     };
@@ -221,6 +245,11 @@ export function useVoiceInput({ onAppend, lang = "zh-CN" }: Options) {
       setError(
         ERROR_MESSAGES[event.error] ?? "语音识别出错了，请重新试一次。",
       );
+
+      // 浏览器明确不支持语音识别服务时，通知外层切换录音转写
+      if (event.error === "service-not-allowed") {
+        notifyUnavailable();
+      }
     };
 
     recognition.onend = () => {
@@ -234,14 +263,21 @@ export function useVoiceInput({ onAppend, lang = "zh-CN" }: Options) {
       }
 
       // 手机端和部分浏览器会在停顿后自动结束，用户没有点停止时自动续听。
-      // 如果这一轮刚启动就结束且完全没有识别结果，说明没有收到有效语音，
-      // 不再自动重试，避免死循环。
+      // 如果识别器根本没触发 onstart，或者刚启动就结束且完全没有结果，
+      // 说明当前浏览器没有可用的识别服务（例如安卓微信），不再重试。
       const sessionDuration = Date.now() - sessionStartedAtRef.current;
+      const neverStarted = !everStartedRef.current;
+      const endedWithoutResult =
+        neverStarted ||
+        (sessionDuration < 900 && !receivedResultRef.current);
 
-      if (sessionDuration < 900 && !receivedResultRef.current) {
+      if (endedWithoutResult) {
         activeRef.current = false;
         setListening(false);
-        setError("没有听到声音，请靠近麦克风再试一次。");
+        setError(
+          "当前浏览器没有返回语音识别结果，已停止。可以改用录音转写或直接打字。",
+        );
+        notifyUnavailable();
         return;
       }
 
@@ -270,7 +306,7 @@ export function useVoiceInput({ onAppend, lang = "zh-CN" }: Options) {
       setListening(false);
       setError("语音输入启动失败，请重新试一次。");
     }
-  }, [clearRestartTimer, lang]);
+  }, [clearRestartTimer, lang, notifyUnavailable]);
 
   const toggle = useCallback(() => {
     if (activeRef.current || listening) {

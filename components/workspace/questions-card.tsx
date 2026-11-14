@@ -6,6 +6,13 @@ import { toast } from "sonner";
 import { HachiwareMascot } from "@/components/mascots";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  EMPTY_ANSWER,
+  buildAnswer,
+  setAnswerCustom,
+  toggleAnswerOption,
+  type QuestionAnswer,
+} from "@/lib/answers";
 import type { FollowUpQuestion, QAPair } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -18,13 +25,6 @@ type Props = {
   onSkip: () => void;
 };
 
-type AnswerState = {
-  selected: string[];
-  custom: string;
-};
-
-const EMPTY_ANSWER: AnswerState = { selected: [], custom: "" };
-
 export function QuestionsCard({
   questions,
   round,
@@ -33,66 +33,31 @@ export function QuestionsCard({
   onSubmit,
   onSkip,
 }: Props) {
-  const [answers, setAnswers] = useState<Record<string, AnswerState>>({});
+  const [answers, setAnswers] = useState<Record<string, QuestionAnswer>>({});
 
-  function getAnswer(id: string): AnswerState {
+  function getAnswer(id: string): QuestionAnswer {
     return answers[id] ?? EMPTY_ANSWER;
   }
 
   function toggleOption(question: FollowUpQuestion, option: string) {
-    setAnswers((previous) => {
-      const current = previous[question.id] ?? EMPTY_ANSWER;
-
-      if (question.multiple) {
-        const selected = current.selected.includes(option)
-          ? current.selected.filter((item) => item !== option)
-          : [...current.selected, option];
-
-        return {
-          ...previous,
-          [question.id]: { ...current, selected },
-        };
-      }
-
-      // 单选：再次点击已选项可以取消；选其他选项时替换
-      const selected =
-        current.selected.length === 1 && current.selected[0] === option
-          ? []
-          : [option];
-
-      return {
-        ...previous,
-        [question.id]: { selected, custom: "" },
-      };
-    });
+    setAnswers((previous) => ({
+      ...previous,
+      [question.id]: toggleAnswerOption(
+        previous[question.id] ?? EMPTY_ANSWER,
+        option,
+        question.multiple,
+      ),
+    }));
   }
 
   function setCustom(question: FollowUpQuestion, value: string) {
-    setAnswers((previous) => {
-      const current = previous[question.id] ?? EMPTY_ANSWER;
-
-      return {
-        ...previous,
-        [question.id]: {
-          // 单选问题输入自定义答案时，清掉已选选项，避免答案互相矛盾
-          selected: question.multiple ? current.selected : [],
-          custom: value,
-        },
-      };
-    });
-  }
-
-  function buildAnswer(state: AnswerState): string {
-    const parts: string[] = [];
-
-    if (state.selected.length > 0) {
-      parts.push(state.selected.join("、"));
-    }
-    if (state.custom.trim()) {
-      parts.push(state.custom.trim());
-    }
-
-    return parts.join("；");
+    setAnswers((previous) => ({
+      ...previous,
+      [question.id]: setAnswerCustom(
+        previous[question.id] ?? EMPTY_ANSWER,
+        value,
+      ),
+    }));
   }
 
   function handleSubmit() {
@@ -127,7 +92,7 @@ export function QuestionsCard({
             </span>
           </div>
           <p className="mt-1 text-xs leading-relaxed text-ink-soft">
-            点选项或直接写；多选问题可以选多个。回答完或跳过后，才会生成复盘正文。
+            选项和补充可以同时填；多选问题可以选多个。回答完或跳过后，才会生成复盘正文。
           </p>
         </div>
       </div>
@@ -188,8 +153,8 @@ export function QuestionsCard({
                 placeholder={
                   question.options.length > 0
                     ? question.multiple
-                      ? "其他补充，可多选…"
-                      : "其他补充…"
+                      ? "补充说明，可多选…"
+                      : "补充说明（可选）…"
                     : "直接写答案…"
                 }
                 className="mt-2.5 h-9 bg-paper text-xs"
