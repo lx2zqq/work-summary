@@ -21,6 +21,7 @@ import {
   emptyDraft,
   hasDraftContent,
   type AppSettings,
+  type MemoryPromptItem,
   type QAPair,
   type ReviewDraft,
   type ReviewRecord,
@@ -71,6 +72,7 @@ type CallResult = {
   draft: ReviewDraft;
   fallback: boolean;
   warning?: string;
+  memories: MemoryPromptItem[];
 };
 
 const QUESTION_LOADING_MESSAGES = [
@@ -107,6 +109,15 @@ export function Workspace({
     initialReview?.updatedAt ?? null,
   );
   const [dirty, setDirty] = useState(false);
+  const [memoryExtractedAt, setMemoryExtractedAt] = useState<
+    string | null
+  >(initialReview?.memoryExtractedAt ?? null);
+  const [extractingMemory, setExtractingMemory] = useState(false);
+  const [usedMemories, setUsedMemories] = useState<MemoryPromptItem[]>(
+    [],
+  );
+  const extractingMemoryRef = useRef(false);
+  const dateRef = useRef(date);
   const [activeTab, setActiveTab] = useState<"input" | "preview">("input");
   const [editorOpen, setEditorOpen] = useState(false);
   const [hydratedDate, setHydratedDate] = useState(initialDate);
@@ -114,6 +125,10 @@ export function Workspace({
   const saveQueueRef = useRef<Promise<boolean>>(Promise.resolve(true));
   const savingCountRef = useRef(0);
   const editRevisionRef = useRef(0);
+
+  useEffect(() => {
+    dateRef.current = date;
+  }, [date]);
 
   const loading = loadingKind !== null;
   const questioning = draft.questions.length > 0;
@@ -220,6 +235,85 @@ export function Workspace({
     [persistReview, date, rawInput, draft, style, conversation, round],
   );
 
+  const extractMemory = useCallback(
+    async (force: boolean, options: { skipSave?: boolean } = {}) => {
+      if (
+        !initialSettings.enableMemory ||
+        extractingMemoryRef.current
+      ) {
+        return;
+      }
+
+      const targetDate = date;
+      extractingMemoryRef.current = true;
+      setExtractingMemory(true);
+
+      try {
+        if (!options.skipSave) {
+          const saved = await saveNow({ silent: true });
+
+          if (!saved) {
+            toast.error("保存失败，暂时不能记忆");
+            return;
+          }
+        }
+
+        const response = await fetch("/api/memories/extract", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ date: targetDate, force }),
+        });
+        const data = (await response.json().catch(() => ({}))) as {
+          error?: string;
+          skipped?: boolean;
+          count?: number;
+          extractedAt?: string;
+        };
+
+        if (!response.ok) {
+          throw new Error(data.error || "记忆整理失败");
+        }
+
+        if (data.skipped) return;
+
+        if (dateRef.current === targetDate) {
+          setMemoryExtractedAt(
+            data.extractedAt ?? new Date().toISOString(),
+          );
+
+          const count = data.count ?? 0;
+
+          if (count > 0) {
+            toast.success(`已记住 ${count} 条关键信息`);
+          } else {
+            toast.info("今天没有需要新增的记忆");
+          }
+        }
+      } catch (error) {
+        if (dateRef.current === targetDate) {
+          toast.error(
+            error instanceof Error ? error.message : "记忆整理失败",
+          );
+        }
+      } finally {
+        extractingMemoryRef.current = false;
+        setExtractingMemory(false);
+      }
+    },
+    [date, initialSettings.enableMemory, saveNow],
+  );
+
+  const memoryStale = useMemo(() => {
+    if (!memoryExtractedAt) return false;
+    if (dirty) return true;
+    if (!savedAt) return false;
+
+    return (
+      new Date(savedAt).getTime() >
+      new Date(memoryExtractedAt).getTime()
+    );
+  }, [memoryExtractedAt, dirty, savedAt]);
+
   useEffect(() => {
     if (!dirty || loading || hydratedDate !== date) return;
     if (!rawInput.trim() && !hasDraftContent(draft)) return;
@@ -266,6 +360,7 @@ export function Workspace({
         draft?: unknown;
         fallback?: boolean;
         warning?: string;
+        memories?: unknown;
       };
 
       if (!response.ok) {
@@ -284,6 +379,9 @@ export function Workspace({
         ),
         fallback: Boolean(data.fallback),
         warning: data.warning,
+        memories: Array.isArray(data.memories)
+          ? (data.memories as MemoryPromptItem[])
+          : [],
       };
     },
     [rawInput, date, draft],
@@ -309,6 +407,7 @@ export function Workspace({
       setStyle(config.style);
       setConversation(config.conversationAfter);
       setRound(config.round);
+      setUsedMemories([]);
       markDirty();
       setActiveTab("preview");
 
@@ -362,6 +461,7 @@ export function Workspace({
         setStyle(config.style);
         setConversation(config.conversationAfter);
         setRound(config.round);
+        setUsedMemories(data.memories);
         markDirty();
         setActiveTab("preview");
 
@@ -427,6 +527,7 @@ export function Workspace({
           setStyle(config.style);
           setConversation(config.conversationAfter);
           setRound(config.round);
+          setUsedMemories(data.memories);
           markDirty();
           setActiveTab("preview");
 
@@ -596,6 +697,8 @@ export function Workspace({
         setConversation(review?.conversation ?? []);
         setRound(review?.round ?? 0);
         setSavedAt(review?.updatedAt ?? null);
+        setMemoryExtractedAt(review?.memoryExtractedAt ?? null);
+        setUsedMemories([]);
         // 让仍挂在旧日期上的保存请求失效，避免误标新日期为已保存
         editRevisionRef.current += 1;
         setDirty(false);
@@ -645,10 +748,32 @@ export function Workspace({
     const okay = await copyText(finalText);
     if (okay) {
       toast.success("已复制，去钉钉粘贴吧");
+
+      // 第一次复制视为当天收尾，后台留一次记忆；失败不影响复制
+      if (initialSettings.enableMemory && !memoryExtractedAt) {
+        void (async () => {
+          const saved = await saveNow({ silent: true });
+
+          if (!saved) {
+            toast.error("复盘保存失败，今天的关键信息还没记住");
+            return;
+          }
+
+          await extractMemory(false, { skipSave: true });
+        })();
+      }
     } else {
       toast.error("复制失败，请手动选中文字复制");
     }
-  }, [questioning, draft, finalText]);
+  }, [
+    questioning,
+    draft,
+    finalText,
+    initialSettings.enableMemory,
+    memoryExtractedAt,
+    saveNow,
+    extractMemory,
+  ]);
 
   const handleEditorSave = useCallback(
     (nextDraft: ReviewDraft) => {
@@ -699,6 +824,7 @@ export function Workspace({
           round={round}
           maxRounds={MAX_FOLLOW_UP_ROUNDS}
           loading={loading}
+          memories={usedMemories}
           onSubmit={(answers) => {
             void handleAnswers(answers);
           }}
@@ -754,11 +880,19 @@ export function Workspace({
             loading={loading}
             loadingMessage={loadingMessage}
             notes={draft.notes}
+            memories={usedMemories}
+            memoryEnabled={initialSettings.enableMemory}
+            memoryExtractedAt={memoryExtractedAt}
+            memoryStale={memoryStale}
+            extractingMemory={extractingMemory}
             onCopy={() => {
               void handleCopy();
             }}
             onEdit={() => setEditorOpen(true)}
             onRegenerate={handleGenerate}
+            onExtractMemory={() => {
+              void extractMemory(true);
+            }}
           />
         </div>
       </div>

@@ -14,6 +14,7 @@ function buildContext(
     settings: DEFAULT_SETTINGS,
     students: [],
     recentReviews: [],
+    memories: [],
     rawInput: "今天林小满作业完成了。",
     answers: [],
     round: 0,

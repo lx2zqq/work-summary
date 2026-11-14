@@ -3,6 +3,7 @@ import "./load-env";
 import assert from "node:assert/strict";
 import { generateDraft } from "@/lib/ai/deepseek";
 import type { PromptContext } from "@/lib/ai/prompt";
+import { pickDailyPhrase } from "@/lib/daily-phrase";
 import { normalizeDraft } from "@/lib/draft";
 import { renderReview } from "@/lib/template";
 import {
@@ -18,6 +19,7 @@ const SETTINGS: AppSettings = {
   showJiaoyan: true,
   showKunnan: false,
   showFixedPhrase: false,
+  enableMemory: true,
 };
 
 function testTemplate() {
@@ -52,8 +54,8 @@ function testTemplate() {
     "无困难时应写标准句",
   );
   assert.ok(
-    withKunnan.includes("做更优质的服务，做更多的业绩。服务要更细致。"),
-    "开启固定话术后应自动补",
+    withKunnan.includes(pickDailyPhrase("2026-11-13", draft)),
+    "开启固定话术后应自动补当天话术",
   );
 
   const normalized = normalizeDraft({
@@ -120,6 +122,7 @@ function buildContext(
       },
     ],
     recentReviews: [],
+    memories: [],
     rawInput,
     answers: [],
     currentDraft: undefined,

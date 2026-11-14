@@ -23,7 +23,11 @@ type Props = {
   aiConfigured: boolean;
 };
 
-type ToggleKey = "showJiaoyan" | "showKunnan" | "showFixedPhrase";
+type ToggleKey =
+  | "showJiaoyan"
+  | "showKunnan"
+  | "showFixedPhrase"
+  | "enableMemory";
 
 const SAMPLE_DRAFT: ReviewDraft = {
   sections: {
@@ -59,7 +63,13 @@ const TOGGLES: Array<{
     key: "showFixedPhrase",
     title: "固定话术",
     description:
-      "在【日常工作复盘】末尾补“做更优质的服务，做更多的业绩。服务要更细致。”",
+      "在【日常工作复盘】末尾补一条按日期轮换的服务/业绩话术；她自己写了内容也会保留并追加。",
+  },
+  {
+    key: "enableMemory",
+    title: "长期记忆",
+    description:
+      "每天最后一次复制时，从最终复盘里提取关键信息；生成时参考这些记忆。关闭后不提取也不参考。",
   },
 ];
 

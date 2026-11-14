@@ -1,5 +1,6 @@
 import Link from "next/link";
 import {
+  Brain,
   ClipboardList,
   History,
   Settings,
@@ -17,6 +18,7 @@ type NavItem = {
 const NAV: NavItem[] = [
   { href: "/", label: "今日复盘", icon: ClipboardList },
   { href: "/history", label: "历史", icon: History },
+  { href: "/memories", label: "记忆", icon: Brain },
   { href: "/students", label: "学生", icon: Users },
   { href: "/settings", label: "设置", icon: Settings },
 ];
@@ -64,7 +66,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </main>
 
       <nav className="fixed inset-x-0 bottom-0 z-30 border-t-2 border-line/70 bg-paper/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md md:hidden">
-        <div className="grid grid-cols-4">
+        <div className="grid grid-cols-5">
           {NAV.map((item) => {
             const Icon = item.icon;
             return (

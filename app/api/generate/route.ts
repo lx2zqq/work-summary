@@ -9,9 +9,11 @@ import { firstIssue, requireApiSession } from "@/lib/api-helpers";
 import {
   getRecentReviews,
   getSettings,
+  listActiveMemories,
   listStudents,
 } from "@/lib/db/queries";
 import { fallbackDraft, normalizeDraft } from "@/lib/draft";
+import { selectMemoriesForPrompt } from "@/lib/memory";
 import {
   generateRequestSchema,
   type GenerateRequest,
@@ -23,6 +25,19 @@ async function buildContext(input: GenerateRequest): Promise<PromptContext> {
   // 串行读取，避免 Supabase 连接池在并发查询时卡住
   const settings = await getSettings();
   const students = await listStudents();
+  const memories =
+    settings.enableMemory && input.mode !== "restyle"
+      ? selectMemoriesForPrompt(await listActiveMemories(), {
+          corpus: [
+            input.rawInput,
+            ...input.answers.map(
+              (pair) => `${pair.question} ${pair.answer}`,
+            ),
+          ].join("\n"),
+          students,
+          limit: 40,
+        })
+      : [];
   const recentReviews =
     input.mode === "final"
       ? await getRecentReviews(input.date, 2)
@@ -35,6 +50,7 @@ async function buildContext(input: GenerateRequest): Promise<PromptContext> {
     settings,
     students,
     recentReviews,
+    memories,
     rawInput: input.rawInput,
     answers: input.answers,
     // 上一轮的追问只是 UI 状态，不进入模型上下文，避免模型重复或误判
@@ -78,18 +94,20 @@ export async function POST(request: Request) {
       fallback: true,
       warning:
         "服务端还没有配置 REVIEW_DEEPSEEK_API_KEY，已按原文生成草稿；配置后会自动使用 AI 整理。",
+      memories: context.memories,
     });
   }
 
   try {
     const draft = await generateDraft(context);
-    return NextResponse.json({ draft });
+    return NextResponse.json({ draft, memories: context.memories });
   } catch (error) {
     console.error("[generate:ai]", error);
     return NextResponse.json({
       draft: fallbackDraft(input.rawInput),
       fallback: true,
       warning: `${getAiErrorMessage(error)}。已按原文生成草稿，请手动调整。`,
+      memories: [],
     });
   }
 }

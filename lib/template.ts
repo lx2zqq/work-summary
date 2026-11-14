@@ -1,6 +1,6 @@
+import { pickDailyPhrase } from "./daily-phrase";
 import { formatDateCN } from "./date";
 import {
-  FIXED_PHRASE,
   NO_DIFFICULTY_PHRASE,
   SECTION_META,
   type AppSettings,
@@ -91,11 +91,12 @@ export function renderReview(
 
   let dailyItems = [...(sections.richang ?? [])];
   if (settings.showFixedPhrase) {
-    const target = normalizedForCompare(FIXED_PHRASE);
+    const phrase = pickDailyPhrase(dateISO, draft);
+    const target = normalizedForCompare(phrase);
     const exists = dailyItems.some((item) =>
       normalizedForCompare(item).includes(target),
     );
-    if (!exists) dailyItems = [...dailyItems, FIXED_PHRASE];
+    if (!exists) dailyItems = [...dailyItems, phrase];
   }
   pushSection("richang", dailyItems);
 

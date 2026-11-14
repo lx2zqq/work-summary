@@ -33,7 +33,7 @@ export function getAiModelName(): string {
   return process.env.REVIEW_DEEPSEEK_MODEL?.trim() || DEFAULT_MODEL;
 }
 
-function createClient(): OpenAI {
+export function createClient(): OpenAI {
   const apiKey = process.env.REVIEW_DEEPSEEK_API_KEY?.trim();
   if (!apiKey) {
     throw new AiError(
@@ -54,7 +54,7 @@ function createClient(): OpenAI {
   });
 }
 
-function extractJson(text: string): string {
+export function extractJson(text: string): string {
   let value = text.trim();
 
   if (value.startsWith("```")) {

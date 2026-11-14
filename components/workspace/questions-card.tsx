@@ -1,6 +1,7 @@
 "use client";
 
-import { SkipForward, Sparkles } from "lucide-react";
+import { Brain, SkipForward, Sparkles } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
 import { HachiwareMascot } from "@/components/mascots";
@@ -13,7 +14,11 @@ import {
   toggleAnswerOption,
   type QuestionAnswer,
 } from "@/lib/answers";
-import type { FollowUpQuestion, QAPair } from "@/lib/types";
+import type {
+  FollowUpQuestion,
+  MemoryPromptItem,
+  QAPair,
+} from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -21,6 +26,7 @@ type Props = {
   round: number;
   maxRounds: number;
   loading: boolean;
+  memories: MemoryPromptItem[];
   onSubmit: (answers: QAPair[]) => void;
   onSkip: () => void;
 };
@@ -30,6 +36,7 @@ export function QuestionsCard({
   round,
   maxRounds,
   loading,
+  memories,
   onSubmit,
   onSkip,
 }: Props) {
@@ -94,6 +101,30 @@ export function QuestionsCard({
           <p className="mt-1 text-xs leading-relaxed text-ink-soft">
             选项和补充可以同时填；多选问题可以选多个。回答完或跳过后，才会生成复盘正文。
           </p>
+          {memories.length > 0 ? (
+            <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[10px] text-ink-soft">
+              <Brain className="h-3 w-3 text-brand-deep" />
+              <span>参考记忆：</span>
+              {memories.slice(0, 3).map((memory) => (
+                <span
+                  key={memory.id}
+                  title={memory.content}
+                  className="rounded-full bg-paper px-2 py-0.5 font-semibold text-ink-soft ring-1 ring-line/60"
+                >
+                  {memory.scope === "student"
+                    ? memory.studentName || "未关联学生"
+                    : "通用"}
+                  ·{memory.category}
+                </span>
+              ))}
+              {memories.length > 3 ? (
+                <span>等 {memories.length} 条</span>
+              ) : null}
+              <Link href="/memories" className="underline">
+                查看
+              </Link>
+            </div>
+          ) : null}
         </div>
       </div>
 

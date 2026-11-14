@@ -9,6 +9,8 @@ import {
   emptyDraft,
   hasDraftContent,
   type AppSettings,
+  type Memory,
+  type MemoryInput,
   type QAPair,
   type ReviewDraft,
   type ReviewListItem,
@@ -18,7 +20,12 @@ import {
   type StudentStatus,
 } from "@/lib/types";
 import { getDb } from "./index";
-import { reviews, settings as settingsTable, students } from "./schema";
+import {
+  memories,
+  reviews,
+  settings as settingsTable,
+  students,
+} from "./schema";
 
 function mapSettings(
   row: typeof settingsTable.$inferSelect,
@@ -28,6 +35,23 @@ function mapSettings(
     showJiaoyan: row.showJiaoyan,
     showKunnan: row.showKunnan,
     showFixedPhrase: row.showFixedPhrase,
+    enableMemory: row.enableMemory,
+  };
+}
+
+function mapMemory(row: typeof memories.$inferSelect): Memory {
+  return {
+    id: row.id,
+    scope: row.scope,
+    studentId: row.studentId,
+    studentName: row.studentName,
+    category: row.category,
+    content: row.content,
+    importance: row.importance,
+    status: row.status,
+    sourceDate: row.sourceDate,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
   };
 }
 
@@ -61,6 +85,7 @@ function mapReview(
     style: row.style,
     conversation: Array.isArray(row.conversation) ? row.conversation : [],
     round: row.round ?? 0,
+    memoryExtractedAt: row.memoryExtractedAt?.toISOString() ?? null,
     updatedAt: row.updatedAt.toISOString(),
   };
 }
@@ -263,4 +288,89 @@ export async function saveReview(input: {
   }
 
   return mapReview(row);
+}
+
+export async function listMemories(limit = 300): Promise<Memory[]> {
+  const rows = await getDb()
+    .select()
+    .from(memories)
+    .orderBy(desc(memories.importance), desc(memories.updatedAt))
+    .limit(limit);
+
+  return rows.map(mapMemory);
+}
+
+export async function listActiveMemories(limit = 200): Promise<Memory[]> {
+  const rows = await getDb()
+    .select()
+    .from(memories)
+    .where(eq(memories.status, "active"))
+    .orderBy(desc(memories.importance), desc(memories.updatedAt))
+    .limit(limit);
+
+  return rows.map(mapMemory);
+}
+
+export async function createMemory(input: MemoryInput): Promise<Memory> {
+  const [row] = await getDb()
+    .insert(memories)
+    .values({
+      scope: input.scope,
+      studentId: input.studentId,
+      studentName: input.studentName,
+      category: input.category,
+      content: input.content,
+      importance: input.importance,
+      sourceDate: input.sourceDate ?? null,
+    })
+    .returning();
+
+  if (!row) throw new Error("保存记忆失败");
+
+  return mapMemory(row);
+}
+
+export async function updateMemory(
+  id: string,
+  input: MemoryInput,
+): Promise<Memory | null> {
+  const [row] = await getDb()
+    .update(memories)
+    .set({
+      scope: input.scope,
+      studentId: input.studentId,
+      studentName: input.studentName,
+      category: input.category,
+      content: input.content,
+      importance: input.importance,
+      status: "active",
+      updatedAt: new Date(),
+      ...(input.sourceDate !== undefined
+        ? { sourceDate: input.sourceDate }
+        : {}),
+    })
+    .where(eq(memories.id, id))
+    .returning();
+
+  return row ? mapMemory(row) : null;
+}
+
+export async function deleteMemory(id: string): Promise<boolean> {
+  const [row] = await getDb()
+    .delete(memories)
+    .where(eq(memories.id, id))
+    .returning({ id: memories.id });
+
+  return Boolean(row);
+}
+
+export async function markMemoryExtracted(date: string): Promise<string> {
+  const extractedAt = new Date();
+
+  await getDb()
+    .update(reviews)
+    .set({ memoryExtractedAt: extractedAt })
+    .where(eq(reviews.reviewDate, date));
+
+  return extractedAt.toISOString();
 }

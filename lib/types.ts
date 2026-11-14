@@ -44,11 +44,61 @@ export type Student = {
   note: string | null;
 };
 
+export type MemoryScope = "student" | "general";
+
+export const MEMORY_CATEGORIES = [
+  "学习习惯",
+  "成绩薄弱点",
+  "家长沟通",
+  "报名续费",
+  "课时排课",
+  "性格情绪",
+  "工作流程",
+  "长期目标",
+  "其他",
+] as const;
+
+export type MemoryCategory = (typeof MEMORY_CATEGORIES)[number];
+
+export type Memory = {
+  id: string;
+  scope: MemoryScope;
+  studentId: string | null;
+  studentName: string | null;
+  category: MemoryCategory;
+  content: string;
+  importance: number;
+  status: "active" | "archived";
+  sourceDate: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type MemoryInput = {
+  scope: MemoryScope;
+  studentId: string | null;
+  studentName: string | null;
+  category: MemoryCategory;
+  content: string;
+  importance: number;
+  sourceDate?: string | null;
+};
+
+export type MemoryPromptItem = {
+  id: string;
+  scope: MemoryScope;
+  studentName: string | null;
+  category: MemoryCategory;
+  content: string;
+  importance: number;
+};
+
 export type AppSettings = {
   defaultStyle: ReviewStyle;
   showJiaoyan: boolean;
   showKunnan: boolean;
   showFixedPhrase: boolean;
+  enableMemory: boolean;
 };
 
 export type ReviewRecord = {
@@ -60,6 +110,7 @@ export type ReviewRecord = {
   style: ReviewStyle;
   conversation: QAPair[];
   round: number;
+  memoryExtractedAt: string | null;
   updatedAt: string;
 };
 
@@ -145,9 +196,6 @@ export const SECTION_META: Record<SectionKey, SectionMeta> = {
   },
 };
 
-export const FIXED_PHRASE =
-  "做更优质的服务，做更多的业绩。服务要更细致。";
-
 export const NO_DIFFICULTY_PHRASE =
   "目前没有困难，有困难都已经想办法解决。";
 
@@ -156,6 +204,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   showJiaoyan: true,
   showKunnan: false,
   showFixedPhrase: false,
+  enableMemory: true,
 };
 
 export function emptySections(): Record<SectionKey, string[]> {

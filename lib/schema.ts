@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { MAX_FOLLOW_UP_ROUNDS } from "./types";
+import { MAX_FOLLOW_UP_ROUNDS, MEMORY_CATEGORIES } from "./types";
 
 // 手动重新生成会重置追问轮次但保留历史问答，所以不能按单次 3×3 来限制
 const MAX_QA_HISTORY = 200;
@@ -121,12 +121,57 @@ export const studentInputSchema = z.object({
     .transform((value) => (value ? value : null)),
 });
 
+export const memoryScopeSchema = z.enum(["student", "general"]);
+export const memoryCategorySchema = z.enum(MEMORY_CATEGORIES);
+
+export const memoryInputSchema = z
+  .object({
+    scope: memoryScopeSchema,
+    studentId: z.string().uuid().nullish(),
+    studentName: z.string().trim().max(20).nullish(),
+    category: memoryCategorySchema.default("其他"),
+    content: z
+      .string()
+      .trim()
+      .min(1, "请填写记忆内容")
+      .max(300, "记忆内容太长了"),
+    importance: z.number().int().min(1).max(3).default(2),
+  })
+  .refine(
+    (value) =>
+      value.scope !== "student" ||
+      Boolean(value.studentId || value.studentName?.trim()),
+    { message: "请选择学生", path: ["studentId"] },
+  );
+
+export const extractMemoriesRequestSchema = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  force: z.boolean().default(false),
+});
+
+export const memoryExtractionSchema = z.object({
+  memories: z
+    .array(
+      z.object({
+        id: z.string().uuid().nullish(),
+        scope: memoryScopeSchema,
+        studentName: z.string().trim().max(20).nullish(),
+        category: memoryCategorySchema.default("其他"),
+        content: z.string().trim().min(1).max(300),
+        importance: z.number().int().min(1).max(3).default(2),
+      }),
+    )
+    .max(10)
+    .default([]),
+});
+
 export const settingsPatchSchema = z
   .object({
     defaultStyle: reviewStyleSchema.optional(),
     showJiaoyan: z.boolean().optional(),
     showKunnan: z.boolean().optional(),
     showFixedPhrase: z.boolean().optional(),
+    enableMemory: z.boolean().optional(),
   })
   .refine((value) => Object.keys(value).length > 0, {
     message: "没有要更新的设置",
@@ -141,3 +186,7 @@ export type GenerateRequest = z.infer<typeof generateRequestSchema>;
 export type SaveReviewRequest = z.infer<typeof saveReviewSchema>;
 export type StudentInput = z.infer<typeof studentInputSchema>;
 export type SettingsPatch = z.infer<typeof settingsPatchSchema>;
+export type MemoryInputPayload = z.infer<typeof memoryInputSchema>;
+export type ExtractedMemory = z.infer<
+  typeof memoryExtractionSchema
+>["memories"][number];

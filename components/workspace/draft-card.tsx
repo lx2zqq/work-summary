@@ -1,6 +1,13 @@
 "use client";
 
-import { Check, Copy, Pencil, RefreshCw } from "lucide-react";
+import {
+  Brain,
+  Check,
+  Copy,
+  Pencil,
+  RefreshCw,
+} from "lucide-react";
+import Link from "next/link";
 import {
   ChiikawaMascot,
   DoodleStar,
@@ -9,6 +16,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import type { MemoryPromptItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -18,9 +26,15 @@ type Props = {
   loading: boolean;
   loadingMessage: string;
   notes: string[];
+  memories: MemoryPromptItem[];
+  memoryEnabled: boolean;
+  memoryExtractedAt: string | null;
+  memoryStale: boolean;
+  extractingMemory: boolean;
   onCopy: () => void;
   onEdit: () => void;
   onRegenerate: () => void;
+  onExtractMemory: () => void;
 };
 
 export function DraftCard({
@@ -30,9 +44,15 @@ export function DraftCard({
   loading,
   loadingMessage,
   notes,
+  memories,
+  memoryEnabled,
+  memoryExtractedAt,
+  memoryStale,
+  extractingMemory,
   onCopy,
   onEdit,
   onRegenerate,
+  onExtractMemory,
 }: Props) {
   return (
     <section className="paper-card relative flex min-h-[540px] flex-col">
@@ -51,15 +71,31 @@ export function DraftCard({
             <p className="text-[11px] text-ink-soft">
               复制后直接粘贴到钉钉工作群
             </p>
+            {memories.length > 0 ? (
+              <p className="mt-0.5 flex items-center gap-1 text-[10px] text-ink-soft/80">
+                <Brain className="h-3 w-3" />
+                本次参考 {memories.length} 条记忆
+                <Link href="/memories" className="underline">
+                  查看
+                </Link>
+              </p>
+            ) : null}
           </div>
         </div>
         {waitingForAnswers ? (
           <Badge tone="amber">待补全</Badge>
         ) : hasContent ? (
-          <Badge tone="green">
-            <Check className="mr-1 h-3 w-3" />
-            可发送
-          </Badge>
+          <div className="flex shrink-0 items-center gap-1.5">
+            {memoryEnabled && memoryExtractedAt ? (
+              <Badge tone={memoryStale ? "amber" : "blue"}>
+                {memoryStale ? "记忆待更新" : "已记忆"}
+              </Badge>
+            ) : null}
+            <Badge tone="green">
+              <Check className="mr-1 h-3 w-3" />
+              可发送
+            </Badge>
+          </div>
         ) : (
           <Badge tone="stone">待生成</Badge>
         )}
@@ -130,7 +166,7 @@ export function DraftCard({
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-2 border-t-2 border-line/60 px-4 py-3 sm:px-5">
-        <div className="flex items-center gap-1">
+        <div className="flex flex-wrap items-center gap-1">
           <Button
             variant="ghost"
             size="sm"
@@ -149,6 +185,22 @@ export function DraftCard({
             <RefreshCw className="h-4 w-4" />
             重新生成
           </Button>
+          {memoryEnabled ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onExtractMemory}
+              loading={extractingMemory}
+              disabled={!hasContent || loading || waitingForAnswers}
+            >
+              <Brain className="h-4 w-4" />
+              {memoryExtractedAt
+                ? memoryStale
+                  ? "更新记忆"
+                  : "重新记忆"
+                : "记住今天"}
+            </Button>
+          ) : null}
         </div>
         <Button
           size="sm"

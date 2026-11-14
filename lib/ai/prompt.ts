@@ -1,9 +1,11 @@
 import { formatDateCN } from "@/lib/date";
+import { formatMemoriesForPrompt } from "@/lib/memory";
 import {
   MAX_FOLLOW_UP_ROUNDS,
   MAX_QUESTIONS_PER_ROUND,
   SECTION_META,
   type AppSettings,
+  type MemoryPromptItem,
   type QAPair,
   type ReviewDraft,
   type ReviewStyle,
@@ -19,6 +21,7 @@ export type PromptContext = {
   settings: AppSettings;
   students: Student[];
   recentReviews: Array<{ date: string; text: string }>;
+  memories: MemoryPromptItem[];
   rawInput: string;
   answers: QAPair[];
   currentDraft?: ReviewDraft;
@@ -97,7 +100,8 @@ const QUESTION_RULES = `【追问规则】
 - 先做五个核心栏目的覆盖检查：判断每个栏目在流水账、已问答和当前草稿里是否完全没有内容。对完全没有内容的栏目，如果本轮问题数还没满，必须生成一个确认问题，选项里必须有“没有”。
 - 用户已经明确说“没有/无/跳过”的栏目视为已确认，不要重复问。
 - 不要检查 kunnan/jiaoyan 这两个可选栏目。
-- 只在缺失信息会明显影响复盘质量时问。优先顺序：业绩进展 > 家校沟通的渠道/结果 > 学情跟进的结果 > 小橙AI录入对象 > 日常工作复盘。
+- 只在缺失信息会明显影响复盘质量时问。优先顺序：业绩进展 > 长期记忆里今天提到的学生的进展 > 家校沟通的渠道/结果 > 学情跟进的结果 > 小橙AI录入对象 > 日常工作复盘。
+- 如果今天的流水账提到了某个学生，而【长期记忆】里有这个学生的报名/续费、家长沟通、学习习惯或薄弱点信息，本轮必须至少有 1 个问题确认相关进展；可以排在业绩问题之后，但不要被其他栏目问题挤掉。不要为了用记忆而硬问无关内容。
 - 不要问“已追问及回答”里已经回答过的问题。
 - 能用一个问题补全的缺失信息（例如新家长人数、沟通渠道/结果、学生表现细节、业绩进展），必须放进 questions，不要只写在 notes。notes 不能代替追问。
 - 当一个问题可能同时有多个答案时（例如“今天跟哪些家长沟通了”“录入了哪些学生的错题”“做了哪些类型的日常工作”），把 multiple 设为 true，前端会显示成可多选；只有一个答案时设为 false。
@@ -127,6 +131,14 @@ const RESTYLE_RULES = `【改文风规则】
 - 五个核心栏目的空数组继续保持空数组。
 - 只输出 sections 和 notes；不要再提问，questions 必须为空数组。`;
 
+const MEMORY_USAGE_RULES = `【长期记忆使用规则】
+- 长期记忆只用于理解背景和追踪进展，今天的流水账/问答才是事实来源。
+- 不要把记忆里的旧事写成今天发生的事，不要在正文里添加今天没有发生的内容。
+- 不要在正文里出现“根据记忆”“历史记录”“上次”等字样。
+- 追问阶段：如果今天提到的学生有未完成事项，可以围绕进展提问；不要为了用记忆而硬问。
+- 最终稿：如果今天的内容和记忆相关，可以自然体现连续性；不相关就忽略。
+- 长期记忆和最近复盘重复时，只使用一次。`;
+
 const RESTYLE_EXAMPLES = `【文风对比示例】
 当前草稿：林小满：完成作业，错题已讲解。
 简洁版：林小满：完成今日作业，错题已讲解。
@@ -135,6 +147,7 @@ const RESTYLE_EXAMPLES = `【文风对比示例】
 const QUESTION_EXAMPLES = `【好问题的示例】
 - “今天有试听、续费或转介绍的进展吗？” 选项：["没有", "有，稍后补充"]，multiple=false
 - “今天和林小满妈妈通过哪些渠道沟通？” 选项：["微信", "电话", "面聊"]，multiple=true
+- “长期记忆里陈一鸣的数学课已经签单，今天上课后要跟家长同步反馈吗？” 选项：["要同步", "已经同步", "不用"]，multiple=false
 - “今天有需要复盘或改进的地方吗？” 选项：["没有", "有，稍后补充"]，multiple=false
 - “小橙AI今天录入了哪些学生的错题？” 选项：["林小满", "其他学生", "今天没录入"]，multiple=true`;
 
@@ -221,7 +234,11 @@ ${STYLE_RULES[context.style]}
 
   const settingsBlock =
     context.mode === "final"
-      ? `栏目开关：教研相关=${context.settings.showJiaoyan ? "开" : "关"}；工作困难=${context.settings.showKunnan ? "开" : "关"}；固定话术=${context.settings.showFixedPhrase ? "开" : "关"}`
+      ? `栏目开关：教研相关=${context.settings.showJiaoyan ? "开" : "关"}；工作困难=${context.settings.showKunnan ? "开" : "关"}；固定话术=${
+          context.settings.showFixedPhrase
+            ? "开（由程序在渲染时追加，你不用自己写服务/业绩口号）"
+            : "关"
+        }`
       : "";
 
   const studentsBlock = isRestyle
@@ -233,6 +250,11 @@ ${formatStudents(context.students)}`;
     context.mode === "final"
       ? `【最近复盘】
 ${formatRecentReviews(context.recentReviews)}`
+      : "";
+
+  const memoryRules =
+    !isRestyle && context.memories.length > 0
+      ? MEMORY_USAGE_RULES
       : "";
 
   return `你是“学管部工作复盘”写作助手，服务对象是教育培训机构的学管师。用户会把当天零散、口语化的工作流水账发给你，你要帮她把信息补全并整理成可以直接复制到钉钉工作群的规范复盘。
@@ -254,6 +276,8 @@ ${modeBlock}
 
 ${styleBlock}
 
+${memoryRules}
+
 【今天的上下文】
 今天日期：${formatDateCN(context.reviewDate)}
 ${settingsBlock}
@@ -274,6 +298,12 @@ function buildUserPrompt(context: PromptContext): string {
 
   const parts: string[] = [];
 
+  if (context.memories.length > 0) {
+    parts.push(
+      `【长期记忆（只在相关时参考，不要写成今天发生的事）】\n${formatMemoriesForPrompt(context.memories)}`,
+    );
+  }
+
   parts.push(`【今天的流水账】\n${context.rawInput.trim()}`);
 
   if (context.answers.length > 0) {
@@ -293,6 +323,12 @@ function buildUserPrompt(context: PromptContext): string {
     parts.push(
       `【本轮信息】第 ${context.round + 1} 轮追问，最多 ${MAX_FOLLOW_UP_ROUNDS} 轮。请只输出 questions 和 notes，不要输出 sections。`,
     );
+
+    if (context.memories.length > 0) {
+      parts.push(
+        "【本轮记忆要求】如果长期记忆里有今天提到的学生的未跟进事项，请至少有 1 个问题确认进展。",
+      );
+    }
   } else {
     parts.push(
       "【本轮信息】追问已结束。请输出完整的 sections 和 notes；questions 必须为空数组。",

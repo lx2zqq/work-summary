@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { pickDailyPhrase } from "@/lib/daily-phrase";
 import { normalizeItem, numberPrefix, renderReview } from "@/lib/template";
 import { DEFAULT_SETTINGS, emptyDraft, type ReviewDraft } from "@/lib/types";
 
@@ -38,17 +39,16 @@ describe("renderReview", () => {
     );
   });
 
-  it("固定话术只补一次", () => {
-    const draft = draftWith({
-      richang: ["做更优质的服务，做更多的业绩。服务要更细致。"],
-    });
-    const text = renderReview(draft, "2026-11-13", {
+  it("固定话术按日期补一次", () => {
+    const date = "2026-11-13";
+    const phrase = pickDailyPhrase(date, draftWith({}));
+    const draft = draftWith({ richang: [phrase] });
+    const text = renderReview(draft, date, {
       ...DEFAULT_SETTINGS,
       showFixedPhrase: true,
     });
 
-    const matches = text.match(/做更优质的服务/g) ?? [];
-    expect(matches).toHaveLength(1);
+    expect(text.split(phrase)).toHaveLength(2);
   });
 
   it("教研相关只在开启且有内容时出现", () => {

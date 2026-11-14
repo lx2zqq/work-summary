@@ -13,6 +13,7 @@ const BASE: PromptContext = {
   settings: DEFAULT_SETTINGS,
   students: [],
   recentReviews: [],
+  memories: [],
   rawInput: "今天接待几位新家长，沟通了林小满课堂表现，没有提业绩。",
   answers: [],
   round: 1,
@@ -67,6 +68,56 @@ describe("buildPromptMessages", () => {
     expect(system?.content).toContain("【文风】");
     expect(system?.content).toContain("【示例：简洁版】");
     expect(system?.content).not.toContain("【追问规则】");
+  });
+
+  it("有长期记忆时注入背景和使用规则", () => {
+    const [system, user] = buildPromptMessages({
+      ...BASE,
+      memories: [
+        {
+          id: "memory-1",
+          scope: "student",
+          studentName: "林小满",
+          category: "家长沟通",
+          content: "林小满妈妈偏好微信沟通。",
+          importance: 2,
+        },
+      ],
+    });
+
+    expect(user?.content).toContain("【长期记忆");
+    expect(user?.content).toContain("林小满妈妈偏好微信沟通");
+    expect(system?.content).toContain(
+      "不要把记忆里的旧事写成今天发生的事",
+    );
+  });
+
+  it("改文风模式不注入长期记忆", () => {
+    const draft = {
+      ...emptyDraft(),
+      sections: {
+        ...emptyDraft().sections,
+        xueqing: ["林小满：完成今日校内作业。"],
+      },
+    };
+
+    const [system] = buildPromptMessages({
+      ...BASE,
+      mode: "restyle",
+      currentDraft: draft,
+      memories: [
+        {
+          id: "memory-1",
+          scope: "student",
+          studentName: "林小满",
+          category: "家长沟通",
+          content: "林小满妈妈偏好微信沟通。",
+          importance: 2,
+        },
+      ],
+    });
+
+    expect(system?.content).not.toContain("【长期记忆】");
   });
 
   it("改文风模式只以当前草稿为底稿，不重新提取流水账", () => {

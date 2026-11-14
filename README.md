@@ -6,9 +6,11 @@
 - 先追问补全，最多 3 轮、每轮 3 个问题，可跳过；选项支持单选/多选
 - 追问阶段只出问题、不生成正文，回答完或跳过后才生成，省 token
 - 五个核心栏目为空时会主动确认，答“没有”就保持空栏
+- 固定话术：开启后每天补一条按日期轮换的服务/业绩话术；她写了内容也会保留并追加
 - 生成后可以逐条修改、移动到其他栏目、删除
 - 一键复制，纯文本 + emoji，粘贴到钉钉不会带 Markdown 符号
 - 支持语音输入：电脑端边说边转文字；安卓微信等不支持 Web Speech 的环境自动改用录音转写（需配置硅基流动 Key）
+- 长期记忆：每天最后一次复制时提取关键信息，之后生成复盘时自动参考；可在“记忆”页查看和编辑
 - 历史存档，第二天生成时会参考最近两天的内容
 - 手机 / 电脑都能用，支持添加到主屏幕
 
@@ -80,6 +82,14 @@ npm run dev
 | `PGLITE_DATA_DIR` | 否 | 本地 PGlite 目录，默认 `.data/pglite` |
 
 没有配置 `REVIEW_DEEPSEEK_API_KEY` 时，应用不会崩溃：会把原文按句号/分号拆成【学情跟进】，并提示“AI 暂时没有连上”，方便先验证页面和流程。
+
+## 长期记忆
+
+- 每天第一次点“复制到钉钉”，或者手动点预览卡里的“记住今天”时，系统会从当天最终复盘里提取值得长期保留的信息：学生习惯、薄弱点、家长偏好、报名/续费进度、工作流程等。
+- 每天最多自动提取一次，重复复制不会重复调用 AI；内容改过后可以点“更新记忆”。
+- 之后生成追问或最终稿时，只把“通用记忆 + 今天提到的学生记忆”发给 AI，让追问和正文更连贯。
+- 导航“记忆”页可以按学生/通用查看、编辑、删除；设置里可以关闭“长期记忆”。
+- 提取会额外调用一次 DeepSeek；关闭长期记忆后既不提取也不参考。
 
 ## 部署到 Vercel + Supabase
 
@@ -187,6 +197,7 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 
 - 改代码后 `git add . && git commit -m "..." && git push`，Vercel 会自动部署。
 - 改了数据库结构，需要在本地重新用 Session pooler URL 跑 `npm run db:migrate`，不要把生产 URL 长期留在 `.env.local`。
+- **本次长期记忆版本新增了 `memories` 表，以及 `reviews.memory_extracted_at`、`settings.enable_memory` 两列。部署新代码前，必须先用 Session pooler 命令跑一次 `npm run db:migrate`，否则首页和设置页会因为缺列报错。**
 - **生产库不要执行 `npm run db:push`**，它可能直接改表结构甚至丢列；生产只用生成迁移 + `db:migrate`。
 
 > 本地 PGlite 里的学生和历史复盘不会自动迁移到 Supabase。线上第一次使用需要重新添加学生；如果需要把本地历史搬到线上，先停下来单独处理。
@@ -247,6 +258,7 @@ PYTHONIOENCODING=utf-8 APP_PASSWORD=你的访问密码 python scripts/ui-test.py
 - 学生姓名、家长沟通内容会发送给 DeepSeek API。当前版本按你的选择**不做脱敏**。
 - 电脑端语音输入使用浏览器自带的 Web Speech API，音频可能由 Chrome（Google）或 Safari（Apple）的语音服务处理，不经过本项目服务器。
 - 安卓微信等录音转写场景，录音会先上传到本项目服务端，再由服务端发送给硅基流动 SiliconFlow 转写；本项目不会把录音写入数据库。介意的话可以直接打字。
+- 长期记忆保存在 Supabase/本地 PGlite；提取时会把当天最终复盘发给 DeepSeek。记忆页可以查看、编辑或删除，设置里可以整体关闭。
 - DeepSeek Key 只在服务端读取，不会出现在浏览器 bundle 里。
 - 页面有单密码保护；Cookie 是 HttpOnly + SameSite=Lax，生产环境自动加 Secure。
 - 生产环境的历史记录存在 Supabase；本地开发存在 `.data/pglite`。
