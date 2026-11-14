@@ -68,13 +68,10 @@ export function DraftCard({
               复盘预览
               <DoodleStar className="h-3 w-3 text-butter" />
             </h2>
-            <p className="text-[11px] text-ink-soft">
-              复制后直接粘贴到钉钉工作群
-            </p>
-            {memories.length > 0 ? (
+            {memories.length > 0 && !waitingForAnswers ? (
               <p className="mt-0.5 flex items-center gap-1 text-[10px] text-ink-soft/80">
                 <Brain className="h-3 w-3" />
-                本次参考 {memories.length} 条记忆
+                记忆 {memories.length} 条
                 <Link href="/memories" className="underline">
                   查看
                 </Link>
@@ -86,11 +83,6 @@ export function DraftCard({
           <Badge tone="amber">待补全</Badge>
         ) : hasContent ? (
           <div className="flex shrink-0 items-center gap-1.5">
-            {memoryEnabled && memoryExtractedAt ? (
-              <Badge tone={memoryStale ? "amber" : "blue"}>
-                {memoryStale ? "记忆待更新" : "已记忆"}
-              </Badge>
-            ) : null}
             <Badge tone="green">
               <Check className="mr-1 h-3 w-3" />
               可发送
@@ -121,9 +113,6 @@ export function DraftCard({
             <p className="mt-2 text-sm font-extrabold text-ink">
               先回答上面的追问
             </p>
-            <p className="mt-1 max-w-xs text-xs leading-relaxed text-ink-soft">
-              回答完或跳过后，再生成复盘正文；追问阶段不会显示半成品。
-            </p>
           </div>
         ) : (
           <>
@@ -142,9 +131,6 @@ export function DraftCard({
                   <ChiikawaMascot className="mx-auto h-16 w-16" />
                   <p className="mt-2 text-sm font-extrabold text-ink">
                     生成后会显示在这里
-                  </p>
-                  <p className="mt-1 text-xs text-ink-soft">
-                    左边写完，点“生成复盘”
                   </p>
                 </div>
               </div>

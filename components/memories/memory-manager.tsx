@@ -280,9 +280,7 @@ export function MemoryManager({
               {memory.content}
             </p>
             <p className="mt-1 text-[11px] text-ink-soft">
-              {memory.sourceDate
-                ? `来自 ${formatDateCN(memory.sourceDate)} 的复盘`
-                : "手动添加"}
+              {memory.sourceDate ? formatDateCN(memory.sourceDate) : "手动添加"}
             </p>
           </div>
 
@@ -344,7 +342,7 @@ export function MemoryManager({
 
         {!memoryEnabled ? (
           <p className="mt-3 rounded-2xl bg-butter-soft px-3 py-2 text-[11px] leading-relaxed text-[#7a5c2a] ring-2 ring-butter/50">
-            长期记忆已在设置里关闭：已有记忆不会删除，但生成复盘时不会参考。
+            长期记忆已关闭：不会提取或参考，已有记忆保留。
             <Link href="/settings" className="ml-1 underline">
               去设置
             </Link>
@@ -357,9 +355,6 @@ export function MemoryManager({
           <UsagiMascot className="mascot-float mx-auto h-24 w-24" mood="sad" />
           <p className="mt-3 text-sm font-extrabold text-ink">
             还没有长期记忆
-          </p>
-          <p className="mt-1 text-xs text-ink-soft">
-            生成今天的最终复盘后，点“记住今天”就会开始积累。
           </p>
           <Link
             href="/"
@@ -406,10 +401,7 @@ export function MemoryManager({
       )}
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent
-          title={editing ? "编辑记忆" : "新增记忆"}
-          description="记忆会作为长期背景，生成复盘时只在相关时参考。"
-        >
+        <DialogContent title={editing ? "编辑记忆" : "新增记忆"}>
           <form onSubmit={handleSubmit} className="mt-4 space-y-3.5">
             <div>
               <Label>类型</Label>

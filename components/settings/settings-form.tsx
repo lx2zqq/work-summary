@@ -51,25 +51,23 @@ const TOGGLES: Array<{
   {
     key: "showJiaoyan",
     title: "教研相关",
-    description: "有教讨会、教研内容时，在复盘末尾显示这个栏目。",
+    description: "有教研内容时显示。",
   },
   {
     key: "showKunnan",
     title: "工作困难",
-    description:
-      "开启后每天都显示；当天没内容时自动写“目前没有困难，有困难都已经想办法解决。”",
+    description: "当天没内容时自动补一句“目前没有困难”。",
   },
   {
     key: "showFixedPhrase",
     title: "固定话术",
-    description:
-      "在【日常工作复盘】末尾补一条按日期轮换的服务/业绩话术；她自己写了内容也会保留并追加。",
+    description: "每天轮换一条服务/业绩话术，追加在末尾。",
   },
   {
     key: "enableMemory",
     title: "长期记忆",
     description:
-      "每天最后一次复制时，从最终复盘里提取关键信息；生成时参考这些记忆。关闭后不提取也不参考。",
+      "每天最后一次复制时自动提取；生成时参考，关闭后不提取也不参考。",
   },
 ];
 
@@ -150,12 +148,7 @@ export function SettingsForm({
           <div className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-soft text-brand-deep ring-2 ring-brand/40">
             <Settings2 className="h-4 w-4" />
           </div>
-          <div>
-            <h2 className="text-sm font-extrabold text-ink">栏目开关</h2>
-            <p className="text-[11px] text-ink-soft">
-              改完立即生效，之后生成的复盘会按新设置渲染。
-            </p>
-          </div>
+          <h2 className="text-sm font-extrabold text-ink">复盘设置</h2>
         </div>
 
         <div className="mt-4 divide-y-2 divide-line/60">
@@ -183,14 +176,7 @@ export function SettingsForm({
         </div>
 
         <div className="mt-4 flex flex-col gap-3 border-t-2 border-line/60 pt-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <div className="text-sm font-bold text-ink">
-              默认文风
-            </div>
-            <p className="mt-0.5 text-xs text-ink-soft">
-              新建复盘时默认用这种文风，写完还可以随时切换。
-            </p>
-          </div>
+          <div className="text-sm font-bold text-ink">默认文风</div>
           <div
             className={cn(
               "shrink-0",
@@ -217,20 +203,13 @@ export function SettingsForm({
       </section>
 
       <section className="paper-card p-4 sm:p-5">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-soft text-brand-deep ring-2 ring-brand/40">
-              <Sparkles className="h-4 w-4" />
-            </div>
-            <div>
-              <h2 className="text-sm font-extrabold text-ink">
-                模板预览
-              </h2>
-              <p className="text-[11px] text-ink-soft">
-                用示例内容展示当前开关下的最终格式。
-              </p>
-            </div>
+        <div className="flex items-center gap-2">
+          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-soft text-brand-deep ring-2 ring-brand/40">
+            <Sparkles className="h-4 w-4" />
           </div>
+          <h2 className="text-sm font-extrabold text-ink">
+            模板预览
+          </h2>
         </div>
 
         <pre className="review-text mt-4 max-h-[360px] overflow-y-auto rounded-2xl bg-cream/40 p-4 text-[13px] text-ink ring-2 ring-line/60">
@@ -243,14 +222,9 @@ export function SettingsForm({
           <div className="flex h-9 w-9 items-center justify-center rounded-full bg-sky-soft text-[#4e7f99] ring-2 ring-sky/60">
             <Bot className="h-4 w-4" />
           </div>
-          <div>
-            <h2 className="text-sm font-extrabold text-ink">
-              AI 与账号
-            </h2>
-            <p className="text-[11px] text-ink-soft">
-              Key 只在服务端读取，不会出现在浏览器。
-            </p>
-          </div>
+          <h2 className="text-sm font-extrabold text-ink">
+            AI 与账号
+          </h2>
         </div>
 
         <div className="mt-4 space-y-3">
@@ -264,14 +238,7 @@ export function SettingsForm({
           </div>
 
           <div className="flex items-center justify-between gap-3 rounded-2xl bg-cream-deep/60 px-3.5 py-3">
-            <div>
-              <div className="text-sm font-bold text-ink">
-                退出登录
-              </div>
-              <p className="mt-0.5 text-xs text-ink-soft">
-                退出后需要重新输入访问密码。
-              </p>
-            </div>
+            <div className="text-sm font-bold text-ink">退出登录</div>
             <Button
               variant="danger"
               size="sm"

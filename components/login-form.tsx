@@ -58,7 +58,6 @@ export function LoginForm({ next }: { next: string }) {
             type="password"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
-            placeholder="请输入密码"
             autoComplete="current-password"
             autoFocus
             className="pl-10"

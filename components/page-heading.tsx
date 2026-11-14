@@ -7,7 +7,7 @@ export function PageHeading({
   mascot,
 }: {
   title: string;
-  description: string;
+  description?: string;
   mascot: ReactNode;
 }) {
   return (
@@ -20,9 +20,11 @@ export function PageHeading({
         <h1 className="text-xl font-extrabold tracking-tight text-ink">
           {title}
         </h1>
-        <p className="mt-1 text-sm leading-relaxed text-ink-soft">
-          {description}
-        </p>
+        {description ? (
+          <p className="mt-1 text-sm leading-relaxed text-ink-soft">
+            {description}
+          </p>
+        ) : null}
       </div>
     </div>
   );

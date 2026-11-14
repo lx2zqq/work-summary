@@ -107,11 +107,7 @@ function DraftEditorInner({
 
   return (
     <Dialog open onOpenChange={onOpenChange}>
-      <DialogContent
-        title="调整内容"
-        description="逐条修改、移动或删除；保存后正文会同步更新。"
-        className="max-w-2xl"
-      >
+      <DialogContent title="调整内容" className="max-w-2xl">
         <div className="mt-4 space-y-5">
           {SECTION_ORDER.map((key) => {
             const items = local.sections[key] ?? [];
@@ -144,12 +140,6 @@ function DraftEditorInner({
                 </div>
 
                 <div className="mt-2 space-y-2">
-                  {items.length === 0 ? (
-                    <p className="rounded-2xl bg-cream-deep/60 px-3 py-2 text-xs text-ink-soft">
-                      暂无内容
-                    </p>
-                  ) : null}
-
                   {items.map((item, index) => (
                     <div
                       key={`${key}-${index}`}

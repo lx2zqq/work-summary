@@ -44,10 +44,7 @@ export default async function LoginPage({
           <LoginForm next={safeNext} />
         </div>
 
-        <p className="mt-5 text-center text-xs text-ink-soft/70">
-          只有拿到访问密码的人才能进入
-        </p>
-        <div className="mt-3 flex justify-center gap-2 text-brand/60">
+        <div className="mt-5 flex justify-center gap-2 text-brand/60">
           <DoodleStar className="h-3.5 w-3.5" />
           <DoodleHeart className="h-3.5 w-3.5" />
           <DoodleStar className="h-3.5 w-3.5" />

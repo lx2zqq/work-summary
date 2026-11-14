@@ -8,6 +8,7 @@ import {
   Square,
   Users,
 } from "lucide-react";
+import Link from "next/link";
 import { useCallback, useState, useSyncExternalStore } from "react";
 import { toast } from "sonner";
 import { ChiikawaMascot } from "@/components/mascots";
@@ -169,29 +170,20 @@ export function RawInputCard({
 
   return (
     <section className="paper-card p-4 sm:p-5">
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex items-start gap-3">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-sky-soft ring-2 ring-sky/60">
-            <ChiikawaMascot className="h-10 w-10" />
-          </div>
-          <div>
-            <h2 className="text-base font-extrabold tracking-tight text-ink">
-              今天都做了什么？
-            </h2>
-            <p className="mt-1 text-xs leading-relaxed text-ink-soft">
-              随便写，不用组织语言。学生、家长、业绩、琐事都可以。
-            </p>
-          </div>
+      <div className="flex items-start gap-3">
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-sky-soft ring-2 ring-sky/60">
+          <ChiikawaMascot className="h-10 w-10" />
         </div>
-        <span className="shrink-0 rounded-full bg-brand-soft px-2.5 py-1 text-[11px] font-bold text-brand-deep ring-2 ring-brand/40">
-          第一步
-        </span>
+        <div>
+          <h2 className="text-base font-extrabold tracking-tight text-ink">
+            今天都做了什么？
+          </h2>
+        </div>
       </div>
 
       {students.length > 0 ? (
         <div className="mt-3 flex flex-wrap items-center gap-1.5 text-[11px] text-ink-soft">
           <Users className="h-3.5 w-3.5" />
-          <span>名单：</span>
           {students.slice(0, 8).map((student) => (
             <span
               key={student.id}
@@ -200,61 +192,70 @@ export function RawInputCard({
               {student.name}
             </span>
           ))}
-          {students.length > 8 ? <span>等 {students.length} 人</span> : null}
+          {students.length > 8 ? (
+            <span
+              className="rounded-full bg-cream-deep px-2.5 py-0.5 font-semibold text-ink-soft"
+              title={`还有 ${students.length - 8} 位学生`}
+            >
+              +{students.length - 8}
+            </span>
+          ) : null}
         </div>
       ) : (
-        <p className="mt-3 rounded-2xl bg-cream-deep/70 px-3 py-2 text-[11px] leading-relaxed text-ink-soft">
-          还没有学生名单，可以先去“学生”页添加林小满，AI 会更容易认出她。
-        </p>
+        <div className="mt-3 flex items-center gap-1.5 text-[11px] text-ink-soft">
+          <Users className="h-3.5 w-3.5" />
+          <span>还没有学生名单</span>
+          <Link
+            href="/students"
+            className="font-bold text-brand-deep underline underline-offset-2"
+          >
+            去添加
+          </Link>
+        </div>
       )}
 
-      <div className="mt-4 flex items-center justify-between gap-2">
-        <span className="text-xs font-bold text-ink-soft">工作流水账</span>
-        <div className="flex items-center gap-2">
-          <span className="hidden text-[11px] text-ink-soft/70 sm:inline">
-            {recordingMode ? "录完自动转文字" : "边说边转文字"}
-          </span>
-          <button
-            type="button"
-            onClick={handleVoiceToggle}
-            disabled={voiceButtonDisabled}
-            aria-pressed={activeVoice}
-            aria-label={voiceTitle}
-            title={voiceTitle}
-            className={cn(
-              "inline-flex h-9 shrink-0 items-center gap-2 rounded-full border-2 px-3.5 text-xs font-bold transition-all",
-              activeVoice
-                ? "border-brand-deep bg-brand text-cocoa shadow-[0_2px_0_#c96b85]"
-                : recorder.transcribing
-                  ? "border-brand/50 bg-brand-soft text-brand-deep"
-                  : "border-line bg-paper text-ink-soft shadow-[0_2px_0_#eadccd] hover:border-brand hover:text-ink",
-              voiceButtonDisabled && "cursor-not-allowed opacity-50",
-            )}
-          >
-            {recorder.transcribing ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : activeVoice ? (
-              <Square className="h-3.5 w-3.5 fill-current" />
-            ) : (
-              <Mic className="h-4 w-4" />
-            )}
-            {voiceLabel}
-            {activeVoice ? (
-              <span className="relative flex h-2 w-2">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-brand-deep opacity-60 motion-reduce:animate-none" />
-                <span className="relative inline-flex h-2 w-2 rounded-full bg-brand-deep" />
-              </span>
-            ) : null}
-          </button>
-        </div>
+      <div className="mt-3 flex justify-end">
+        <button
+          type="button"
+          onClick={handleVoiceToggle}
+          disabled={voiceButtonDisabled}
+          aria-pressed={activeVoice}
+          aria-label={voiceTitle}
+          title={voiceTitle}
+          className={cn(
+            "inline-flex h-9 shrink-0 items-center gap-2 rounded-full border-2 px-3.5 text-xs font-bold transition-all",
+            activeVoice
+              ? "border-brand-deep bg-brand text-cocoa shadow-[0_2px_0_#c96b85]"
+              : recorder.transcribing
+                ? "border-brand/50 bg-brand-soft text-brand-deep"
+                : "border-line bg-paper text-ink-soft shadow-[0_2px_0_#eadccd] hover:border-brand hover:text-ink",
+            voiceButtonDisabled && "cursor-not-allowed opacity-50",
+          )}
+        >
+          {recorder.transcribing ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : activeVoice ? (
+            <Square className="h-3.5 w-3.5 fill-current" />
+          ) : (
+            <Mic className="h-4 w-4" />
+          )}
+          {voiceLabel}
+          {activeVoice ? (
+            <span className="relative flex h-2 w-2">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-brand-deep opacity-60 motion-reduce:animate-none" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-brand-deep" />
+            </span>
+          ) : null}
+        </button>
       </div>
 
       <Textarea
+        aria-label="工作流水账"
         value={value}
         disabled={loading}
         onChange={(event) => onChange(event.target.value)}
         placeholder={
-          "比如：\n今天林小满作业写完了，错题讲了两道；跟她妈妈微信说了下这周安排；另外把错题录到小橙AI了。"
+          "今天做了什么？随便写，学生、家长、业绩、琐事都可以。\n比如：林小满作业写完了，错题讲了两道；跟她妈妈微信说了这周安排。\n写不完整也没关系，AI 会追问。"
         }
         className="notebook-lines mt-2 min-h-[220px] resize-y bg-paper text-[15px] leading-8"
         maxLength={RAW_INPUT_MAX_LENGTH}
@@ -309,8 +310,7 @@ export function RawInputCard({
         </p>
       ) : null}
 
-      <div className="mt-2 flex items-center justify-between gap-2 text-[11px] text-ink-soft">
-        <span>写不完整没关系，AI 会追问。</span>
+      <div className="mt-2 flex justify-end text-[11px] text-ink-soft">
         <span className="shrink-0">
           {value.length} / {RAW_INPUT_MAX_LENGTH}
         </span>
@@ -333,7 +333,7 @@ export function RawInputCard({
       <details className="mt-4 rounded-2xl border-2 border-line/60 bg-cream-deep/50 px-3.5 py-3 text-sm text-ink-soft">
         <summary className="flex cursor-pointer list-none items-center gap-2 text-xs font-bold text-ink-soft">
           <Lightbulb className="h-4 w-4 text-[#c79a45]" />
-          不知道怎么写？看栏目提示
+          栏目提示
         </summary>
         <div className="mt-3 grid gap-2.5 sm:grid-cols-2">
           {CORE_SECTIONS.map((key) => (

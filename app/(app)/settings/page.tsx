@@ -16,7 +16,6 @@ export default async function SettingsPage() {
     <div className="mx-auto max-w-3xl space-y-4">
       <PageHeading
         title="设置"
-        description="控制额外栏目、默认文风和登录状态。"
         mascot={<UsagiMascot className="h-9 w-9" />}
       />
       <SettingsForm

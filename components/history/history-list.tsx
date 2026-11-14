@@ -19,9 +19,6 @@ export function HistoryList({ items }: { items: ReviewListItem[] }) {
         <p className="mt-3 text-sm font-extrabold text-ink">
           还没有历史复盘
         </p>
-        <p className="mt-1 text-xs text-ink-soft">
-          今天写的第一篇会出现在这里。
-        </p>
         <Link
           href="/"
           className="mt-4 inline-flex h-10 items-center gap-2 rounded-full border-2 border-cocoa bg-brand px-4 text-sm font-bold text-cocoa shadow-[0_3px_0_#5b463c] transition-all hover:-translate-y-0.5 hover:bg-[#f7b7c8] hover:shadow-[0_4px_0_#5b463c]"

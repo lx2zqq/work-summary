@@ -12,7 +12,6 @@ export default async function HistoryPage() {
     <div className="space-y-4">
       <PageHeading
         title="历史复盘"
-        description="按日期倒序。点“打开”可以继续编辑，点“复制”直接发钉钉。"
         mascot={<ChiikawaMascot className="h-9 w-9" />}
       />
       <HistoryList items={reviews} />

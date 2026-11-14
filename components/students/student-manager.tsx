@@ -160,7 +160,7 @@ export function StudentManager({
       <div className="flex items-center justify-between gap-3">
         <p className="text-sm text-ink-soft">
           {students.length > 0
-            ? `共 ${students.length} 位学生`
+            ? `${students.length} 位学生`
             : "还没有学生"}
         </p>
         <Button onClick={() => openCreate()}>
@@ -174,9 +174,6 @@ export function StudentManager({
           <HachiwareMascot className="mascot-float mx-auto h-24 w-24" mood="sad" />
           <p className="mt-3 text-sm font-extrabold text-ink">
             先添加林小满吧
-          </p>
-          <p className="mt-1 text-xs leading-relaxed text-ink-soft">
-            添加后，AI 会更容易认出她，也能补全年级和科目。
           </p>
           <Button className="mt-4" onClick={() => openCreate("林小满")}>
             <UserRound className="h-4 w-4" />
@@ -206,11 +203,13 @@ export function StudentManager({
                         {student.status}
                       </Badge>
                     </div>
-                    <p className="mt-0.5 text-xs text-ink-soft">
-                      {[student.grade, student.subjects]
-                        .filter(Boolean)
-                        .join(" · ") || "还没有填写年级/科目"}
-                    </p>
+                    {student.grade || student.subjects ? (
+                      <p className="mt-0.5 text-xs text-ink-soft">
+                        {[student.grade, student.subjects]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </p>
+                    ) : null}
                   </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
@@ -243,10 +242,7 @@ export function StudentManager({
       )}
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent
-          title={editing ? "编辑学生" : "添加学生"}
-          description="年级、科目和备注都可以留空，之后随时补。"
-        >
+        <DialogContent title={editing ? "编辑学生" : "添加学生"}>
           <form onSubmit={handleSubmit} className="mt-4 space-y-4">
             <div className="space-y-2">
               <Label htmlFor="student-name">姓名 *</Label>

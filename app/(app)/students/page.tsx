@@ -12,7 +12,7 @@ export default async function StudentsPage() {
     <div className="space-y-4">
       <PageHeading
         title="学生名单"
-        description="名单只用于让 AI 认人，不会把没提到的学生写进复盘。"
+        description="AI 只写你提到的学生。"
         mascot={<HachiwareMascot className="h-9 w-9" />}
       />
       <StudentManager initialStudents={students} />

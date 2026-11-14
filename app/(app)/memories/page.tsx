@@ -19,7 +19,7 @@ export default async function MemoriesPage() {
     <div className="space-y-4">
       <PageHeading
         title="长期记忆"
-        description="AI 从每天的最终复盘里提取的关键信息。可以编辑或删除，生成复盘时会自动参考。"
+        description="从每日复盘自动积累，生成时参考。"
         mascot={<UsagiMascot className="h-9 w-9" />}
       />
       <MemoryManager

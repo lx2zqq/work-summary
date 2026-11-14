@@ -99,12 +99,11 @@ export function QuestionsCard({
             </span>
           </div>
           <p className="mt-1 text-xs leading-relaxed text-ink-soft">
-            选项和补充可以同时填；多选问题可以选多个。回答完或跳过后，才会生成复盘正文。
+            选项和补充可以同时填。
           </p>
           {memories.length > 0 ? (
             <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[10px] text-ink-soft">
               <Brain className="h-3 w-3 text-brand-deep" />
-              <span>参考记忆：</span>
               {memories.slice(0, 3).map((memory) => (
                 <span
                   key={memory.id}
@@ -118,7 +117,12 @@ export function QuestionsCard({
                 </span>
               ))}
               {memories.length > 3 ? (
-                <span>等 {memories.length} 条</span>
+                <span
+                  className="rounded-full bg-paper px-2 py-0.5 font-semibold text-ink-soft ring-1 ring-line/60"
+                  title={`还有 ${memories.length - 3} 条记忆`}
+                >
+                  +{memories.length - 3}
+                </span>
               ) : null}
               <Link href="/memories" className="underline">
                 查看
