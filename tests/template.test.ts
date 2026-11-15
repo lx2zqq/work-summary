@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { pickDailyPhrase } from "@/lib/daily-phrase";
+import { pickDailyPhrases } from "@/lib/daily-phrase";
 import { normalizeItem, numberPrefix, renderReview } from "@/lib/template";
 import { DEFAULT_SETTINGS, emptyDraft, type ReviewDraft } from "@/lib/types";
 
@@ -39,55 +39,106 @@ describe("renderReview", () => {
     );
   });
 
-  it("固定话术按日期补一次", () => {
+  it("开启后自动补 3 条通用话术", () => {
     const date = "2026-11-13";
-    const phrase = pickDailyPhrase(date, draftWith({}));
-    const draft = draftWith({ richang: [phrase] });
+    const draft = draftWith({
+      richang: ["今天主要跟进了林小满的作业，后续继续关注订正质量。"],
+    });
     const text = renderReview(draft, date, {
       ...DEFAULT_SETTINGS,
       showFixedPhrase: true,
     });
 
-    expect(text.split(phrase)).toHaveLength(2);
+    for (const phrase of pickDailyPhrases(date, draft, 3)) {
+      expect(text).toContain(phrase);
+    }
   });
 
-  it("优先使用 AI 生成的当日话术", () => {
+  it("关闭时不追加通用话术", () => {
+    const date = "2026-11-13";
+    const draft = draftWith({
+      richang: ["今天主要跟进了林小满的作业，后续继续关注订正质量。"],
+    });
+    const text = renderReview(draft, date, {
+      ...DEFAULT_SETTINGS,
+      showFixedPhrase: false,
+    });
+
+    expect(text).not.toContain(pickDailyPhrases(date, draft, 1)[0]);
+  });
+
+  it("旧版 dailyPhrase 在 richang 为空时作为第一条", () => {
     const date = "2026-11-13";
     const phrase =
-      "临近期中，今天重点跟进了孩子们的复习和错题订正情况。后续继续做好学情跟踪，及时把学习状态同步给家长。";
+      "临近期中，今天重点跟进了复习和错题订正情况。后续继续做好学情跟踪，及时同步家长。";
     const draft = { ...draftWith({}), dailyPhrase: phrase };
     const text = renderReview(draft, date, {
       ...DEFAULT_SETTINGS,
-      showFixedPhrase: true,
+      showFixedPhrase: false,
     });
 
     expect(text).toContain(phrase);
-    expect(text).not.toContain(pickDailyPhrase(date, draft));
   });
 
-  it("话术过短时回退到固定库", () => {
+  it("旧版 dailyPhrase 在 richang 有内容时仍保留", () => {
+    const date = "2026-11-13";
+    const phrase =
+      "临近期中，今天重点跟进了复习和错题订正情况。后续继续做好学情跟踪，及时同步家长。";
+    const draft = {
+      ...draftWith({ richang: ["今天主要跟进了林小满的作业。"] }),
+      dailyPhrase: phrase,
+    };
+    const text = renderReview(draft, date, {
+      ...DEFAULT_SETTINGS,
+      showFixedPhrase: false,
+    });
+
+    expect(text).toContain(phrase);
+  });
+
+  it("旧版 dailyPhrase 过短时不使用", () => {
     const date = "2026-11-13";
     const draft = { ...draftWith({}), dailyPhrase: "服务更细致。" };
     const text = renderReview(draft, date, {
       ...DEFAULT_SETTINGS,
-      showFixedPhrase: true,
+      showFixedPhrase: false,
     });
 
-    expect(text).toContain(pickDailyPhrase(date, draft));
     expect(text).not.toContain("服务更细致。");
   });
 
-  it("AI 话术与已有条目重复时不再追加", () => {
+  it("通用话术与已有条目重复时跳过，仍补足 3 条", () => {
     const date = "2026-11-13";
-    const phrase =
-      "临近期中，今天重点跟进了孩子们的复习和错题订正情况。后续继续做好学情跟踪，及时把学习状态同步给家长。";
-    const draft = draftWith({ richang: [phrase] });
+    const duplicate = pickDailyPhrases(date, draftWith({}), 1)[0];
+    const draft = draftWith({ richang: [duplicate] });
     const text = renderReview(draft, date, {
       ...DEFAULT_SETTINGS,
       showFixedPhrase: true,
     });
 
-    expect(text.split(phrase)).toHaveLength(2);
+    expect(text.split(duplicate)).toHaveLength(2);
+
+    const others = pickDailyPhrases(date, draft, 4).filter(
+      (phrase) => phrase !== duplicate,
+    );
+    expect(others).toHaveLength(3);
+    for (const phrase of others) {
+      expect(text).toContain(phrase);
+    }
+  });
+
+  it("AI 当天复盘排在通用话术前面", () => {
+    const date = "2026-11-13";
+    const aiItem = "今天主要跟进了林小满的作业，后续继续关注订正质量。";
+    const draft = draftWith({ richang: [aiItem] });
+    const text = renderReview(draft, date, {
+      ...DEFAULT_SETTINGS,
+      showFixedPhrase: true,
+    });
+
+    expect(text.indexOf(aiItem)).toBeLessThan(
+      text.indexOf(pickDailyPhrases(date, draft, 1)[0]),
+    );
   });
 
   it("教研相关只在开启且有内容时出现", () => {

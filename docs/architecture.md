@@ -26,7 +26,7 @@
 | --- | --- | --- |
 | `students` | 学生名单 | `name`、`grade`、`subjects`、`status`、`note` |
 | `reviews` | 每天的复盘 | `review_date`（唯一）、`raw_input`、`draft`、`final_text`、`conversation`、`round` |
-| `settings` | 全局设置 | 默认文风、栏目开关、固定话术、长期记忆 |
+| `settings` | 全局设置 | 默认文风、栏目开关、通用话术、长期记忆 |
 | `memories` | 长期记忆 | `scope`、`student_id`、`category`、`content`、`importance`、`status` |
 | `usage_events` | 使用埋点 | `event`、`review_date`、`properties`（只存数量/枚举/耗时） |
 
@@ -35,7 +35,7 @@
 ```ts
 {
   sections: Record<SectionKey, string[]>,
-  dailyPhrase?: string,
+  dailyPhrase?: string, // 旧版字段，仅用于兼容历史复盘
   questions: FollowUpQuestion[],
   notes: string[]
 }
@@ -75,8 +75,7 @@
 
 - `questions` 模式只替换问题，保留已有正文；
 - `restyle` 模式条目数必须一致，否则抛错保留原稿；
-- `final` 模式空正文抛错，漏栏目用当前草稿补回；
-- 固定话术开关关闭时，不生成 `dailyPhrase`。
+- `final` 模式空正文抛错，漏栏目用当前草稿补回。
 
 ## Prompt 组织
 
@@ -85,7 +84,7 @@
 | 模式 | 内容 |
 | --- | --- |
 | `questions` | 栏目说明、追问规则、好问题示例 |
-| `final` | 栏目规则、最终稿规则、固定话术规则、文风示例 |
+| `final` | 栏目规则、最终稿规则、文风示例 |
 | `restyle` | 改文风规则、文风对比示例 |
 
 每次请求只带必要上下文：
@@ -130,6 +129,17 @@ resolveMemoryStudent（按 id 或姓名匹配学生）
 - 今天流水账/问答里提到的学生的记忆；
 - 按重要度和更新时间排序，限制 40 条。
 
+## 通用复盘话术
+
+【日常工作复盘】固定输出 4 条：1 条 AI 根据当天流水账生成的当日复盘，加 3 条模板话术。
+
+- 模板话术存在 `lib/daily-phrase.ts`，按 `general` / `exam` / `meeting` / `mistake` 分组，每条不少于 20 字；
+- 先按当天草稿判断主题，命中考试、会议、错题时第一条从对应主题池取，其余从 `general` 池补足；
+- 用日期做索引确定起点，同一天刷新结果不变，连续两天组合不同；
+- 与 AI 条目重复的话术会跳过，并继续从池子里补，保证 3 条；
+- 话术只在渲染时追加，不写进 `sections`，也不计入 `itemCount`；
+- 开关关闭时只保留 AI 生成的 1 条。
+
 ## 埋点
 
 `usage_events` 是分析表，不是业务表。设计原则：
@@ -151,6 +161,9 @@ resolveMemoryStudent（按 id 或姓名匹配学生）
 
 **为什么用 JSON mode 而不是 function calling**
 当前输出是固定结构的复盘正文，`response_format: json_object` + Zod 已经足够。function calling 更适合模型需要选择工具、查询外部数据的场景，已列入 Roadmap。
+
+**为什么通用话术用固定库而不是 AI 生成**
+通用话术需要稳定、可预期、零成本，也不能出现编造的学生或金额。AI 只负责结合当天流水账写 1 条真实复盘，其余 3 条从人工整理的样例库轮换，既保持样例风格，又避免每天风格漂移。
 
 **为什么埋点不存内容**
 复盘里包含学生姓名和家长沟通细节。分析只需要数量和比率，存原文会让分析表变成第二份隐私副本。

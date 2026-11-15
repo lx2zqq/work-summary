@@ -1,7 +1,7 @@
 // 仅服务端使用：不要在客户端组件里 import 这个文件
 import OpenAI from "openai";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
-import { normalizeDraft } from "@/lib/draft";
+import { countDraftItems, normalizeDraft } from "@/lib/draft";
 import { draftSchema } from "@/lib/schema";
 import {
   MAX_FOLLOW_UP_ROUNDS,
@@ -203,12 +203,6 @@ export async function generateDraftWithUsage(
   }
 }
 
-function countDraftItems(draft: ReviewDraft): number {
-  return Object.values(draft.sections).reduce(
-    (total, items) => total + items.length,
-    0,
-  );
-}
 
 export function finalizeDraft(
   draft: ReviewDraft,
@@ -272,15 +266,6 @@ export function finalizeDraft(
         normalized.sections[key] = [...current.sections[key]];
       }
     }
-  }
-
-  // 模型偶尔漏写话术，保留上一版，避免无谓回退到固定库
-  if (
-    context.settings.showFixedPhrase &&
-    !normalized.dailyPhrase &&
-    current?.dailyPhrase
-  ) {
-    normalized.dailyPhrase = current.dailyPhrase;
   }
 
   return normalized;

@@ -3,6 +3,7 @@ import {
   DAILY_PHRASES,
   detectPhraseTheme,
   pickDailyPhrase,
+  pickDailyPhrases,
 } from "@/lib/daily-phrase";
 import { emptyDraft, type ReviewDraft } from "@/lib/types";
 
@@ -13,14 +14,21 @@ function draftWith(text: string): ReviewDraft {
   };
 }
 
-describe("pickDailyPhrase", () => {
-  it("同一天话术固定", () => {
-    expect(pickDailyPhrase("2026-11-13")).toBe(
-      pickDailyPhrase("2026-11-13"),
+describe("pickDailyPhrases", () => {
+  it("同一天抽取结果固定", () => {
+    expect(pickDailyPhrases("2026-11-13")).toEqual(
+      pickDailyPhrases("2026-11-13"),
     );
   });
 
-  it("连续 7 天使用不同话术", () => {
+  it("每天返回 3 条，且当天不重复", () => {
+    const phrases = pickDailyPhrases("2026-11-13");
+
+    expect(phrases).toHaveLength(3);
+    expect(new Set(phrases).size).toBe(3);
+  });
+
+  it("连续 7 天组合不同", () => {
     const dates = [
       "2026-11-10",
       "2026-11-11",
@@ -30,14 +38,37 @@ describe("pickDailyPhrase", () => {
       "2026-11-15",
       "2026-11-16",
     ];
-    const phrases = dates.map((date) => pickDailyPhrase(date));
+    const combos = dates.map((date) =>
+      pickDailyPhrases(date).join("|"),
+    );
 
-    expect(new Set(phrases).size).toBe(dates.length);
+    expect(new Set(combos).size).toBe(dates.length);
   });
 
-  it("没有草稿时使用通用主题", () => {
-    expect(DAILY_PHRASES.general).toContain(
-      pickDailyPhrase("2026-11-13"),
+  it("命中主题时第一条来自主题池", () => {
+    const phrases = pickDailyPhrases(
+      "2026-11-13",
+      draftWith("今天期中复习"),
+    );
+
+    expect(DAILY_PHRASES.exam).toContain(phrases[0]);
+    expect(phrases).toHaveLength(3);
+  });
+
+  it("没有主题时全部来自通用池", () => {
+    const phrases = pickDailyPhrases(
+      "2026-11-13",
+      draftWith("整理了资料"),
+    );
+
+    for (const phrase of phrases) {
+      expect(DAILY_PHRASES.general).toContain(phrase);
+    }
+  });
+
+  it("兼容旧调用只取 1 条", () => {
+    expect(pickDailyPhrase("2026-11-13")).toBe(
+      pickDailyPhrases("2026-11-13")[0],
     );
   });
 
@@ -52,20 +83,12 @@ describe("pickDailyPhrase", () => {
     expect(detectPhraseTheme(draftWith("整理了资料"))).toBe("general");
   });
 
-  it("按主题选择话术", () => {
-    const phrase = pickDailyPhrase(
-      "2026-11-13",
-      draftWith("今天期中复习"),
-    );
-
-    expect(DAILY_PHRASES.exam).toContain(phrase);
-  });
-
-  it("固定库话术满足最低字数", () => {
+  it("话术库每条不少于 20 字", () => {
     const phrases = Object.values(DAILY_PHRASES).flat();
 
+    expect(phrases.length).toBeGreaterThanOrEqual(40);
     for (const phrase of phrases) {
-      expect(phrase.length).toBeGreaterThanOrEqual(40);
+      expect(phrase.length).toBeGreaterThanOrEqual(20);
       expect(phrase.length).toBeLessThanOrEqual(160);
     }
   });

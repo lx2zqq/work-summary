@@ -11,7 +11,7 @@ import {
   validateCase,
   type EvalCase,
 } from "@/eval/cases";
-import { pickDailyPhrase } from "@/lib/daily-phrase";
+import { pickDailyPhrases } from "@/lib/daily-phrase";
 import { normalizeDraft } from "@/lib/draft";
 import { runChecks, type CheckResult } from "@/lib/eval/checks";
 import { judgeDraft, type JudgeScore } from "@/lib/eval/judge";
@@ -118,8 +118,11 @@ function checkTemplate(): string[] {
   ) {
     issues.push("无困难时应写标准句");
   }
-  if (!withKunnan.includes(pickDailyPhrase("2026-11-15", draft))) {
-    issues.push("开启固定话术后应自动补当天话术");
+  for (const phrase of pickDailyPhrases("2026-11-15", draft, 3)) {
+    if (!withKunnan.includes(phrase)) {
+      issues.push("开启通用话术后应自动补 3 条");
+      break;
+    }
   }
 
   const normalized = normalizeDraft({

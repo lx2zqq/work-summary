@@ -120,29 +120,36 @@ describe("buildPromptMessages", () => {
     expect(system?.content).not.toContain("【长期记忆】");
   });
 
-  it("固定话术开启时要求生成 dailyPhrase，并注入样例参考", () => {
+  it("最终模式要求 richang 恰好 1 条且不少于 20 字", () => {
     const [system] = buildPromptMessages({
+      ...BASE,
+      mode: "final",
+      round: MAX_FOLLOW_UP_ROUNDS,
+    });
+
+    expect(system?.content).toContain("richang 必须恰好 1 条");
+    expect(system?.content).toContain("不少于 20 个汉字");
+    expect(system?.content).not.toContain("dailyPhrase");
+  });
+
+  it("通用话术开关只影响程序追加，不要求模型输出", () => {
+    const [open] = buildPromptMessages({
       ...BASE,
       mode: "final",
       round: MAX_FOLLOW_UP_ROUNDS,
       settings: { ...DEFAULT_SETTINGS, showFixedPhrase: true },
     });
-
-    expect(system?.content).toContain("dailyPhrase");
-    expect(system?.content).toContain("60-120");
-    expect(system?.content).toContain("【固定话术参考样例");
-    expect(system?.content).toContain("已追问及回答");
-  });
-
-  it("固定话术关闭时要求 dailyPhrase 返回空字符串", () => {
-    const [system] = buildPromptMessages({
+    const [closed] = buildPromptMessages({
       ...BASE,
       mode: "final",
       round: MAX_FOLLOW_UP_ROUNDS,
+      settings: { ...DEFAULT_SETTINGS, showFixedPhrase: false },
     });
 
-    expect(system?.content).toContain("dailyPhrase 必须返回空字符串");
-    expect(system?.content).not.toContain("【固定话术参考样例");
+    expect(open?.content).toContain("自动追加 3 条通用话术");
+    expect(closed?.content).toContain("程序不会追加");
+    expect(open?.content).not.toContain("dailyPhrase");
+    expect(closed?.content).not.toContain("dailyPhrase");
   });
 
   it("改文风模式只以当前草稿为底稿，不重新提取流水账", () => {
@@ -165,7 +172,6 @@ describe("buildPromptMessages", () => {
     expect(system?.content).toContain("保留所有栏目");
     expect(system?.content).toContain("条目数量");
     expect(system?.content).toContain("不要原样照抄");
-    expect(system?.content).toContain("dailyPhrase 返回空字符串");
     expect(user?.content).toContain("【当前草稿】");
     expect(user?.content).not.toContain("【今天的流水账】");
     expect(user?.content).not.toContain("【已追问及回答】");

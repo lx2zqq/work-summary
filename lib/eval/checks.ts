@@ -27,8 +27,6 @@ export type EvalExpect = {
   sameItemCount?: boolean;
   /** 详细版字数必须大于改前 */
   detailedMustBeLonger?: boolean;
-  /** 固定话术保持原样 */
-  dailyPhraseUnchanged?: boolean;
   /** 输入几乎没有信息量时，空正文是正确行为 */
   allowEmpty?: boolean;
 };
@@ -118,6 +116,23 @@ export function runChecks(input: CheckInput): CheckResult[] {
   }
 
   results.push(result("结构", structureIssues));
+
+  // 日常工作复盘固定 1 条且不少于 20 字；空输入保护用例除外
+  if (mode === "final" && !expect.allowEmpty) {
+    const richang = draft.sections.richang ?? [];
+    const issues: string[] = [];
+
+    if (richang.length !== 1) {
+      issues.push(`需要 1 条，实际 ${richang.length} 条`);
+    }
+    for (const item of richang) {
+      if (item.trim().length < 20) {
+        issues.push(`“${item.slice(0, 12)}…”少于 20 字`);
+      }
+    }
+
+    results.push(result("日常工作复盘", issues));
+  }
 
   // 2. 必含事实
   if (mode !== "questions" && expect.mustInclude?.length) {
@@ -255,16 +270,6 @@ export function runChecks(input: CheckInput): CheckResult[] {
       );
     }
 
-    if (expect.dailyPhraseUnchanged) {
-      const before = input.beforeDraft.dailyPhrase ?? "";
-      const after = draft.dailyPhrase ?? "";
-      results.push(
-        result(
-          "固定话术不变",
-          before === after ? [] : ["dailyPhrase 被改写"],
-        ),
-      );
-    }
   }
 
   return results;

@@ -35,13 +35,13 @@ const SAMPLE_DRAFT: ReviewDraft = {
     xueqing: ["林小满：完成今日校内作业，错题已讲解。"],
     jiaoxiao: ["林小满妈妈（微信）：沟通今日作业完成情况。"],
     yeji: [],
-    richang: ["服务再细致一些，多关注林小满的作业状态。"],
+    richang: [
+      "今天主要跟进了林小满的作业和错题，整体完成情况正常，后续继续关注订正质量，及时和家长同步进展。",
+    ],
     xiaocheng: ["林小满的数学错题已录入小橙AI系统。"],
     kunnan: [],
     jiaoyan: ["参加学管部教研，讨论新生跟进节奏。"],
   },
-  dailyPhrase:
-    "临近期中，今天重点跟进了孩子们的复习和错题订正情况，也提前准备好了复习资料。后续会继续做好学情跟踪，及时把孩子的学习状态同步给家长，服务再细致一些，帮孩子们稳住基础、查漏补缺。",
   questions: [],
   notes: [],
 };
@@ -63,8 +63,8 @@ const TOGGLES: Array<{
   },
   {
     key: "showFixedPhrase",
-    title: "固定话术",
-    description: "每天根据当天内容生成一段服务/业绩话术，追加在末尾。",
+    title: "通用复盘话术",
+    description: "每天在【日常工作复盘】后自动补 3 条，按当天主题轮换。",
   },
   {
     key: "enableMemory",

@@ -65,7 +65,7 @@ export const settings = pgTable("settings", {
     .default("concise"),
   showJiaoyan: boolean("show_jiaoyan").notNull().default(true),
   showKunnan: boolean("show_kunnan").notNull().default(false),
-  showFixedPhrase: boolean("show_fixed_phrase").notNull().default(false),
+  showFixedPhrase: boolean("show_fixed_phrase").notNull().default(true),
   enableMemory: boolean("enable_memory").notNull().default(true),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .defaultNow()

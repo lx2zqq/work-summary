@@ -44,11 +44,9 @@ const STUDENT_IDS = [
 
 function draftOf(
   sections: Partial<Record<SectionKey, string[]>>,
-  dailyPhrase?: string,
 ): ReviewDraft {
   return {
     sections: { ...emptySections(), ...sections },
-    dailyPhrase,
     questions: [],
     notes: [],
   };
@@ -634,18 +632,16 @@ export const EVAL_CASES: EvalCase[] = [
   },
   {
     id: "style-004",
-    tags: ["style", "restyle", "daily-phrase"],
+    tags: ["style", "restyle", "richang"],
     mode: "restyle",
     rawInput: "今天整理了复习资料。",
     style: "concise",
-    currentDraft: draftOf(
-      { richang: ["今天整理了明天要用的复习资料。"] },
-      "临近期中，今天重点跟进复习和错题订正。",
-    ),
+    currentDraft: draftOf({
+      richang: ["今天整理了明天要用的复习资料。"],
+    }),
     expect: {
       mustNotInclude: ["林小满", "周子航"],
       sameItemCount: true,
-      dailyPhraseUnchanged: true,
     },
   },
   {

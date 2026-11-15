@@ -1,6 +1,6 @@
 import {
   MIN_DAILY_PHRASE_LENGTH,
-  pickDailyPhrase,
+  pickDailyPhrases,
 } from "./daily-phrase";
 import { formatDateCN } from "./date";
 import {
@@ -49,13 +49,46 @@ function normalizedForCompare(value: string): string {
   return value.replace(/[\s，。！？、；：""''（）()【】]/g, "");
 }
 
-/** 优先使用 AI 按当天内容生成的话术；缺失或过短时回退到固定库 */
-function resolveDailyPhrase(draft: ReviewDraft, dateISO: string): string {
-  const generated = normalizeItem(draft.dailyPhrase ?? "");
+/** 每天追加到【日常工作复盘】的通用话术条数 */
+const GENERAL_PHRASE_COUNT = 3;
 
-  if (generated.length >= MIN_DAILY_PHRASE_LENGTH) return generated;
+function isDuplicatePhrase(items: string[], phrase: string): boolean {
+  const target = normalizedForCompare(phrase);
+  if (!target) return true;
 
-  return pickDailyPhrase(dateISO, draft);
+  return items.some((item) => {
+    const key = normalizedForCompare(item);
+    if (!key) return false;
+    if (key === target || key.includes(target)) return true;
+    // 已有条目很短时，“话术包含它”不代表重复，避免误删整条通用话术
+    return key.length >= 10 && target.includes(key);
+  });
+}
+
+/** 按当天主题和日期抽取通用话术，跳过过短或与已有条目重复的 */
+function resolveGeneralPhrases(
+  dailyItems: string[],
+  draft: ReviewDraft,
+  dateISO: string,
+): string[] {
+  // 多取几条，遇到重复或过短时还能补足目标条数
+  const phrases = pickDailyPhrases(
+    dateISO,
+    draft,
+    GENERAL_PHRASE_COUNT + 2,
+  );
+  const result: string[] = [];
+
+  for (const phrase of phrases) {
+    if (result.length >= GENERAL_PHRASE_COUNT) break;
+
+    const normalized = normalizeItem(phrase);
+    if (normalized.length < MIN_DAILY_PHRASE_LENGTH) continue;
+    if (isDuplicatePhrase([...dailyItems, ...result], normalized)) continue;
+    result.push(normalized);
+  }
+
+  return result;
 }
 
 function uniqueItems(items: string[]): string[] {
@@ -102,13 +135,21 @@ export function renderReview(
   pushSection("yeji", sections.yeji ?? []);
 
   let dailyItems = [...(sections.richang ?? [])];
+
+  // 旧版复盘把当天话术存在 dailyPhrase 里，保留下来，避免历史内容丢失
+  const legacy = normalizeItem(draft.dailyPhrase ?? "");
+  if (
+    legacy.length >= MIN_DAILY_PHRASE_LENGTH &&
+    !isDuplicatePhrase(dailyItems, legacy)
+  ) {
+    dailyItems = [...dailyItems, legacy];
+  }
+
   if (settings.showFixedPhrase) {
-    const phrase = resolveDailyPhrase(draft, dateISO);
-    const target = normalizedForCompare(phrase);
-    const exists = dailyItems.some((item) =>
-      normalizedForCompare(item).includes(target),
-    );
-    if (!exists) dailyItems = [...dailyItems, phrase];
+    dailyItems = [
+      ...dailyItems,
+      ...resolveGeneralPhrases(dailyItems, draft, dateISO),
+    ];
   }
   pushSection("richang", dailyItems);
 

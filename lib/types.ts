@@ -26,7 +26,7 @@ export type FollowUpQuestion = {
 
 export type ReviewDraft = {
   sections: Record<SectionKey, string[]>;
-  /** AI 生成的当日服务/业绩话术，渲染时追加到【日常工作复盘】末尾 */
+  /** 旧版固定话术，仅用于兼容历史复盘；新生成不再写入 */
   dailyPhrase?: string;
   questions: FollowUpQuestion[];
   notes: string[];
@@ -205,7 +205,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   defaultStyle: "concise",
   showJiaoyan: true,
   showKunnan: false,
-  showFixedPhrase: false,
+  showFixedPhrase: true,
   enableMemory: true,
 };
 
