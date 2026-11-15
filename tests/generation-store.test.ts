@@ -3,6 +3,7 @@ import {
   beginGeneration,
   clearGeneration,
   failGeneration,
+  generationMatchesReview,
   getGenerationJob,
   markGenerationSaveFailed,
   markGenerationSaved,
@@ -10,15 +11,20 @@ import {
   subscribeGeneration,
   updateGenerationResult,
 } from "@/lib/generation-store";
-import { emptyDraft } from "@/lib/types";
+import {
+  emptyDraft,
+  type ReviewRecord,
+} from "@/lib/types";
 
 const BASE = {
   date: "2026-11-15",
   mode: "final" as const,
   rawInput: "今天林小满作业完成了。",
   style: "concise" as const,
+  answers: [],
   round: 3,
   conversationAfter: [],
+  baselineSavedAt: null,
 };
 
 beforeEach(() => {
@@ -110,6 +116,65 @@ describe("generation store", () => {
 
     clearGeneration(second.id);
     expect(getGenerationJob()).toBeNull();
+  });
+
+  it("生成结果指纹能和数据库里的复盘对上", () => {
+    const job = beginGeneration(BASE);
+
+    updateGenerationResult(job.id, {
+      draft: emptyDraft(),
+      fallback: false,
+      memories: [],
+    });
+
+    const review: ReviewRecord = {
+      id: "review-1",
+      reviewDate: BASE.date,
+      rawInput: BASE.rawInput,
+      draft: emptyDraft(),
+      finalText: "",
+      style: BASE.style,
+      conversation: [],
+      round: BASE.round,
+      memoryExtractedAt: null,
+      updatedAt: "2026-11-15T10:00:00.000Z",
+    };
+
+    expect(generationMatchesReview(getGenerationJob()!, review)).toBe(true);
+
+    expect(
+      generationMatchesReview(getGenerationJob()!, {
+        ...review,
+        round: 2,
+      }),
+    ).toBe(false);
+  });
+
+  it("没有指纹时用轮次和问答记录判断是否已保存", () => {
+    const job = beginGeneration({
+      ...BASE,
+      baselineSavedAt: "2026-11-15T09:00:00.000Z",
+    });
+    const review: ReviewRecord = {
+      id: "review-1",
+      reviewDate: BASE.date,
+      rawInput: BASE.rawInput,
+      draft: emptyDraft(),
+      finalText: "",
+      style: BASE.style,
+      conversation: [],
+      round: BASE.round,
+      memoryExtractedAt: null,
+      updatedAt: "2026-11-15T09:00:00.000Z",
+    };
+
+    expect(generationMatchesReview(job, review)).toBe(false);
+    expect(
+      generationMatchesReview(job, {
+        ...review,
+        updatedAt: "2026-11-15T10:00:00.000Z",
+      }),
+    ).toBe(true);
   });
 
   it("订阅在状态变化时触发，取消后不再触发", () => {

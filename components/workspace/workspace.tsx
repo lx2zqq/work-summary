@@ -1,6 +1,7 @@
 "use client";
 
-import { Copy, Sparkles } from "lucide-react";
+import { Copy, RefreshCw, Sparkles } from "lucide-react";
+import { useRouter } from "next/navigation";
 import {
   useCallback,
   useEffect,
@@ -16,22 +17,27 @@ import {
   type QuestionAnswer,
 } from "@/lib/answers";
 import { copyText } from "@/lib/clipboard";
-import { isValidISODate, relativeDateLabel } from "@/lib/date";
+import { isValidISODate, relativeDateLabel, todayISO } from "@/lib/date";
 import { mergeFollowUpDraft, normalizeDraft } from "@/lib/draft";
 import {
   beginGeneration,
   clearGeneration,
+  clearPersistedGeneration,
   failGeneration,
+  generationMatchesReview,
   getGenerationJob,
   markGenerationSaveFailed,
   markGenerationSaved,
+  readPersistedGeneration,
   subscribeGeneration,
   updateGenerationResult,
+  type GenerationJob,
 } from "@/lib/generation-store";
 import {
   isMemoryExtractionStale,
   resolveMemoryCopyAction,
 } from "@/lib/memory";
+import { setSelectedDate } from "@/lib/selected-date";
 import { renderReview } from "@/lib/template";
 import {
   MAX_FOLLOW_UP_ROUNDS,
@@ -76,6 +82,7 @@ type GenerateConfig = {
   answers: QAPair[];
   round: number;
   conversationAfter: QAPair[];
+  rawInput?: string;
   restyle?: boolean;
 };
 
@@ -85,6 +92,7 @@ type CallConfig = {
   answers: QAPair[];
   round: number;
   conversationAfter: QAPair[];
+  rawInput?: string;
 };
 
 type CallResult = {
@@ -107,6 +115,7 @@ export function Workspace({
   initialStudents,
   initialSettings,
 }: Props) {
+  const router = useRouter();
   const initialJob = getGenerationJob();
   const jobForDate =
     initialJob && initialJob.date === initialDate ? initialJob : null;
@@ -174,12 +183,17 @@ export function Workspace({
 
     return {};
   });
+  const [recoveryJob, setRecoveryJob] = useState<GenerationJob | null>(
+    null,
+  );
+  const [checkingRecovery, setCheckingRecovery] = useState(false);
   const extractingMemoryRef = useRef(false);
   const dateRef = useRef(date);
   const savedAtRef = useRef<string | null>(
     initialReview?.updatedAt ?? null,
   );
   const mountedRef = useRef(false);
+  const pageUnloadingRef = useRef(false);
   const activeJobIdRef = useRef<string | null>(null);
   const latestPayloadRef = useRef<SavePayload | null>(null);
   const dirtyRef = useRef(false);
@@ -196,12 +210,23 @@ export function Workspace({
 
   useEffect(() => {
     dateRef.current = date;
+    setSelectedDate(date);
   }, [date]);
 
   useEffect(() => {
     mountedRef.current = true;
+
+    const markUnloading = () => {
+      pageUnloadingRef.current = true;
+    };
+
+    window.addEventListener("pagehide", markUnloading);
+    window.addEventListener("beforeunload", markUnloading);
+
     return () => {
       mountedRef.current = false;
+      window.removeEventListener("pagehide", markUnloading);
+      window.removeEventListener("beforeunload", markUnloading);
     };
   }, []);
 
@@ -233,18 +258,12 @@ export function Workspace({
   }, []);
 
   const finishLocalJob = useCallback((jobId: string) => {
-    if (!mountedRef.current) return;
+    if (!mountedRef.current || pageUnloadingRef.current) return;
 
-    activeJobIdRef.current = null;
+    if (activeJobIdRef.current === jobId) {
+      activeJobIdRef.current = null;
+    }
     clearGeneration(jobId);
-  }, []);
-
-  const clearLocalJob = useCallback(() => {
-    if (!mountedRef.current) return;
-
-    const jobId = activeJobIdRef.current;
-    activeJobIdRef.current = null;
-    if (jobId) clearGeneration(jobId);
   }, []);
 
   useEffect(() => {
@@ -253,6 +272,8 @@ export function Workspace({
 
   // 页面切回来后，接管仍在跑的生成任务，恢复等待状态或应用结果
   const applyGenerationJob = useCallback(() => {
+    if (pageUnloadingRef.current) return;
+
     const job = getGenerationJob();
     if (!job || job.date !== date) return;
     if (job.id === activeJobIdRef.current) return;
@@ -386,6 +407,15 @@ export function Workspace({
         if (isLatest()) {
           setDirty(false);
           if (!options.silent) toast.success("已保存");
+        }
+
+        // 上一次生成保存失败后，手动或自动保存成功时清掉恢复标记
+        const job = getGenerationJob();
+        if (job && job.date === payload.date && job.saveFailed) {
+          if (activeJobIdRef.current === job.id) {
+            activeJobIdRef.current = null;
+          }
+          clearGeneration(job.id);
         }
 
         return true;
@@ -563,7 +593,7 @@ export function Workspace({
 
   const callGenerate = useCallback(
     async (config: CallConfig): Promise<CallResult> => {
-      const inputText = rawInput.trim();
+      const inputText = (config.rawInput ?? rawInput).trim();
 
       if (!inputText) {
         throw new Error("先写点今天做了什么");
@@ -573,13 +603,17 @@ export function Workspace({
         throw new Error("内容太长了，先控制在 6000 字以内");
       }
 
+      setRecoveryJob(null);
+
       const job = beginGeneration({
         date,
         mode: config.mode,
         rawInput: inputText,
         style: config.style,
+        answers: config.answers,
         round: config.round,
         conversationAfter: config.conversationAfter,
+        baselineSavedAt: savedAtRef.current,
       });
       activeJobIdRef.current = job.id;
 
@@ -632,6 +666,14 @@ export function Workspace({
           job.id,
           error instanceof Error ? error.message : "生成失败",
         );
+
+        if (mountedRef.current && !pageUnloadingRef.current) {
+          if (activeJobIdRef.current === job.id) {
+            activeJobIdRef.current = null;
+          }
+          clearGeneration(job.id);
+        }
+
         throw error;
       }
     },
@@ -681,11 +723,12 @@ export function Workspace({
       setRestoredAnswers({});
       markDirty();
       setActiveTab("preview");
+      setLoadingKind(null);
 
       const saved = await persistReview(
         {
           date,
-          rawInput: rawInput.trim(),
+          rawInput: (config.rawInput ?? rawInput).trim(),
           draft: nextDraft,
           style: config.style,
           conversation: config.conversationAfter,
@@ -699,13 +742,13 @@ export function Workspace({
           data.jobId,
           savedAtRef.current ?? new Date().toISOString(),
         );
+        finishLocalJob(data.jobId);
       } else {
         markGenerationSaveFailed(data.jobId);
         if (mountedRef.current) {
           toast.error("草稿保存失败，请点击保存重试");
         }
       }
-      finishLocalJob(data.jobId);
 
       toast.warning(data.warning || "AI 暂时不可用，已按原文生成草稿", {
         duration: 6500,
@@ -725,7 +768,7 @@ export function Workspace({
 
   const runFinal = useCallback(
     async (config: GenerateConfig): Promise<boolean> => {
-      if (!rawInput.trim()) {
+      if (!(config.rawInput ?? rawInput).trim()) {
         toast.error("先写点今天做了什么");
         setActiveTab("input");
         return false;
@@ -763,13 +806,14 @@ export function Workspace({
         setRestoredAnswers({});
         markDirty();
         setActiveTab("preview");
+        setLoadingKind(null);
 
         toast.success(config.restyle ? "文风已切换" : "整理好了");
 
         const saved = await persistReview(
           {
             date,
-            rawInput: rawInput.trim(),
+            rawInput: (config.rawInput ?? rawInput).trim(),
             draft: nextDraft,
             style: config.style,
             conversation: config.conversationAfter,
@@ -783,17 +827,16 @@ export function Workspace({
             data.jobId,
             savedAtRef.current ?? new Date().toISOString(),
           );
+          finishLocalJob(data.jobId);
         } else {
           markGenerationSaveFailed(data.jobId);
           if (mountedRef.current) {
             toast.error("生成好了，但保存失败，请点击保存重试");
           }
         }
-        finishLocalJob(data.jobId);
 
         return true;
       } catch (error) {
-        clearLocalJob();
         setRestoredAnswers(
           answersFromConversation(
             draft.questions,
@@ -817,13 +860,12 @@ export function Workspace({
       persistReview,
       markDirty,
       finishLocalJob,
-      clearLocalJob,
     ],
   );
 
   const runQuestions = useCallback(
     async (config: GenerateConfig): Promise<boolean> => {
-      if (!rawInput.trim()) {
+      if (!(config.rawInput ?? rawInput).trim()) {
         toast.error("先写点今天做了什么");
         setActiveTab("input");
         return false;
@@ -867,11 +909,12 @@ export function Workspace({
           setRestoredAnswers({});
           markDirty();
           setActiveTab("preview");
+          setLoadingKind(null);
 
           const saved = await persistReview(
             {
               date,
-              rawInput: rawInput.trim(),
+              rawInput: (config.rawInput ?? rawInput).trim(),
               draft: nextDraft,
               style: config.style,
               conversation: config.conversationAfter,
@@ -885,13 +928,13 @@ export function Workspace({
               data.jobId,
               savedAtRef.current ?? new Date().toISOString(),
             );
+            finishLocalJob(data.jobId);
           } else {
             markGenerationSaveFailed(data.jobId);
             if (mountedRef.current) {
               toast.error("追问已生成，但保存失败，请点击保存重试");
             }
           }
-          finishLocalJob(data.jobId);
 
           return true;
         }
@@ -906,7 +949,6 @@ export function Workspace({
           round: Math.min(config.round + 1, MAX_FOLLOW_UP_ROUNDS),
         });
       } catch (error) {
-        clearLocalJob();
         setRestoredAnswers(
           answersFromConversation(
             draft.questions,
@@ -931,7 +973,6 @@ export function Workspace({
       runFinal,
       markDirty,
       finishLocalJob,
-      clearLocalJob,
     ],
   );
 
@@ -1015,6 +1056,163 @@ export function Workspace({
     ],
   );
 
+  const applyReviewRecord = useCallback(
+    (review: ReviewRecord | null) => {
+      setRawInput(review?.rawInput ?? "");
+      setDraft(review ? normalizeDraft(review.draft) : emptyDraft());
+      setStyle(review?.style ?? initialSettings.defaultStyle);
+      setConversation(review?.conversation ?? []);
+      setRound(review?.round ?? 0);
+      savedAtRef.current = review?.updatedAt ?? null;
+      setSavedAt(review?.updatedAt ?? null);
+      setMemoryExtractedAt(review?.memoryExtractedAt ?? null);
+      setUsedMemories([]);
+      setRestoredAnswers({});
+      // 让仍挂在旧数据上的保存请求失效，避免误标新状态为已保存
+      editRevisionRef.current += 1;
+      setDirty(false);
+      setSaveFailed(false);
+      setActiveTab(
+        review && review.draft.questions.length > 0 ? "preview" : "input",
+      );
+    },
+    [initialSettings.defaultStyle],
+  );
+
+  const applyRecoveredResult = useCallback((job: GenerationJob) => {
+    const result = job.result;
+    if (!result) return;
+
+    setRawInput(job.rawInput);
+    setStyle(job.style);
+    setConversation(job.conversationAfter);
+    setRound(job.round);
+    setUsedMemories(result.memories);
+    setRestoredAnswers({});
+
+    if (!result.ignored) {
+      setDraft(normalizeDraft(result.draft));
+      setSavedAt(null);
+      setSaveFailed(false);
+      setDirty(true);
+      setActiveTab("preview");
+    }
+
+    if (result.warning) {
+      toast.warning(result.warning, { duration: 6500 });
+    }
+  }, []);
+
+  // 整页刷新后恢复上一次生成：先查库，再决定应用结果还是提示重试
+  useEffect(() => {
+    if (getGenerationJob()) return;
+
+    const persisted = readPersistedGeneration();
+    if (!persisted || persisted.date !== date) return;
+
+    let cancelled = false;
+
+    void (async () => {
+      let review: ReviewRecord | null = null;
+
+      try {
+        const response = await fetch(`/api/reviews?date=${persisted.date}`);
+        const data = (await response.json().catch(() => ({}))) as {
+          review?: ReviewRecord | null;
+        };
+        if (response.ok) review = data.review ?? null;
+      } catch {
+        // 查库失败时按未完成处理，让用户选择检查或重试
+      }
+
+      if (cancelled || getGenerationJob()) return;
+
+      setRawInput(persisted.rawInput);
+      setStyle(persisted.style);
+      setConversation(persisted.conversationAfter);
+      setRound(persisted.round);
+
+      if (review && generationMatchesReview(persisted, review)) {
+        clearPersistedGeneration();
+        applyReviewRecord(review);
+        toast.success("上次生成已经完成");
+        return;
+      }
+
+      if (persisted.result) {
+        clearPersistedGeneration();
+        applyRecoveredResult(persisted);
+        toast.info("已恢复上次生成结果，正在保存");
+        return;
+      }
+
+      setRecoveryJob(persisted);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [date, applyReviewRecord, applyRecoveredResult]);
+
+  const handleCheckRecovery = useCallback(async () => {
+    const job = recoveryJob;
+    if (!job || checkingRecovery) return;
+
+    setCheckingRecovery(true);
+
+    try {
+      const response = await fetch(`/api/reviews?date=${job.date}`);
+      const data = (await response.json().catch(() => ({}))) as {
+        error?: string;
+        review?: ReviewRecord | null;
+      };
+
+      if (!response.ok) {
+        throw new Error(data.error || "检查失败");
+      }
+
+      const review = data.review ?? null;
+
+      if (review && generationMatchesReview(job, review)) {
+        clearPersistedGeneration();
+        applyReviewRecord(review);
+        setRecoveryJob(null);
+        toast.success("上次生成已经完成");
+      } else {
+        toast.info("还没查到生成结果，可以点“继续生成”");
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "检查失败");
+    } finally {
+      setCheckingRecovery(false);
+    }
+  }, [recoveryJob, checkingRecovery, applyReviewRecord]);
+
+  const handleRetryRecovery = useCallback(() => {
+    const job = recoveryJob;
+    if (!job || loading) return;
+
+    setRecoveryJob(null);
+    setRawInput(job.rawInput);
+    setStyle(job.style);
+    setConversation(job.conversationAfter);
+    setRound(job.round);
+
+    const config = {
+      style: job.style,
+      answers: job.answers,
+      round: job.round,
+      conversationAfter: job.conversationAfter,
+      rawInput: job.rawInput,
+    };
+
+    if (job.mode === "questions") {
+      void runQuestions(config);
+    } else {
+      void runFinal({ ...config, restyle: job.mode === "restyle" });
+    }
+  }, [recoveryJob, loading, runQuestions, runFinal]);
+
   const handleDateChange = useCallback(
     async (nextDate: string) => {
       if (!isValidISODate(nextDate) || nextDate === date || loading) {
@@ -1054,23 +1252,11 @@ export function Workspace({
 
         const review = data.review ?? null;
 
-        setRawInput(review?.rawInput ?? "");
-        setDraft(review ? normalizeDraft(review.draft) : emptyDraft());
-        setStyle(review?.style ?? initialSettings.defaultStyle);
-        setConversation(review?.conversation ?? []);
-        setRound(review?.round ?? 0);
-        savedAtRef.current = review?.updatedAt ?? null;
-        setSavedAt(review?.updatedAt ?? null);
-        setMemoryExtractedAt(review?.memoryExtractedAt ?? null);
-        setUsedMemories([]);
-        setRestoredAnswers({});
-        // 让仍挂在旧日期上的保存请求失效，避免误标新日期为已保存
-        editRevisionRef.current += 1;
-        setDirty(false);
-        setSaveFailed(false);
+        applyReviewRecord(review);
         setHydratedDate(nextDate);
-        setActiveTab(
-          review && review.draft.questions.length > 0 ? "preview" : "input",
+        router.replace(
+          nextDate === todayISO() ? "/" : `/?date=${nextDate}`,
+          { scroll: false },
         );
 
         toast.success(
@@ -1095,7 +1281,8 @@ export function Workspace({
       rawInput,
       draft,
       saveNow,
-      initialSettings.defaultStyle,
+      applyReviewRecord,
+      router,
     ],
   );
 
@@ -1173,6 +1360,43 @@ export function Workspace({
 
   return (
     <div className="space-y-4">
+      {recoveryJob ? (
+        <section className="paper-card p-4 sm:p-5">
+          <div className="flex items-start gap-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-butter-soft text-[#8a6a2f] ring-2 ring-butter/60">
+              <RefreshCw className="h-4 w-4" />
+            </div>
+            <div className="min-w-0">
+              <h2 className="text-sm font-extrabold text-ink">
+                上次生成还没完成
+              </h2>
+              <p className="mt-0.5 text-xs leading-relaxed text-ink-soft">
+                刷新或关页会中断生成，可以检查结果或继续生成。
+              </p>
+            </div>
+          </div>
+          <div className="mt-3 flex justify-end gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              loading={checkingRecovery}
+              onClick={() => {
+                void handleCheckRecovery();
+              }}
+            >
+              检查结果
+            </Button>
+            <Button
+              size="sm"
+              disabled={loading}
+              onClick={handleRetryRecovery}
+            >
+              继续生成
+            </Button>
+          </div>
+        </section>
+      ) : null}
+
       <DateBar
         date={date}
         style={style}
