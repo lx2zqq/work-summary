@@ -17,6 +17,7 @@ export type ClientEventProperties = {
 
 export function trackClientEvent(
   event: ClientEvent,
+  reviewDate: string,
   properties: ClientEventProperties = {},
 ): void {
   if (typeof window === "undefined") return;
@@ -24,7 +25,7 @@ export function trackClientEvent(
   void fetch("/api/events", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ event, properties }),
+    body: JSON.stringify({ event, reviewDate, properties }),
     keepalive: true,
   }).catch(() => {
     // 埋点失败不影响用户操作

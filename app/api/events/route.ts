@@ -9,6 +9,7 @@ import { requireApiSession } from "@/lib/api-helpers";
 
 const bodySchema = z.object({
   event: z.enum(CLIENT_EVENTS),
+  reviewDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   properties: eventPropertiesSchema.default({}),
 });
 
@@ -25,6 +26,7 @@ export async function POST(request: Request) {
 
   await trackEvent({
     event: parsed.data.event,
+    reviewDate: parsed.data.reviewDate,
     properties: parsed.data.properties,
   });
 

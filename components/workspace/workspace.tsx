@@ -992,7 +992,7 @@ export function Workspace({
       const nextConversation = [...conversation, ...answers];
       const nextRound = Math.min(round + 1, MAX_FOLLOW_UP_ROUNDS);
 
-      trackClientEvent("question_answered", {
+      trackClientEvent("question_answered", date, {
         round,
         questionCount: draft.questions.length,
         answeredCount: answers.length,
@@ -1017,7 +1017,7 @@ export function Workspace({
         conversationAfter: nextConversation,
       });
     },
-    [conversation, round, style, draft, runQuestions, runFinal],
+    [conversation, round, style, draft, date, runQuestions, runFinal],
   );
 
   const handleSkipQuestions = useCallback(() => {
@@ -1025,7 +1025,7 @@ export function Workspace({
 
     const nextRound = Math.min(round + 1, MAX_FOLLOW_UP_ROUNDS);
 
-    trackClientEvent("question_answered", {
+    trackClientEvent("question_answered", date, {
       round,
       questionCount: draft.questions.length,
       answeredCount: 0,
@@ -1038,7 +1038,7 @@ export function Workspace({
       round: nextRound,
       conversationAfter: conversation,
     });
-  }, [loading, round, style, draft, conversation, runFinal]);
+  }, [loading, round, style, draft, date, conversation, runFinal]);
 
   const handleStyleChange = useCallback(
     (nextStyle: ReviewStyle) => {
@@ -1316,7 +1316,7 @@ export function Workspace({
     if (okay) {
       toast.success("已复制，去钉钉粘贴吧");
 
-      trackClientEvent("review_copied", {
+      trackClientEvent("review_copied", date, {
         charCount: finalText.length,
         itemCount: Object.values(draft.sections).reduce(
           (total, items) => total + items.length,
@@ -1353,6 +1353,7 @@ export function Workspace({
     questioning,
     draft,
     finalText,
+    date,
     initialSettings.enableMemory,
     memoryExtractedAt,
     memoryStale,
