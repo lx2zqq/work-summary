@@ -60,4 +60,13 @@ describe("pickDailyPhrase", () => {
 
     expect(DAILY_PHRASES.exam).toContain(phrase);
   });
+
+  it("固定库话术满足最低字数", () => {
+    const phrases = Object.values(DAILY_PHRASES).flat();
+
+    for (const phrase of phrases) {
+      expect(phrase.length).toBeGreaterThanOrEqual(40);
+      expect(phrase.length).toBeLessThanOrEqual(160);
+    }
+  });
 });

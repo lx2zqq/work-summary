@@ -1,3 +1,7 @@
+import {
+  MAX_DAILY_PHRASE_LENGTH,
+  MIN_DAILY_PHRASE_LENGTH,
+} from "./daily-phrase";
 import { normalizeItem } from "./template";
 import {
   MAX_QUESTIONS_PER_ROUND,
@@ -15,6 +19,7 @@ const MAX_NOTES = 3;
 
 type DraftLike = {
   sections?: Partial<Record<SectionKey, string[]>>;
+  dailyPhrase?: string | null;
   questions?: Array<{
     id?: string;
     text: string;
@@ -40,6 +45,14 @@ function uniqueClean(items: string[] | undefined): string[] {
     result.push(item);
   }
   return result;
+}
+
+/** 清理 AI 生成的话术；过短视为无效，交给固定库兜底 */
+function normalizeDailyPhrase(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+
+  const phrase = normalizeItem(value).slice(0, MAX_DAILY_PHRASE_LENGTH);
+  return phrase.length >= MIN_DAILY_PHRASE_LENGTH ? phrase : undefined;
 }
 
 /** 把模型输出或数据库里的草稿整理成稳定结构 */
@@ -90,6 +103,7 @@ export function normalizeDraft(
 
   return {
     sections,
+    dailyPhrase: normalizeDailyPhrase(input?.dailyPhrase),
     questions: questions.slice(0, maxQuestions),
     notes: uniqueClean(input?.notes).slice(0, MAX_NOTES),
   };
@@ -106,6 +120,7 @@ export function mergeFollowUpDraft(
   return {
     ...incoming,
     sections: hasDraftContent(current) ? current.sections : incoming.sections,
+    dailyPhrase: current.dailyPhrase ?? incoming.dailyPhrase,
   };
 }
 

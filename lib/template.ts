@@ -1,4 +1,7 @@
-import { pickDailyPhrase } from "./daily-phrase";
+import {
+  MIN_DAILY_PHRASE_LENGTH,
+  pickDailyPhrase,
+} from "./daily-phrase";
 import { formatDateCN } from "./date";
 import {
   NO_DIFFICULTY_PHRASE,
@@ -46,6 +49,15 @@ function normalizedForCompare(value: string): string {
   return value.replace(/[\s，。！？、；：""''（）()【】]/g, "");
 }
 
+/** 优先使用 AI 按当天内容生成的话术；缺失或过短时回退到固定库 */
+function resolveDailyPhrase(draft: ReviewDraft, dateISO: string): string {
+  const generated = normalizeItem(draft.dailyPhrase ?? "");
+
+  if (generated.length >= MIN_DAILY_PHRASE_LENGTH) return generated;
+
+  return pickDailyPhrase(dateISO, draft);
+}
+
 function uniqueItems(items: string[]): string[] {
   const seen = new Set<string>();
   const result: string[] = [];
@@ -91,7 +103,7 @@ export function renderReview(
 
   let dailyItems = [...(sections.richang ?? [])];
   if (settings.showFixedPhrase) {
-    const phrase = pickDailyPhrase(dateISO, draft);
+    const phrase = resolveDailyPhrase(draft, dateISO);
     const target = normalizedForCompare(phrase);
     const exists = dailyItems.some((item) =>
       normalizedForCompare(item).includes(target),

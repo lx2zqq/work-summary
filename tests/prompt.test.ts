@@ -120,6 +120,31 @@ describe("buildPromptMessages", () => {
     expect(system?.content).not.toContain("【长期记忆】");
   });
 
+  it("固定话术开启时要求生成 dailyPhrase，并注入样例参考", () => {
+    const [system] = buildPromptMessages({
+      ...BASE,
+      mode: "final",
+      round: MAX_FOLLOW_UP_ROUNDS,
+      settings: { ...DEFAULT_SETTINGS, showFixedPhrase: true },
+    });
+
+    expect(system?.content).toContain("dailyPhrase");
+    expect(system?.content).toContain("60-120");
+    expect(system?.content).toContain("【固定话术参考样例");
+    expect(system?.content).toContain("已追问及回答");
+  });
+
+  it("固定话术关闭时要求 dailyPhrase 返回空字符串", () => {
+    const [system] = buildPromptMessages({
+      ...BASE,
+      mode: "final",
+      round: MAX_FOLLOW_UP_ROUNDS,
+    });
+
+    expect(system?.content).toContain("dailyPhrase 必须返回空字符串");
+    expect(system?.content).not.toContain("【固定话术参考样例");
+  });
+
   it("改文风模式只以当前草稿为底稿，不重新提取流水账", () => {
     const draft = {
       ...emptyDraft(),
@@ -140,6 +165,7 @@ describe("buildPromptMessages", () => {
     expect(system?.content).toContain("保留所有栏目");
     expect(system?.content).toContain("条目数量");
     expect(system?.content).toContain("不要原样照抄");
+    expect(system?.content).toContain("dailyPhrase 返回空字符串");
     expect(user?.content).toContain("【当前草稿】");
     expect(user?.content).not.toContain("【今天的流水账】");
     expect(user?.content).not.toContain("【已追问及回答】");

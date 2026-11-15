@@ -51,6 +51,45 @@ describe("renderReview", () => {
     expect(text.split(phrase)).toHaveLength(2);
   });
 
+  it("优先使用 AI 生成的当日话术", () => {
+    const date = "2026-11-13";
+    const phrase =
+      "临近期中，今天重点跟进了孩子们的复习和错题订正情况。后续继续做好学情跟踪，及时把学习状态同步给家长。";
+    const draft = { ...draftWith({}), dailyPhrase: phrase };
+    const text = renderReview(draft, date, {
+      ...DEFAULT_SETTINGS,
+      showFixedPhrase: true,
+    });
+
+    expect(text).toContain(phrase);
+    expect(text).not.toContain(pickDailyPhrase(date, draft));
+  });
+
+  it("话术过短时回退到固定库", () => {
+    const date = "2026-11-13";
+    const draft = { ...draftWith({}), dailyPhrase: "服务更细致。" };
+    const text = renderReview(draft, date, {
+      ...DEFAULT_SETTINGS,
+      showFixedPhrase: true,
+    });
+
+    expect(text).toContain(pickDailyPhrase(date, draft));
+    expect(text).not.toContain("服务更细致。");
+  });
+
+  it("AI 话术与已有条目重复时不再追加", () => {
+    const date = "2026-11-13";
+    const phrase =
+      "临近期中，今天重点跟进了孩子们的复习和错题订正情况。后续继续做好学情跟踪，及时把学习状态同步给家长。";
+    const draft = draftWith({ richang: [phrase] });
+    const text = renderReview(draft, date, {
+      ...DEFAULT_SETTINGS,
+      showFixedPhrase: true,
+    });
+
+    expect(text.split(phrase)).toHaveLength(2);
+  });
+
   it("教研相关只在开启且有内容时出现", () => {
     const draft = draftWith({ jiaoyan: ["参加学管部教研。"] });
 

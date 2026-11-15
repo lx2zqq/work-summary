@@ -26,6 +26,8 @@ export type FollowUpQuestion = {
 
 export type ReviewDraft = {
   sections: Record<SectionKey, string[]>;
+  /** AI 生成的当日服务/业绩话术，渲染时追加到【日常工作复盘】末尾 */
+  dailyPhrase?: string;
   questions: FollowUpQuestion[];
   notes: string[];
 };

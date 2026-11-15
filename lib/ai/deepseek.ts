@@ -200,6 +200,7 @@ export function finalizeDraft(
     return {
       ...normalized,
       sections: current?.sections ?? emptySections(),
+      dailyPhrase: current?.dailyPhrase ?? normalized.dailyPhrase,
     };
   }
 
@@ -219,7 +220,11 @@ export function finalizeDraft(
       );
     }
 
-    return normalized;
+    // 改文风只改正文，固定话术保持原样
+    return {
+      ...normalized,
+      dailyPhrase: current?.dailyPhrase ?? normalized.dailyPhrase,
+    };
   }
 
   // 最终稿返回空内容时不要覆盖已有正文，交给路由走兜底并提示用户
@@ -240,6 +245,15 @@ export function finalizeDraft(
         normalized.sections[key] = [...current.sections[key]];
       }
     }
+  }
+
+  // 模型偶尔漏写话术，保留上一版，避免无谓回退到固定库
+  if (
+    context.settings.showFixedPhrase &&
+    !normalized.dailyPhrase &&
+    current?.dailyPhrase
+  ) {
+    normalized.dailyPhrase = current.dailyPhrase;
   }
 
   return normalized;

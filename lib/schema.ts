@@ -49,6 +49,7 @@ export const draftSchema = z.object({
       jiaoyan: sectionItemsSchema,
     })
     .optional(),
+  dailyPhrase: z.string().trim().max(300).optional(),
   questions: z.array(questionSchema).max(8).optional(),
   notes: z.array(z.string().max(300)).max(8).optional(),
 });

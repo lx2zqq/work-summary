@@ -1,3 +1,4 @@
+import { PHRASE_STYLE_EXAMPLES } from "@/lib/daily-phrase";
 import { formatDateCN } from "@/lib/date";
 import { formatMemoriesForPrompt } from "@/lib/memory";
 import {
@@ -72,6 +73,7 @@ const OUTPUT_SCHEMA_FINAL = `{
     "kunnan": ["工作困难条目"],
     "jiaoyan": ["教研相关条目"]
   },
+  "dailyPhrase": "当天固定话术（2-3 句，60-120 个汉字；固定话术开关关闭时为空字符串）",
   "notes": ["给用户看的待确认提示"]
 }`;
 
@@ -121,6 +123,17 @@ const FINAL_RULES = `【最终稿规则】
 - 不确定或缺失的细节直接省略，不要用“待确认”“待补充”“未提供”等占位词写进 sections。
 - notes 最多 3 条，只放无法写进正文的提醒。`;
 
+const FIXED_PHRASE_RULES = `【固定话术规则】
+- 固定话术会追加到【日常工作复盘】末尾，只写一段，2-3 句，共 60-120 个汉字。
+- 必须结合今天的流水账和【已追问及回答】里的补充内容，落到今天的具体场景，例如期中复习、错题跟进、家校沟通、会议、资料准备。
+- 语气参考下面的历史样例，但不要照抄原句；不要出现具体学生姓名、金额或未确认的结果。
+- 不要重复 sections 里已经写过的原句；不要编造今天没有发生的事。
+- 固定话术开关关闭时，dailyPhrase 返回空字符串。
+- 不要写“我”字开头，不要带序号、emoji 或 Markdown。`;
+
+const PHRASE_REFERENCE_BLOCK = `【固定话术参考样例（只学语气和结构，不要照抄）】
+${PHRASE_STYLE_EXAMPLES.map((phrase) => `- ${phrase}`).join("\n")}`;
+
 const RESTYLE_RULES = `【改文风规则】
 - 本次只改文风，不是重新提取内容。必须以【当前草稿】为唯一底稿。
 - 保留所有栏目、每个栏目的条目数量、顺序、事实和用户修改；不要新增、删除、合并条目。
@@ -129,6 +142,7 @@ const RESTYLE_RULES = `【改文风规则】
 - 详细版：展开每条到约 40-100 个汉字，补充对象、动作、结果/后续关注，但不得编造。
 - 不要原样照抄当前草稿；必须让用户能看出文风变化。
 - 五个核心栏目的空数组继续保持空数组。
+- dailyPhrase 返回空字符串，不要改写固定话术，程序会保留原话术。
 - 只输出 sections 和 notes；不要再提问，questions 必须为空数组。`;
 
 const MEMORY_USAGE_RULES = `【长期记忆使用规则】
@@ -161,7 +175,10 @@ sections 示例：
 【示例：详细版】
 sections 示例：
 - xueqing：["对接学员林小满，跟进今日校内作业完成情况，完成错题讲解与整理，后续持续关注其课堂吸收情况。"]
-- jiaoxiao：["与林小满妈妈微信沟通，同步今日作业完成情况，明确后续错题整理安排。"]`;
+- jiaoxiao：["与林小满妈妈微信沟通，同步今日作业完成情况，明确后续错题整理安排。"]
+
+【固定话术示例】
+dailyPhrase：临近期中，今天重点跟进了孩子们的复习和错题订正情况，也提前准备好了复习资料。后续会继续做好学情跟踪，及时把孩子的学习状态同步给家长，服务再细致一些，帮孩子们稳住基础、查漏补缺。`;
 
 function formatStudents(students: Student[]): string {
   if (students.length === 0) {
@@ -200,6 +217,14 @@ function buildSystemPrompt(context: PromptContext): string {
     ? OUTPUT_SCHEMA_QUESTIONS
     : OUTPUT_SCHEMA_FINAL;
 
+  const fixedPhraseBlock = isRestyle
+    ? ""
+    : context.settings.showFixedPhrase
+      ? `${FIXED_PHRASE_RULES}
+
+${PHRASE_REFERENCE_BLOCK}`
+      : "【固定话术】开关关闭，dailyPhrase 必须返回空字符串。";
+
   const modeBlock = isQuestions
     ? `【本次任务】
 你现在只负责分析信息缺口和追问，不写复盘正文。不要输出 sections。根据流水账、已问答和当前草稿判断还缺什么；缺失的细节和空栏目都要通过 questions 补全。
@@ -217,11 +242,13 @@ ${RESTYLE_RULES}
 
 ${RESTYLE_EXAMPLES}`
       : `【本次任务】
-根据流水账和所有问答，生成最终复盘正文。不要再提问，只输出 sections 和 notes。
+根据流水账和所有问答，生成最终复盘正文。不要再提问，只输出 sections、dailyPhrase 和 notes。
 
 ${SECTION_RULES}
 
 ${FINAL_RULES}
+
+${fixedPhraseBlock}
 
 ${FINAL_EXAMPLES}`;
 
@@ -236,8 +263,8 @@ ${STYLE_RULES[context.style]}
     context.mode === "final"
       ? `栏目开关：教研相关=${context.settings.showJiaoyan ? "开" : "关"}；工作困难=${context.settings.showKunnan ? "开" : "关"}；固定话术=${
           context.settings.showFixedPhrase
-            ? "开（由程序在渲染时追加，你不用自己写服务/业绩口号）"
-            : "关"
+            ? "开（你需要在 dailyPhrase 里写当天话术，程序会追加到日常工作复盘末尾）"
+            : "关（dailyPhrase 返回空字符串）"
         }`
       : "";
 
@@ -292,7 +319,7 @@ function buildUserPrompt(context: PromptContext): string {
     return [
       `【当前草稿】\n${JSON.stringify(context.currentDraft ?? {}, null, 2)}`,
       `【目标文风】${STYLE_LABEL[context.style]}`,
-      "请只输出重写后的 sections 和 notes。保留所有栏目、条目数量、顺序、事实和用户修改；只改文字表达和详略；questions 必须为空数组。不要输出 JSON 以外的内容。",
+      "请只输出重写后的 sections 和 notes，dailyPhrase 返回空字符串。保留所有栏目、条目数量、顺序、事实和用户修改；只改文字表达和详略；questions 必须为空数组。不要输出 JSON 以外的内容。",
     ].join("\n\n");
   }
 
@@ -331,7 +358,7 @@ function buildUserPrompt(context: PromptContext): string {
     }
   } else {
     parts.push(
-      "【本轮信息】追问已结束。请输出完整的 sections 和 notes；questions 必须为空数组。",
+      "【本轮信息】追问已结束。请输出完整的 sections、dailyPhrase 和 notes；questions 必须为空数组。",
     );
   }
 

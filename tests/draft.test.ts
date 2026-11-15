@@ -49,6 +49,23 @@ describe("normalizeDraft", () => {
     expect(draft.questions).toEqual([]);
   });
 
+  it("保留并清理 AI 生成的话术", () => {
+    const draft = normalizeDraft({
+      dailyPhrase:
+        "1️⃣ 临近期中，今天重点跟进了复习和错题订正情况。后续继续做好学情跟踪，及时同步家长。",
+    });
+
+    expect(draft.dailyPhrase).toBe(
+      "临近期中，今天重点跟进了复习和错题订正情况。后续继续做好学情跟踪，及时同步家长。",
+    );
+  });
+
+  it("过短的话术视为无效，交给固定库兜底", () => {
+    const draft = normalizeDraft({ dailyPhrase: "服务更细致。" });
+
+    expect(draft.dailyPhrase).toBeUndefined();
+  });
+
   it("保留追问的多选标记，缺省按单选处理", () => {
     const draft = normalizeDraft({
       questions: [
@@ -91,6 +108,20 @@ describe("mergeFollowUpDraft", () => {
     ]);
     expect(merged.questions).toHaveLength(1);
     expect(merged.notes).toEqual(["想确认试听情况"]);
+  });
+
+  it("追问时保留已有固定话术", () => {
+    const current = normalizeDraft({
+      dailyPhrase:
+        "临近期中，今天重点跟进了复习和错题订正情况。后续继续做好学情跟踪，及时同步家长。",
+    });
+    const incoming = normalizeDraft({
+      questions: [{ text: "今天有试听吗？", options: ["没有", "有"] }],
+    });
+
+    const merged = mergeFollowUpDraft(current, incoming);
+
+    expect(merged.dailyPhrase).toBe(current.dailyPhrase);
   });
 });
 

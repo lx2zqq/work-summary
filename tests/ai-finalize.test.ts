@@ -41,6 +41,67 @@ describe("finalizeDraft 安全检查", () => {
     expect(result.questions).toHaveLength(1);
   });
 
+  it("追问模式保留已有固定话术", () => {
+    const phrase =
+      "临近期中，今天重点跟进了复习和错题订正情况。后续继续做好学情跟踪，及时同步家长。";
+    const current = normalizeDraft({
+      sections: { xueqing: ["林小满：完成作业。"] },
+      dailyPhrase: phrase,
+    });
+    const incoming = normalizeDraft({
+      sections: {},
+      questions: [{ text: "今天有试听吗？", options: ["没有", "有"] }],
+    });
+
+    const result = finalizeDraft(
+      incoming,
+      buildContext({ mode: "questions", currentDraft: current }),
+    );
+
+    expect(result.dailyPhrase).toBe(phrase);
+  });
+
+  it("改文风时保留已有固定话术", () => {
+    const phrase =
+      "临近期中，今天重点跟进了复习和错题订正情况。后续继续做好学情跟踪，及时同步家长。";
+    const current = normalizeDraft({
+      sections: { xueqing: ["林小满：完成作业。"] },
+      dailyPhrase: phrase,
+    });
+    const incoming = normalizeDraft({
+      sections: { xueqing: ["林小满：完成今日作业。"] },
+    });
+
+    const result = finalizeDraft(
+      incoming,
+      buildContext({ mode: "restyle", currentDraft: current }),
+    );
+
+    expect(result.dailyPhrase).toBe(phrase);
+  });
+
+  it("最终稿漏写话术时保留上一版", () => {
+    const phrase =
+      "临近期中，今天重点跟进了复习和错题订正情况。后续继续做好学情跟踪，及时同步家长。";
+    const current = normalizeDraft({
+      sections: { xueqing: ["林小满：完成作业。"] },
+      dailyPhrase: phrase,
+    });
+    const incoming = normalizeDraft({
+      sections: { xueqing: ["林小满：完成今日作业。"] },
+    });
+
+    const result = finalizeDraft(
+      incoming,
+      buildContext({
+        currentDraft: current,
+        settings: { ...DEFAULT_SETTINGS, showFixedPhrase: true },
+      }),
+    );
+
+    expect(result.dailyPhrase).toBe(phrase);
+  });
+
   it("最终稿为空时抛错，不覆盖已有正文", () => {
     expect(() =>
       finalizeDraft(normalizeDraft({}), buildContext()),

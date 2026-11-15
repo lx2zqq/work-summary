@@ -39,6 +39,8 @@ const SAMPLE_DRAFT: ReviewDraft = {
     kunnan: [],
     jiaoyan: ["参加学管部教研，讨论新生跟进节奏。"],
   },
+  dailyPhrase:
+    "临近期中，今天重点跟进了孩子们的复习和错题订正情况，也提前准备好了复习资料。后续会继续做好学情跟踪，及时把孩子的学习状态同步给家长，服务再细致一些，帮孩子们稳住基础、查漏补缺。",
   questions: [],
   notes: [],
 };
@@ -61,7 +63,7 @@ const TOGGLES: Array<{
   {
     key: "showFixedPhrase",
     title: "固定话术",
-    description: "每天轮换一条服务/业绩话术，追加在末尾。",
+    description: "每天根据当天内容生成一段服务/业绩话术，追加在末尾。",
   },
   {
     key: "enableMemory",
