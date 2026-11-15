@@ -139,7 +139,7 @@ resolveMemoryStudent（按 id 或姓名匹配学生）
 - 写入失败只告警，不影响生成或保存；
 - 客户端只能上报 `review_copied` 和 `question_answered`，服务端有白名单校验。
 
-统计脚本 `scripts/stats.ts` 读取事件表，输出成功率、P50/P95、token、追问回答率、复制率、编辑改动、记忆命中率。
+统计脚本 `scripts/stats.ts` 读取事件表，输出成功率、P50/P95、token、追问回答率、复制率、编辑改动、记忆注入率。
 
 ## 关键取舍
 

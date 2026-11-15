@@ -25,6 +25,7 @@ export type StatsSummary = {
   copyRate: number;
   avgItemDelta: number | null;
   avgCharDelta: number | null;
+  /** 生成时带上记忆的请求比例；不代表记忆一定被采纳 */
   memoryHitRate: number;
   memoryExtractions: number;
 };
@@ -209,10 +210,10 @@ export function formatStatsMarkdown(
     `| 平均 prompt / completion tokens | ${number(summary.avgPromptTokens, 0)} / ${number(summary.avgCompletionTokens, 0)} |`,
     `| 追问提交次数 | ${summary.followUpTotal} |`,
     `| 追问回答率 | ${percent(summary.followUpAnswerRate)} |`,
-    `| 复制率 | ${percent(summary.copyRate)} |`,
+    `| 复制率（按天） | ${percent(summary.copyRate)} |`,
     `| 平均条目改动数 | ${number(summary.avgItemDelta)} |`,
     `| 平均字数改动 | ${number(summary.avgCharDelta, 0)} |`,
-    `| 记忆命中率 | ${percent(summary.memoryHitRate)} |`,
+    `| 记忆注入率 | ${percent(summary.memoryHitRate)} |`,
     `| 记忆提取次数 | ${summary.memoryExtractions} |`,
   ].join("\n");
 }

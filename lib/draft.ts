@@ -17,6 +17,20 @@ const MAX_ITEMS_PER_SECTION = 30;
 const MAX_QUESTIONS = MAX_QUESTIONS_PER_ROUND;
 const MAX_NOTES = 3;
 
+/** 生成和保存共用同一口径，只统计栏目正文，避免模板标题/emoji 被算成编辑改动 */
+export function countDraftItems(draft: ReviewDraft): number {
+  return Object.values(draft.sections).reduce(
+    (total, items) => total + items.length,
+    0,
+  );
+}
+
+export function countDraftChars(draft: ReviewDraft): number {
+  return Object.values(draft.sections)
+    .flat()
+    .reduce((total, item) => total + item.length, 0);
+}
+
 type DraftLike = {
   sections?: Partial<Record<SectionKey, string[]>>;
   dailyPhrase?: string | null;

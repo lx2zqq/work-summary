@@ -132,7 +132,7 @@ describe("summarizeEvents", () => {
     expect(summary.avgCharDelta).toBe(100);
   });
 
-  it("统计记忆命中率", () => {
+  it("统计记忆注入率", () => {
     expect(summary.memoryHitRate).toBeCloseTo(2 / 3);
     expect(summary.memoryExtractions).toBe(1);
   });

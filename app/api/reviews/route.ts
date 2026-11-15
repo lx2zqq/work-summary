@@ -8,10 +8,14 @@ import {
   listReviews,
   saveReview,
 } from "@/lib/db/queries";
-import { normalizeDraft } from "@/lib/draft";
+import {
+  countDraftChars,
+  countDraftItems,
+  normalizeDraft,
+} from "@/lib/draft";
 import { saveReviewSchema } from "@/lib/schema";
 import { renderReview } from "@/lib/template";
-import { hasDraftContent, type ReviewDraft } from "@/lib/types";
+import { hasDraftContent } from "@/lib/types";
 
 export async function GET(request: Request) {
   const unauthorized = await requireApiSession();
@@ -92,7 +96,7 @@ export async function POST(request: Request) {
           style: input.style,
           round: input.round,
           itemCount: countDraftItems(draft),
-          charCount: finalText.length,
+          charCount: countDraftChars(draft),
         },
       });
     }
@@ -105,11 +109,4 @@ export async function POST(request: Request) {
       { status: 500 },
     );
   }
-}
-
-function countDraftItems(draft: ReviewDraft): number {
-  return Object.values(draft.sections).reduce(
-    (total, items) => total + items.length,
-    0,
-  );
 }

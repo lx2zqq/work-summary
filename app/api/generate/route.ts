@@ -14,13 +14,17 @@ import {
   listActiveMemories,
   listStudents,
 } from "@/lib/db/queries";
-import { fallbackDraft, normalizeDraft } from "@/lib/draft";
+import {
+  countDraftChars,
+  countDraftItems,
+  fallbackDraft,
+  normalizeDraft,
+} from "@/lib/draft";
 import { selectMemoriesForPrompt } from "@/lib/memory";
 import {
   generateRequestSchema,
   type GenerateRequest,
 } from "@/lib/schema";
-import type { ReviewDraft } from "@/lib/types";
 
 export const maxDuration = 60;
 
@@ -174,17 +178,4 @@ export async function POST(request: Request) {
       memories: [],
     });
   }
-}
-
-function countDraftItems(draft: ReviewDraft): number {
-  return Object.values(draft.sections).reduce(
-    (total, items) => total + items.length,
-    0,
-  );
-}
-
-function countDraftChars(draft: ReviewDraft): number {
-  return Object.values(draft.sections)
-    .flat()
-    .reduce((total, item) => total + item.length, 0);
 }
