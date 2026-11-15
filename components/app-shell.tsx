@@ -8,6 +8,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { DoodleStar, MascotFace } from "@/components/mascots";
+import { GenerationIndicator } from "@/components/workspace/generation-indicator";
 
 type NavItem = {
   href: string;
@@ -27,7 +28,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-dvh">
       <header className="sticky top-0 z-30 border-b-2 border-line/70 bg-cream/90 pt-[env(safe-area-inset-top)] backdrop-blur-md">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
+        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-3 px-4 sm:px-6">
           <Link href="/" className="group flex items-center gap-2.5">
             <span className="relative flex h-11 w-11 items-center justify-center rounded-full border-2 border-cocoa/20 bg-brand-soft shadow-[0_3px_0_#f0d4dd] transition-transform group-hover:-rotate-3">
               <MascotFace className="h-9 w-9" />
@@ -43,21 +44,24 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </span>
           </Link>
 
-          <nav className="hidden items-center gap-1.5 md:flex">
-            {NAV.map((item) => {
-              const Icon = item.icon;
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className="flex items-center gap-2 rounded-full px-4 py-2 text-sm font-bold text-ink-soft transition-all hover:bg-cream-deep hover:text-ink"
-                >
-                  <Icon className="h-4 w-4" />
-                  {item.label}
-                </Link>
-              );
-            })}
-          </nav>
+          <div className="flex items-center gap-2">
+            <GenerationIndicator />
+            <nav className="hidden items-center gap-1.5 md:flex">
+              {NAV.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className="flex items-center gap-2 rounded-full px-4 py-2 text-sm font-bold text-ink-soft transition-all hover:bg-cream-deep hover:text-ink"
+                  >
+                    <Icon className="h-4 w-4" />
+                    {item.label}
+                  </Link>
+                );
+              })}
+            </nav>
+          </div>
         </div>
       </header>
 

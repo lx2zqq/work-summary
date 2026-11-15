@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Segmented } from "@/components/ui/segmented";
 import { Switch } from "@/components/ui/switch";
 import { todayISO } from "@/lib/date";
+import { resetGenerationStore } from "@/lib/generation-store";
 import { renderReview } from "@/lib/template";
 import type {
   AppSettings,
@@ -134,6 +135,7 @@ export function SettingsForm({
     try {
       const response = await fetch("/api/auth/logout", { method: "POST" });
       if (!response.ok) throw new Error("退出失败，请重试");
+      resetGenerationStore();
       router.replace("/login");
       router.refresh();
     } catch (error) {

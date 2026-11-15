@@ -27,6 +27,7 @@ type Props = {
   maxRounds: number;
   loading: boolean;
   memories: MemoryPromptItem[];
+  initialAnswers?: Record<string, QuestionAnswer>;
   onSubmit: (answers: QAPair[]) => void;
   onSkip: () => void;
 };
@@ -37,10 +38,13 @@ export function QuestionsCard({
   maxRounds,
   loading,
   memories,
+  initialAnswers,
   onSubmit,
   onSkip,
 }: Props) {
-  const [answers, setAnswers] = useState<Record<string, QuestionAnswer>>({});
+  const [answers, setAnswers] = useState<Record<string, QuestionAnswer>>(
+    () => initialAnswers ?? {},
+  );
 
   function getAnswer(id: string): QuestionAnswer {
     return answers[id] ?? EMPTY_ANSWER;

@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   EMPTY_ANSWER,
+  answersFromConversation,
   buildAnswer,
   setAnswerCustom,
   toggleAnswerOption,
 } from "@/lib/answers";
+import type { FollowUpQuestion } from "@/lib/types";
 
 describe("toggleAnswerOption", () => {
   it("单选题保留已填的补充内容", () => {
@@ -70,5 +72,78 @@ describe("buildAnswer", () => {
 
   it("只有补充", () => {
     expect(buildAnswer({ selected: [], custom: " 补充 " })).toBe("补充");
+  });
+});
+
+const QUESTIONS: FollowUpQuestion[] = [
+  {
+    id: "q1",
+    text: "今天有试听吗？",
+    options: ["没有", "有"],
+    multiple: false,
+    target: "yeji",
+  },
+  {
+    id: "q2",
+    text: "跟哪些家长沟通了？",
+    options: ["林小满妈妈", "陈一鸣妈妈"],
+    multiple: true,
+    target: "jiaoxiao",
+  },
+  {
+    id: "q3",
+    text: "还有什么补充？",
+    options: [],
+    multiple: false,
+    target: "general",
+  },
+];
+
+describe("answersFromConversation", () => {
+  it("还原选项、补充和纯文本答案", () => {
+    const result = answersFromConversation(QUESTIONS, [
+      { question: "今天有试听吗？", answer: "有；补充：周六过来" },
+      {
+        question: "跟哪些家长沟通了？",
+        answer: "林小满妈妈、陈一鸣妈妈",
+      },
+      { question: "还有什么补充？", answer: "今天还打印了资料" },
+    ]);
+
+    expect(result.q1).toEqual({ selected: ["有"], custom: "周六过来" });
+    expect(result.q2).toEqual({
+      selected: ["林小满妈妈", "陈一鸣妈妈"],
+      custom: "",
+    });
+    expect(result.q3).toEqual({
+      selected: [],
+      custom: "今天还打印了资料",
+    });
+  });
+
+  it("自定义答案不会被误当成选项", () => {
+    const result = answersFromConversation([QUESTIONS[0]], [
+      {
+        question: "今天有试听吗？",
+        answer: "家长临时改到周日",
+      },
+    ]);
+
+    expect(result.q1).toEqual({
+      selected: [],
+      custom: "家长临时改到周日",
+    });
+  });
+
+  it("同一个问题多次回答时使用最后一次", () => {
+    const result = answersFromConversation([QUESTIONS[0]], [
+      { question: "今天有试听吗？", answer: "没有" },
+      { question: "今天有试听吗？", answer: "有；补充：已确认" },
+    ]);
+
+    expect(result.q1).toEqual({
+      selected: ["有"],
+      custom: "已确认",
+    });
   });
 });
