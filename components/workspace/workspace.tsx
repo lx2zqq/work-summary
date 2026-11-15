@@ -14,6 +14,10 @@ import { Segmented } from "@/components/ui/segmented";
 import { copyText } from "@/lib/clipboard";
 import { isValidISODate, relativeDateLabel } from "@/lib/date";
 import { mergeFollowUpDraft, normalizeDraft } from "@/lib/draft";
+import {
+  isMemoryExtractionStale,
+  resolveMemoryCopyAction,
+} from "@/lib/memory";
 import { renderReview } from "@/lib/template";
 import {
   MAX_FOLLOW_UP_ROUNDS,
@@ -236,7 +240,10 @@ export function Workspace({
   );
 
   const extractMemory = useCallback(
-    async (force: boolean, options: { skipSave?: boolean } = {}) => {
+    async (
+      force: boolean,
+      options: { skipSave?: boolean; quiet?: boolean } = {},
+    ) => {
       if (
         !initialSettings.enableMemory ||
         extractingMemoryRef.current
@@ -284,8 +291,12 @@ export function Workspace({
           const count = data.count ?? 0;
 
           if (count > 0) {
-            toast.success(`已记住 ${count} 条关键信息`);
-          } else {
+            toast.success(
+              options.quiet
+                ? `记忆已更新 ${count} 条`
+                : `已记住 ${count} 条关键信息`,
+            );
+          } else if (!options.quiet) {
             toast.info("今天没有需要新增的记忆");
           }
         }
@@ -308,10 +319,10 @@ export function Workspace({
     if (dirty) return true;
     if (!savedAt) return false;
 
-    return (
-      new Date(savedAt).getTime() >
-      new Date(memoryExtractedAt).getTime()
-    );
+    return isMemoryExtractionStale({
+      extractedAt: memoryExtractedAt,
+      updatedAt: savedAt,
+    });
   }, [memoryExtractedAt, dirty, savedAt]);
 
   useEffect(() => {
@@ -749,8 +760,14 @@ export function Workspace({
     if (okay) {
       toast.success("已复制，去钉钉粘贴吧");
 
-      // 第一次复制视为当天收尾，后台留一次记忆；失败不影响复制
-      if (initialSettings.enableMemory && !memoryExtractedAt) {
+      // 复制视为当天收尾：第一次记忆，正文有更新则刷新；失败不影响复制
+      const memoryAction = resolveMemoryCopyAction({
+        enabled: initialSettings.enableMemory,
+        extractedAt: memoryExtractedAt,
+        stale: memoryStale,
+      });
+
+      if (memoryAction !== "none") {
         void (async () => {
           const saved = await saveNow({ silent: true });
 
@@ -759,7 +776,10 @@ export function Workspace({
             return;
           }
 
-          await extractMemory(false, { skipSave: true });
+          await extractMemory(false, {
+            skipSave: true,
+            quiet: memoryAction === "refresh",
+          });
         })();
       }
     } else {
@@ -771,6 +791,7 @@ export function Workspace({
     finalText,
     initialSettings.enableMemory,
     memoryExtractedAt,
+    memoryStale,
     saveNow,
     extractMemory,
   ]);

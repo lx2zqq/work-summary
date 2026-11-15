@@ -3,8 +3,10 @@ import {
   MEMORY_MERGE_THRESHOLD,
   formatMemoriesForPrompt,
   hasSameMemoryContent,
+  isMemoryExtractionStale,
   memorySimilarity,
   normalizeMemoryText,
+  resolveMemoryCopyAction,
   resolveMemoryStudent,
   selectMemoriesForPrompt,
 } from "@/lib/memory";
@@ -211,6 +213,93 @@ describe("memorySimilarity", () => {
     expect(
       memorySimilarity("家长偏好微信沟通。", "家长偏好微信沟通。"),
     ).toBe(1);
+  });
+});
+
+describe("resolveMemoryCopyAction", () => {
+  it("记忆关闭时不触发", () => {
+    expect(
+      resolveMemoryCopyAction({
+        enabled: false,
+        extractedAt: null,
+        stale: true,
+      }),
+    ).toBe("none");
+  });
+
+  it("第一次复制触发首次记忆", () => {
+    expect(
+      resolveMemoryCopyAction({
+        enabled: true,
+        extractedAt: null,
+        stale: false,
+      }),
+    ).toBe("first");
+  });
+
+  it("正文有更新时触发刷新", () => {
+    expect(
+      resolveMemoryCopyAction({
+        enabled: true,
+        extractedAt: "2026-11-15T01:00:00.000Z",
+        stale: true,
+      }),
+    ).toBe("refresh");
+  });
+
+  it("正文没变化时不重复触发", () => {
+    expect(
+      resolveMemoryCopyAction({
+        enabled: true,
+        extractedAt: "2026-11-15T01:00:00.000Z",
+        stale: false,
+      }),
+    ).toBe("none");
+  });
+});
+
+describe("isMemoryExtractionStale", () => {
+  it("从未提取过需要更新", () => {
+    expect(
+      isMemoryExtractionStale({
+        extractedAt: null,
+        updatedAt: "2026-11-15T01:00:00.000Z",
+      }),
+    ).toBe(true);
+  });
+
+  it("保存时间晚于提取时间需要更新", () => {
+    expect(
+      isMemoryExtractionStale({
+        extractedAt: "2026-11-15T01:00:00.000Z",
+        updatedAt: "2026-11-15T02:00:00.000Z",
+      }),
+    ).toBe(true);
+  });
+
+  it("保存时间不晚于提取时间不需要更新", () => {
+    expect(
+      isMemoryExtractionStale({
+        extractedAt: "2026-11-15T02:00:00.000Z",
+        updatedAt: "2026-11-15T01:00:00.000Z",
+      }),
+    ).toBe(false);
+
+    expect(
+      isMemoryExtractionStale({
+        extractedAt: "2026-11-15T02:00:00.000Z",
+        updatedAt: "2026-11-15T02:00:00.000Z",
+      }),
+    ).toBe(false);
+  });
+
+  it("时间格式异常时按需要更新处理", () => {
+    expect(
+      isMemoryExtractionStale({
+        extractedAt: "not-a-date",
+        updatedAt: "2026-11-15T02:00:00.000Z",
+      }),
+    ).toBe(true);
   });
 });
 

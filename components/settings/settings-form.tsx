@@ -69,7 +69,7 @@ const TOGGLES: Array<{
     key: "enableMemory",
     title: "长期记忆",
     description:
-      "每天最后一次复制时自动提取；生成时参考，关闭后不提取也不参考。",
+      "正文有更新时，复制后会自动更新记忆；生成时参考，关闭后不提取也不参考。",
   },
 ];
 

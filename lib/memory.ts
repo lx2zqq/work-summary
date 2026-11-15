@@ -8,6 +8,42 @@ import type {
 // 同一件事的不同说法大致在这个相似度以上，直接合并更新
 export const MEMORY_MERGE_THRESHOLD = 0.42;
 
+export type MemoryCopyAction = "none" | "first" | "refresh";
+
+/**
+ * 复制复盘时是否需要整理记忆：
+ * - 从未提取过：首次记忆
+ * - 正文在上次记忆后有更新：刷新记忆
+ * - 其余情况不调用 AI
+ */
+export function resolveMemoryCopyAction(input: {
+  enabled: boolean;
+  extractedAt: string | null;
+  stale: boolean;
+}): MemoryCopyAction {
+  if (!input.enabled) return "none";
+  if (!input.extractedAt) return "first";
+  return input.stale ? "refresh" : "none";
+}
+
+/**
+ * 正文在最近一次记忆提取之后又保存过，就认为记忆需要更新。
+ * 时间缺失或格式异常时按“需要更新”处理，避免漏记。
+ */
+export function isMemoryExtractionStale(input: {
+  extractedAt: string | null;
+  updatedAt: string;
+}): boolean {
+  if (!input.extractedAt) return true;
+
+  const extracted = new Date(input.extractedAt).getTime();
+  const updated = new Date(input.updatedAt).getTime();
+
+  if (!Number.isFinite(extracted) || !Number.isFinite(updated)) return true;
+
+  return updated > extracted;
+}
+
 export function normalizeMemoryText(value: string): string {
   return value
     .replace(/[\s，。！？、；：""''（）()【】《》]/g, "")

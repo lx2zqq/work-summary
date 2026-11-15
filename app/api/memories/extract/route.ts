@@ -14,6 +14,7 @@ import {
 import {
   MEMORY_MERGE_THRESHOLD,
   hasSameMemoryContent,
+  isMemoryExtractionStale,
   memorySimilarity,
   resolveMemoryStudent,
   selectMemoriesForPrompt,
@@ -60,7 +61,14 @@ export async function POST(request: Request) {
       );
     }
 
-    if (review.memoryExtractedAt && !force) {
+    // 正文在记忆提取后又有保存，就自动重新提取；force 用于手动“更新记忆”
+    if (
+      !force &&
+      !isMemoryExtractionStale({
+        extractedAt: review.memoryExtractedAt,
+        updatedAt: review.updatedAt,
+      })
+    ) {
       return NextResponse.json({
         skipped: true,
         count: 0,
