@@ -16,6 +16,7 @@ import {
   answersFromConversation,
   type QuestionAnswer,
 } from "@/lib/answers";
+import { trackClientEvent } from "@/lib/analytics/client";
 import { copyText } from "@/lib/clipboard";
 import { isValidISODate, relativeDateLabel, todayISO } from "@/lib/date";
 import { mergeFollowUpDraft, normalizeDraft } from "@/lib/draft";
@@ -991,6 +992,13 @@ export function Workspace({
       const nextConversation = [...conversation, ...answers];
       const nextRound = Math.min(round + 1, MAX_FOLLOW_UP_ROUNDS);
 
+      trackClientEvent("question_answered", {
+        round,
+        questionCount: draft.questions.length,
+        answeredCount: answers.length,
+        skipped: false,
+      });
+
       if (nextRound >= MAX_FOLLOW_UP_ROUNDS) {
         toast.info(`已问完 ${MAX_FOLLOW_UP_ROUNDS} 轮，正在生成复盘`);
         await runFinal({
@@ -1009,7 +1017,7 @@ export function Workspace({
         conversationAfter: nextConversation,
       });
     },
-    [conversation, round, style, runQuestions, runFinal],
+    [conversation, round, style, draft, runQuestions, runFinal],
   );
 
   const handleSkipQuestions = useCallback(() => {
@@ -1017,13 +1025,20 @@ export function Workspace({
 
     const nextRound = Math.min(round + 1, MAX_FOLLOW_UP_ROUNDS);
 
+    trackClientEvent("question_answered", {
+      round,
+      questionCount: draft.questions.length,
+      answeredCount: 0,
+      skipped: true,
+    });
+
     void runFinal({
       style,
       answers: conversation,
       round: nextRound,
       conversationAfter: conversation,
     });
-  }, [loading, round, style, conversation, runFinal]);
+  }, [loading, round, style, draft, conversation, runFinal]);
 
   const handleStyleChange = useCallback(
     (nextStyle: ReviewStyle) => {
@@ -1300,6 +1315,14 @@ export function Workspace({
     const okay = await copyText(finalText);
     if (okay) {
       toast.success("已复制，去钉钉粘贴吧");
+
+      trackClientEvent("review_copied", {
+        charCount: finalText.length,
+        itemCount: Object.values(draft.sections).reduce(
+          (total, items) => total + items.length,
+          0,
+        ),
+      });
 
       // 复制视为当天收尾：第一次记忆，正文有更新则刷新；失败不影响复制
       const memoryAction = resolveMemoryCopyAction({

@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
 import {
-  generateDraft,
+  AiError,
+  generateDraftWithUsage,
   getAiErrorMessage,
   isAiConfigured,
 } from "@/lib/ai/deepseek";
+import { trackEvent } from "@/lib/analytics/events";
 import type { PromptContext } from "@/lib/ai/prompt";
 import { firstIssue, requireApiSession } from "@/lib/api-helpers";
 import {
@@ -18,6 +20,7 @@ import {
   generateRequestSchema,
   type GenerateRequest,
 } from "@/lib/schema";
+import type { ReviewDraft } from "@/lib/types";
 
 export const maxDuration = 60;
 
@@ -88,9 +91,42 @@ export async function POST(request: Request) {
     );
   }
 
+  const startedAt = Date.now();
+  const baseProperties = {
+    mode: input.mode,
+    style: input.style,
+    round: input.round,
+  };
+
+  await trackEvent({
+    event: "generate_started",
+    reviewDate: input.date,
+    properties: {
+      ...baseProperties,
+      inputCharCount: input.rawInput.length,
+      answerCount: input.answers.length,
+      memoryCount: context.memories.length,
+    },
+  });
+
   if (!isAiConfigured()) {
+    const draft = fallbackDraft(input.rawInput);
+    await trackEvent({
+      event: "generate_finished",
+      reviewDate: input.date,
+      properties: {
+        ...baseProperties,
+        durationMs: Date.now() - startedAt,
+        retried: false,
+        fallback: true,
+        questionCount: draft.questions.length,
+        itemCount: countDraftItems(draft),
+        charCount: countDraftChars(draft),
+      },
+    });
+
     return NextResponse.json({
-      draft: fallbackDraft(input.rawInput),
+      draft,
       fallback: true,
       warning:
         "服务端还没有配置 REVIEW_DEEPSEEK_API_KEY，已按原文生成草稿；配置后会自动使用 AI 整理。",
@@ -99,10 +135,38 @@ export async function POST(request: Request) {
   }
 
   try {
-    const draft = await generateDraft(context);
+    const { draft, usage } = await generateDraftWithUsage(context);
+
+    await trackEvent({
+      event: "generate_finished",
+      reviewDate: input.date,
+      properties: {
+        ...baseProperties,
+        durationMs: Date.now() - startedAt,
+        promptTokens: usage.promptTokens,
+        completionTokens: usage.completionTokens,
+        retried: usage.retried,
+        fallback: false,
+        questionCount: draft.questions.length,
+        itemCount: countDraftItems(draft),
+        charCount: countDraftChars(draft),
+      },
+    });
+
     return NextResponse.json({ draft, memories: context.memories });
   } catch (error) {
     console.error("[generate:ai]", error);
+
+    await trackEvent({
+      event: "generate_failed",
+      reviewDate: input.date,
+      properties: {
+        ...baseProperties,
+        durationMs: Date.now() - startedAt,
+        errorKind: error instanceof AiError ? error.kind : "request",
+      },
+    });
+
     return NextResponse.json({
       draft: fallbackDraft(input.rawInput),
       fallback: true,
@@ -110,4 +174,17 @@ export async function POST(request: Request) {
       memories: [],
     });
   }
+}
+
+function countDraftItems(draft: ReviewDraft): number {
+  return Object.values(draft.sections).reduce(
+    (total, items) => total + items.length,
+    0,
+  );
+}
+
+function countDraftChars(draft: ReviewDraft): number {
+  return Object.values(draft.sections)
+    .flat()
+    .reduce((total, item) => total + item.length, 0);
 }

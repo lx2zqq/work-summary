@@ -173,11 +173,11 @@ export function StudentManager({
         <div className="paper-card border-dashed px-6 py-12 text-center">
           <HachiwareMascot className="mascot-float mx-auto h-24 w-24" mood="sad" />
           <p className="mt-3 text-sm font-extrabold text-ink">
-            先添加林小满吧
+            先添加第一位学生吧
           </p>
-          <Button className="mt-4" onClick={() => openCreate("林小满")}>
+          <Button className="mt-4" onClick={() => openCreate()}>
             <UserRound className="h-4 w-4" />
-            添加林小满
+            添加学生
           </Button>
         </div>
       ) : (

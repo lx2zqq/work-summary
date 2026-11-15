@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { trackEvent } from "@/lib/analytics/events";
 import { firstIssue, requireApiSession } from "@/lib/api-helpers";
 import { isValidISODate } from "@/lib/date";
 import {
@@ -10,7 +11,7 @@ import {
 import { normalizeDraft } from "@/lib/draft";
 import { saveReviewSchema } from "@/lib/schema";
 import { renderReview } from "@/lib/template";
-import { hasDraftContent } from "@/lib/types";
+import { hasDraftContent, type ReviewDraft } from "@/lib/types";
 
 export async function GET(request: Request) {
   const unauthorized = await requireApiSession();
@@ -82,6 +83,20 @@ export async function POST(request: Request) {
       round: input.round,
     });
 
+    // 只统计已经有正文的保存，避免自动保存的中间态把数据冲淡
+    if (finalText) {
+      await trackEvent({
+        event: "review_saved",
+        reviewDate: input.date,
+        properties: {
+          style: input.style,
+          round: input.round,
+          itemCount: countDraftItems(draft),
+          charCount: finalText.length,
+        },
+      });
+    }
+
     return NextResponse.json({ review, finalText });
   } catch (error) {
     console.error("[reviews:POST]", error);
@@ -90,4 +105,11 @@ export async function POST(request: Request) {
       { status: 500 },
     );
   }
+}
+
+function countDraftItems(draft: ReviewDraft): number {
+  return Object.values(draft.sections).reduce(
+    (total, items) => total + items.length,
+    0,
+  );
 }

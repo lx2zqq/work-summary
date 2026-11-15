@@ -13,6 +13,9 @@ import {
   type Student,
 } from "@/lib/types";
 
+/** 改 prompt 时递增，eval 报告会带上这个版本，方便对比 */
+export const PROMPT_VERSION = "2026-11-15.1";
+
 export type PromptMode = "questions" | "final" | "restyle";
 
 export type PromptContext = {

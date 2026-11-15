@@ -106,7 +106,32 @@ export const memories = pgTable(
   ],
 );
 
+/** 只记录数量、枚举和耗时，不记录复盘原文、学生姓名或问题内容 */
+export const usageEvents = pgTable(
+  "usage_events",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    event: text("event").notNull(),
+    reviewDate: date("review_date", { mode: "string" }),
+    properties: jsonb("properties")
+      .$type<Record<string, string | number | boolean | null>>()
+      .notNull()
+      .default({}),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("usage_events_event_created_idx").on(
+      table.event,
+      table.createdAt,
+    ),
+    index("usage_events_review_date_idx").on(table.reviewDate),
+  ],
+);
+
 export type StudentRow = typeof students.$inferSelect;
 export type ReviewRow = typeof reviews.$inferSelect;
 export type SettingsRow = typeof settings.$inferSelect;
 export type MemoryRow = typeof memories.$inferSelect;
+export type UsageEventRow = typeof usageEvents.$inferSelect;

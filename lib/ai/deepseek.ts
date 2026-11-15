@@ -97,9 +97,23 @@ function parseDraft(content: string): {
   return { draft: normalizeDraft(result.data), error: "" };
 }
 
+export type AiUsage = {
+  promptTokens: number;
+  completionTokens: number;
+  retried: boolean;
+};
+
+/** 保留原有调用方式；需要 token 和重试信息时用 generateDraftWithUsage */
 export async function generateDraft(
   context: PromptContext,
 ): Promise<ReviewDraft> {
+  const { draft } = await generateDraftWithUsage(context);
+  return draft;
+}
+
+export async function generateDraftWithUsage(
+  context: PromptContext,
+): Promise<{ draft: ReviewDraft; usage: AiUsage }> {
   const client = createClient();
   const model = getAiModelName();
 
@@ -111,6 +125,11 @@ export async function generateDraft(
   }));
 
   let content = "";
+  const usage: AiUsage = {
+    promptTokens: 0,
+    completionTokens: 0,
+    retried: false,
+  };
 
   try {
     const completion = await client.chat.completions.create({
@@ -124,6 +143,8 @@ export async function generateDraft(
     content = completion.choices[0]?.message?.content?.trim() ?? "";
 
     if (completion.usage) {
+      usage.promptTokens += completion.usage.prompt_tokens ?? 0;
+      usage.completionTokens += completion.usage.completion_tokens ?? 0;
       console.info(
         `[ai] ${model} tokens: prompt=${completion.usage.prompt_tokens}, completion=${completion.usage.completion_tokens}`,
       );
@@ -136,10 +157,11 @@ export async function generateDraft(
 
   const first = parseDraft(content);
   if (first.draft) {
-    return finalizeDraft(first.draft, context);
+    return { draft: finalizeDraft(first.draft, context), usage };
   }
 
   // 第一次格式不对时，把错误告诉模型再试一次
+  usage.retried = true;
   const retryMessages: ChatCompletionMessageParam[] = [
     ...messages,
     { role: "assistant", content: content || "（空输出）" },
@@ -161,8 +183,13 @@ export async function generateDraft(
     const retryContent = retry.choices[0]?.message?.content?.trim() ?? "";
     const second = parseDraft(retryContent);
 
+    if (retry.usage) {
+      usage.promptTokens += retry.usage.prompt_tokens ?? 0;
+      usage.completionTokens += retry.usage.completion_tokens ?? 0;
+    }
+
     if (second.draft) {
-      return finalizeDraft(second.draft, context);
+      return { draft: finalizeDraft(second.draft, context), usage };
     }
 
     throw new AiError(

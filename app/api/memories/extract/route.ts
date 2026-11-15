@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { AiError, getAiErrorMessage } from "@/lib/ai/deepseek";
 import { extractMemories } from "@/lib/ai/memory";
+import { trackEvent } from "@/lib/analytics/events";
 import { firstIssue, requireApiSession } from "@/lib/api-helpers";
 import {
   createMemory,
@@ -84,12 +85,26 @@ export async function POST(request: Request) {
       limit: 60,
     });
 
-    const extracted = await extractMemories({
-      date,
-      finalText: review.finalText,
-      students,
-      existing: existingForPrompt,
-    });
+    const startedAt = Date.now();
+    let usage = {
+      promptTokens: 0,
+      completionTokens: 0,
+      retried: false,
+    };
+
+    const extracted = await extractMemories(
+      {
+        date,
+        finalText: review.finalText,
+        students,
+        existing: existingForPrompt,
+      },
+      {
+        onUsage: (value) => {
+          usage = value;
+        },
+      },
+    );
 
     const created: Memory[] = [];
     const touchedIds = new Set<string>();
@@ -189,6 +204,19 @@ export async function POST(request: Request) {
     }
 
     const extractedAt = await markMemoryExtracted(date);
+
+    await trackEvent({
+      event: "memory_extracted",
+      reviewDate: date,
+      properties: {
+        created: created.length,
+        updated: Math.max(0, touchedIds.size - created.length),
+        durationMs: Date.now() - startedAt,
+        promptTokens: usage.promptTokens,
+        completionTokens: usage.completionTokens,
+        retried: usage.retried,
+      },
+    });
 
     return NextResponse.json({
       skipped: false,

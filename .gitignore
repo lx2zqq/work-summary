@@ -37,11 +37,18 @@ yarn-error.log*
 # 含真实学生/家长信息的原始样例，不提交到 Git
 /样例（按时间升序）.md
 
+# 素材原图，已移出仓库
+/material/
+
 # local PGlite database
 /.data/
 
 # local UI test artifacts
 /.tmp-test/
+
+# eval reports are generated locally; commit a baseline separately if needed
+/eval/report.md
+/eval/report.json
 
 # vercel
 .vercel

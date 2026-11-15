@@ -15,6 +15,13 @@
       "when": 1794638038925,
       "tag": "0001_cold_inertia",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794731564081,
+      "tag": "0002_rich_hammerhead",
+      "breakpoints": true
     }
   ]
 }

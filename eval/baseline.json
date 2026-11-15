@@ -1,0 +1,1223 @@
+{
+  "generatedAt": "2026-11-15T08:46:53.931Z",
+  "promptVersion": "2026-11-15.1",
+  "caseCount": 30,
+  "summary": {
+    "total": 30,
+    "passed": 30,
+    "failed": 0,
+    "errors": 0,
+    "passRate": 1,
+    "avgDurationMs": 2465.5,
+    "p95DurationMs": 5527,
+    "avgPromptTokens": 1407.357142857143,
+    "avgCompletionTokens": 331.89285714285717
+  },
+  "byTag": [
+    {
+      "tag": "anti-hallucination",
+      "total": 1,
+      "passed": 1
+    },
+    {
+      "tag": "concise",
+      "total": 1,
+      "passed": 1
+    },
+    {
+      "tag": "conflict",
+      "total": 1,
+      "passed": 1
+    },
+    {
+      "tag": "core-sections",
+      "total": 4,
+      "passed": 4
+    },
+    {
+      "tag": "daily-phrase",
+      "total": 1,
+      "passed": 1
+    },
+    {
+      "tag": "detailed",
+      "total": 4,
+      "passed": 4
+    },
+    {
+      "tag": "difficulty",
+      "total": 1,
+      "passed": 1
+    },
+    {
+      "tag": "edge",
+      "total": 5,
+      "passed": 5
+    },
+    {
+      "tag": "empty",
+      "total": 1,
+      "passed": 1
+    },
+    {
+      "tag": "empty-sections",
+      "total": 1,
+      "passed": 1
+    },
+    {
+      "tag": "filter",
+      "total": 1,
+      "passed": 1
+    },
+    {
+      "tag": "final",
+      "total": 23,
+      "passed": 23
+    },
+    {
+      "tag": "irrelevant",
+      "total": 1,
+      "passed": 1
+    },
+    {
+      "tag": "long",
+      "total": 5,
+      "passed": 5
+    },
+    {
+      "tag": "long-input",
+      "total": 1,
+      "passed": 1
+    },
+    {
+      "tag": "medium",
+      "total": 5,
+      "passed": 5
+    },
+    {
+      "tag": "memory",
+      "total": 5,
+      "passed": 5
+    },
+    {
+      "tag": "multi-student",
+      "total": 1,
+      "passed": 1
+    },
+    {
+      "tag": "negative",
+      "total": 2,
+      "passed": 2
+    },
+    {
+      "tag": "numbers",
+      "total": 1,
+      "passed": 1
+    },
+    {
+      "tag": "optional-sections",
+      "total": 1,
+      "passed": 1
+    },
+    {
+      "tag": "parent",
+      "total": 1,
+      "passed": 1
+    },
+    {
+      "tag": "performance",
+      "total": 3,
+      "passed": 3
+    },
+    {
+      "tag": "questions",
+      "total": 2,
+      "passed": 2
+    },
+    {
+      "tag": "restyle",
+      "total": 5,
+      "passed": 5
+    },
+    {
+      "tag": "short",
+      "total": 5,
+      "passed": 5
+    },
+    {
+      "tag": "style",
+      "total": 5,
+      "passed": 5
+    },
+    {
+      "tag": "voice-style",
+      "total": 1,
+      "passed": 1
+    }
+  ],
+  "results": [
+    {
+      "id": "short-001",
+      "tags": [
+        "short",
+        "final",
+        "core-sections"
+      ],
+      "status": "passed",
+      "durationMs": 1008,
+      "promptTokens": 1452,
+      "completionTokens": 87,
+      "checks": [
+        {
+          "name": "结构",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "必含事实",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "名单外学生",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "栏目覆盖",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "占位词",
+          "passed": true,
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "id": "short-002",
+      "tags": [
+        "short",
+        "final",
+        "performance"
+      ],
+      "status": "passed",
+      "durationMs": 3021,
+      "promptTokens": 1458,
+      "completionTokens": 374,
+      "checks": [
+        {
+          "name": "结构",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "禁止内容",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "栏目覆盖",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "占位词",
+          "passed": true,
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "id": "short-003",
+      "tags": [
+        "short",
+        "final",
+        "detailed"
+      ],
+      "status": "passed",
+      "durationMs": 3018,
+      "promptTokens": 1497,
+      "completionTokens": 307,
+      "checks": [
+        {
+          "name": "结构",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "禁止内容",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "栏目覆盖",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "占位词",
+          "passed": true,
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "id": "short-004",
+      "tags": [
+        "short",
+        "final",
+        "anti-hallucination"
+      ],
+      "status": "passed",
+      "durationMs": 1615,
+      "promptTokens": 0,
+      "completionTokens": 0,
+      "checks": [
+        {
+          "name": "空输入保护",
+          "passed": true,
+          "detail": "模型没有编造正文"
+        }
+      ]
+    },
+    {
+      "id": "short-005",
+      "tags": [
+        "short",
+        "final",
+        "core-sections"
+      ],
+      "status": "passed",
+      "durationMs": 1230,
+      "promptTokens": 1450,
+      "completionTokens": 120,
+      "checks": [
+        {
+          "name": "结构",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "必含事实",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "名单外学生",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "栏目覆盖",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "占位词",
+          "passed": true,
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "id": "medium-001",
+      "tags": [
+        "medium",
+        "final",
+        "core-sections"
+      ],
+      "status": "passed",
+      "durationMs": 5527,
+      "promptTokens": 1511,
+      "completionTokens": 830,
+      "checks": [
+        {
+          "name": "结构",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "必含事实",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "名单外学生",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "栏目覆盖",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "占位词",
+          "passed": true,
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "id": "medium-002",
+      "tags": [
+        "medium",
+        "final",
+        "optional-sections"
+      ],
+      "status": "passed",
+      "durationMs": 2944,
+      "promptTokens": 1461,
+      "completionTokens": 425,
+      "checks": [
+        {
+          "name": "结构",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "禁止内容",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "栏目覆盖",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "占位词",
+          "passed": true,
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "id": "medium-003",
+      "tags": [
+        "medium",
+        "final",
+        "multi-student"
+      ],
+      "status": "passed",
+      "durationMs": 2373,
+      "promptTokens": 1465,
+      "completionTokens": 298,
+      "checks": [
+        {
+          "name": "结构",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "必含事实",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "名单外学生",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "栏目覆盖",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "占位词",
+          "passed": true,
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "id": "medium-004",
+      "tags": [
+        "medium",
+        "final",
+        "parent"
+      ],
+      "status": "passed",
+      "durationMs": 1273,
+      "promptTokens": 1498,
+      "completionTokens": 113,
+      "checks": [
+        {
+          "name": "结构",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "必含事实",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "名单外学生",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "栏目覆盖",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "占位词",
+          "passed": true,
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "id": "medium-005",
+      "tags": [
+        "medium",
+        "final",
+        "performance"
+      ],
+      "status": "passed",
+      "durationMs": 949,
+      "promptTokens": 1454,
+      "completionTokens": 85,
+      "checks": [
+        {
+          "name": "结构",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "必含事实",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "名单外学生",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "栏目覆盖",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "占位词",
+          "passed": true,
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "id": "long-001",
+      "tags": [
+        "long",
+        "final",
+        "core-sections"
+      ],
+      "status": "passed",
+      "durationMs": 1426,
+      "promptTokens": 1498,
+      "completionTokens": 143,
+      "checks": [
+        {
+          "name": "结构",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "必含事实",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "名单外学生",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "栏目覆盖",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "占位词",
+          "passed": true,
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "id": "long-002",
+      "tags": [
+        "long",
+        "final",
+        "detailed"
+      ],
+      "status": "passed",
+      "durationMs": 5420,
+      "promptTokens": 1538,
+      "completionTokens": 731,
+      "checks": [
+        {
+          "name": "结构",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "必含事实",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "栏目覆盖",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "占位词",
+          "passed": true,
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "id": "long-003",
+      "tags": [
+        "long",
+        "final",
+        "performance"
+      ],
+      "status": "passed",
+      "durationMs": 2286,
+      "promptTokens": 1494,
+      "completionTokens": 318,
+      "checks": [
+        {
+          "name": "结构",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "必含事实",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "栏目覆盖",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "占位词",
+          "passed": true,
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "id": "long-004",
+      "tags": [
+        "long",
+        "final",
+        "difficulty"
+      ],
+      "status": "passed",
+      "durationMs": 4418,
+      "promptTokens": 1507,
+      "completionTokens": 648,
+      "checks": [
+        {
+          "name": "结构",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "必含事实",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "栏目覆盖",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "占位词",
+          "passed": true,
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "id": "long-005",
+      "tags": [
+        "long",
+        "final",
+        "voice-style"
+      ],
+      "status": "passed",
+      "durationMs": 3940,
+      "promptTokens": 1534,
+      "completionTokens": 642,
+      "checks": [
+        {
+          "name": "结构",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "必含事实",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "栏目覆盖",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "占位词",
+          "passed": true,
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "id": "edge-001",
+      "tags": [
+        "edge",
+        "final",
+        "empty"
+      ],
+      "status": "passed",
+      "durationMs": 2022,
+      "promptTokens": 0,
+      "completionTokens": 0,
+      "checks": [
+        {
+          "name": "空输入保护",
+          "passed": true,
+          "detail": "模型没有编造正文"
+        }
+      ]
+    },
+    {
+      "id": "edge-002",
+      "tags": [
+        "edge",
+        "final",
+        "long-input"
+      ],
+      "status": "passed",
+      "durationMs": 4186,
+      "promptTokens": 1733,
+      "completionTokens": 604,
+      "checks": [
+        {
+          "name": "结构",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "禁止内容",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "栏目覆盖",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "占位词",
+          "passed": true,
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "id": "edge-003",
+      "tags": [
+        "edge",
+        "final",
+        "numbers"
+      ],
+      "status": "passed",
+      "durationMs": 2295,
+      "promptTokens": 1458,
+      "completionTokens": 309,
+      "checks": [
+        {
+          "name": "结构",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "必含事实",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "名单外学生",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "栏目覆盖",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "占位词",
+          "passed": true,
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "id": "edge-004",
+      "tags": [
+        "edge",
+        "final",
+        "negative"
+      ],
+      "status": "passed",
+      "durationMs": 1898,
+      "promptTokens": 1460,
+      "completionTokens": 248,
+      "checks": [
+        {
+          "name": "结构",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "禁止内容",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "栏目覆盖",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "占位词",
+          "passed": true,
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "id": "edge-005",
+      "tags": [
+        "edge",
+        "final",
+        "negative"
+      ],
+      "status": "passed",
+      "durationMs": 1853,
+      "promptTokens": 1454,
+      "completionTokens": 248,
+      "checks": [
+        {
+          "name": "结构",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "禁止内容",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "栏目覆盖",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "占位词",
+          "passed": true,
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "id": "memory-001",
+      "tags": [
+        "memory",
+        "questions"
+      ],
+      "status": "passed",
+      "durationMs": 4368,
+      "promptTokens": 1390,
+      "completionTokens": 678,
+      "checks": [
+        {
+          "name": "结构",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "追问质量",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "占位词",
+          "passed": true,
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "id": "memory-002",
+      "tags": [
+        "memory",
+        "final",
+        "irrelevant"
+      ],
+      "status": "passed",
+      "durationMs": 1011,
+      "promptTokens": 1624,
+      "completionTokens": 61,
+      "checks": [
+        {
+          "name": "结构",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "禁止内容",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "名单外学生",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "栏目覆盖",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "占位词",
+          "passed": true,
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "id": "memory-003",
+      "tags": [
+        "memory",
+        "final",
+        "conflict"
+      ],
+      "status": "passed",
+      "durationMs": 1173,
+      "promptTokens": 1616,
+      "completionTokens": 142,
+      "checks": [
+        {
+          "name": "结构",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "必含事实",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "禁止内容",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "栏目覆盖",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "占位词",
+          "passed": true,
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "id": "memory-004",
+      "tags": [
+        "memory",
+        "questions"
+      ],
+      "status": "passed",
+      "durationMs": 6150,
+      "promptTokens": 1382,
+      "completionTokens": 997,
+      "checks": [
+        {
+          "name": "结构",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "追问质量",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "占位词",
+          "passed": true,
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "id": "memory-005",
+      "tags": [
+        "memory",
+        "final",
+        "filter"
+      ],
+      "status": "passed",
+      "durationMs": 1594,
+      "promptTokens": 1647,
+      "completionTokens": 179,
+      "checks": [
+        {
+          "name": "结构",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "必含事实",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "禁止内容",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "名单外学生",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "占位词",
+          "passed": true,
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "id": "style-001",
+      "tags": [
+        "style",
+        "restyle",
+        "detailed"
+      ],
+      "status": "passed",
+      "durationMs": 1067,
+      "promptTokens": 970,
+      "completionTokens": 87,
+      "checks": [
+        {
+          "name": "结构",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "必含事实",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "名单外学生",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "占位词",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "条目数不变",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "详细版更长",
+          "passed": true,
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "id": "style-002",
+      "tags": [
+        "style",
+        "restyle",
+        "concise"
+      ],
+      "status": "passed",
+      "durationMs": 1016,
+      "promptTokens": 963,
+      "completionTokens": 86,
+      "checks": [
+        {
+          "name": "结构",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "必含事实",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "名单外学生",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "占位词",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "条目数不变",
+          "passed": true,
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "id": "style-003",
+      "tags": [
+        "style",
+        "restyle",
+        "empty-sections"
+      ],
+      "status": "passed",
+      "durationMs": 1136,
+      "promptTokens": 965,
+      "completionTokens": 82,
+      "checks": [
+        {
+          "name": "结构",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "禁止内容",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "占位词",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "条目数不变",
+          "passed": true,
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "id": "style-004",
+      "tags": [
+        "style",
+        "restyle",
+        "daily-phrase"
+      ],
+      "status": "passed",
+      "durationMs": 2398,
+      "promptTokens": 947,
+      "completionTokens": 344,
+      "checks": [
+        {
+          "name": "结构",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "禁止内容",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "占位词",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "条目数不变",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "固定话术不变",
+          "passed": true,
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "id": "style-005",
+      "tags": [
+        "style",
+        "restyle",
+        "detailed"
+      ],
+      "status": "passed",
+      "durationMs": 1350,
+      "promptTokens": 980,
+      "completionTokens": 107,
+      "checks": [
+        {
+          "name": "结构",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "必含事实",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "名单外学生",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "占位词",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "条目数不变",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "详细版更长",
+          "passed": true,
+          "detail": ""
+        }
+      ]
+    }
+  ]
+}

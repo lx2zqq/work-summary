@@ -7,6 +7,7 @@ import {
   createClient,
   extractJson,
   getAiModelName,
+  type AiUsage,
 } from "./deepseek";
 
 const OUTPUT_SCHEMA = `{
@@ -108,14 +109,22 @@ function parseMemories(content: string) {
   return { memories: result.data.memories, error: "" };
 }
 
-export async function extractMemories(input: {
-  date: string;
-  finalText: string;
-  students: Student[];
-  existing: MemoryPromptItem[];
-}) {
+export async function extractMemories(
+  input: {
+    date: string;
+    finalText: string;
+    students: Student[];
+    existing: MemoryPromptItem[];
+  },
+  options?: { onUsage?: (usage: AiUsage) => void },
+) {
   const client = createClient();
   const model = getAiModelName();
+  const usage: AiUsage = {
+    promptTokens: 0,
+    completionTokens: 0,
+    retried: false,
+  };
 
   const messages: ChatCompletionMessageParam[] = [
     { role: "system", content: MEMORY_RULES },
@@ -145,6 +154,8 @@ export async function extractMemories(input: {
     content = completion.choices[0]?.message?.content?.trim() ?? "";
 
     if (completion.usage) {
+      usage.promptTokens += completion.usage.prompt_tokens ?? 0;
+      usage.completionTokens += completion.usage.completion_tokens ?? 0;
       console.info(
         `[ai:memory] ${model} tokens: prompt=${completion.usage.prompt_tokens}, completion=${completion.usage.completion_tokens}`,
       );
@@ -156,8 +167,12 @@ export async function extractMemories(input: {
   }
 
   const first = parseMemories(content);
-  if (first.memories) return first.memories;
+  if (first.memories) {
+    options?.onUsage?.(usage);
+    return first.memories;
+  }
 
+  usage.retried = true;
   const retryMessages: ChatCompletionMessageParam[] = [
     ...messages,
     { role: "assistant", content: content || "（空输出）" },
@@ -177,9 +192,18 @@ export async function extractMemories(input: {
     });
     const retryContent =
       retry.choices[0]?.message?.content?.trim() ?? "";
+
+    if (retry.usage) {
+      usage.promptTokens += retry.usage.prompt_tokens ?? 0;
+      usage.completionTokens += retry.usage.completion_tokens ?? 0;
+    }
+
     const second = parseMemories(retryContent);
 
-    if (second.memories) return second.memories;
+    if (second.memories) {
+      options?.onUsage?.(usage);
+      return second.memories;
+    }
 
     throw new AiError(
       "记忆整理结果格式不对，已自动重试一次，请稍后再试",

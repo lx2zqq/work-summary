@@ -1,28 +1,90 @@
 import "./load-env";
 
-import assert from "node:assert/strict";
-import { generateDraft } from "@/lib/ai/deepseek";
-import type { PromptContext } from "@/lib/ai/prompt";
+import fs from "node:fs";
+import path from "node:path";
+import { generateDraftWithUsage } from "@/lib/ai/deepseek";
+import { buildPromptMessages, PROMPT_VERSION } from "@/lib/ai/prompt";
+import { percentile } from "@/lib/analytics/stats";
+import {
+  EVAL_CASES,
+  buildEvalContext,
+  validateCase,
+  type EvalCase,
+} from "@/eval/cases";
 import { pickDailyPhrase } from "@/lib/daily-phrase";
 import { normalizeDraft } from "@/lib/draft";
+import { runChecks, type CheckResult } from "@/lib/eval/checks";
+import { judgeDraft, type JudgeScore } from "@/lib/eval/judge";
 import { renderReview } from "@/lib/template";
 import {
-  MAX_FOLLOW_UP_ROUNDS,
+  DEFAULT_SETTINGS,
   emptyDraft,
   type AppSettings,
-  type QAPair,
   type ReviewDraft,
 } from "@/lib/types";
 
-const SETTINGS: AppSettings = {
-  defaultStyle: "concise",
-  showJiaoyan: true,
-  showKunnan: false,
-  showFixedPhrase: false,
-  enableMemory: true,
+type CaseStatus = "passed" | "failed" | "error";
+
+type CaseResult = {
+  id: string;
+  tags: string[];
+  status: CaseStatus;
+  durationMs: number;
+  promptTokens: number;
+  completionTokens: number;
+  checks: CheckResult[];
+  judge?: JudgeScore;
+  judgeError?: string;
+  error?: string;
 };
 
-function testTemplate() {
+type Summary = {
+  total: number;
+  passed: number;
+  failed: number;
+  errors: number;
+  passRate: number;
+  avgDurationMs: number | null;
+  p95DurationMs: number | null;
+  avgPromptTokens: number | null;
+  avgCompletionTokens: number | null;
+};
+
+const args = process.argv.slice(2);
+
+function hasFlag(name: string): boolean {
+  return args.includes(`--${name}`);
+}
+
+function readArg(name: string, fallback = ""): string {
+  const prefix = `--${name}=`;
+  return (
+    args.find((value) => value.startsWith(prefix))?.slice(prefix.length) ??
+    fallback
+  );
+}
+
+function readNumberArg(name: string, fallback: number): number {
+  const value = Number(readArg(name, String(fallback)));
+  return Number.isFinite(value) && value >= 0
+    ? Math.trunc(value)
+    : fallback;
+}
+
+function average(values: number[]): number | null {
+  return values.length === 0
+    ? null
+    : values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function writeFile(outDir: string, name: string, content: string): void {
+  fs.mkdirSync(outDir, { recursive: true });
+  fs.writeFileSync(path.join(outDir, name), content, "utf8");
+}
+
+function checkTemplate(): string[] {
+  const issues: string[] = [];
+  const settings: AppSettings = { ...DEFAULT_SETTINGS };
   const draft: ReviewDraft = {
     ...emptyDraft(),
     sections: {
@@ -35,28 +97,30 @@ function testTemplate() {
     },
   };
 
-  const text = renderReview(draft, "2026-11-13", SETTINGS);
-  assert.ok(text.startsWith("学管部工作复盘⬇️"), "标题应固定");
-  assert.ok(text.includes("2026年11月13日工作复盘"), "日期应正确");
-  assert.ok(text.includes("🍊【学情跟进】"), "应包含学情跟进");
-  assert.ok(text.includes("🍊【业绩跟踪】"), "空栏目也应保留");
-  assert.ok(!text.includes("🍊【工作困难】"), "工作困难默认关闭");
-  assert.ok(text.includes("🍊【教研相关】"), "教研相关默认开启且有内容");
+  const text = renderReview(draft, "2026-11-15", settings);
+  if (!text.startsWith("学管部工作复盘⬇️")) issues.push("标题应固定");
+  if (!text.includes("2026年11月15日工作复盘")) issues.push("日期应正确");
+  if (!text.includes("🍊【学情跟进】")) issues.push("应包含学情跟进");
+  if (!text.includes("🍊【业绩跟踪】")) issues.push("空栏目也应保留");
+  if (text.includes("🍊【工作困难】")) issues.push("工作困难默认关闭");
+  if (!text.includes("🍊【教研相关】")) issues.push("教研相关应显示");
 
-  const withKunnan = renderReview(draft, "2026-11-13", {
-    ...SETTINGS,
+  const withKunnan = renderReview(draft, "2026-11-15", {
+    ...settings,
     showKunnan: true,
     showFixedPhrase: true,
   });
-  assert.ok(withKunnan.includes("🍊【工作困难】"), "开启后应显示工作困难");
-  assert.ok(
-    withKunnan.includes("目前没有困难，有困难都已经想办法解决。"),
-    "无困难时应写标准句",
-  );
-  assert.ok(
-    withKunnan.includes(pickDailyPhrase("2026-11-13", draft)),
-    "开启固定话术后应自动补当天话术",
-  );
+  if (!withKunnan.includes("🍊【工作困难】")) {
+    issues.push("开启后应显示工作困难");
+  }
+  if (
+    !withKunnan.includes("目前没有困难，有困难都已经想办法解决。")
+  ) {
+    issues.push("无困难时应写标准句");
+  }
+  if (!withKunnan.includes(pickDailyPhrase("2026-11-15", draft))) {
+    issues.push("开启固定话术后应自动补当天话术");
+  }
 
   const normalized = normalizeDraft({
     sections: {
@@ -75,238 +139,476 @@ function testTemplate() {
       { text: "问题4", options: [] },
     ],
   });
-  assert.equal(normalized.sections.xueqing.length, 1, "重复条目应去重");
-  assert.equal(normalized.questions.length, 3, "追问最多 3 条");
 
-  console.log("✓ 模板与草稿结构测试通过");
+  if (normalized.sections.xueqing.length !== 1) {
+    issues.push("重复条目应去重");
+  }
+  if (normalized.questions.length !== 3) {
+    issues.push("追问最多 3 条");
+  }
+
+  return issues;
 }
 
-const CASES = [
-  {
-    name: "短流水账",
-    style: "concise" as const,
-    rawInput:
-      "今天林小满作业写完了，错题讲了两道，跟她妈妈微信说了下，另外把小橙AI的错题录了。",
-  },
-  {
-    name: "中等流水账",
-    style: "detailed" as const,
-    rawInput:
-      "今天林小满的校内作业完成了，数学错题讲了三道；她妈妈微信说这周想加一节英语课；下午跟一个新家长电话约了周六试听；另外开了学管部教研会，讨论期中复习。",
-  },
-  {
-    name: "长流水账",
-    style: "concise" as const,
-    rawInput:
-      "今天上午前台值班，核对课时，更新课表。林小满妈妈面聊，说孩子最近作业慢，我跟老师对接了。下午给林小满录了数学错题，还录了一个新学生周子航的信息。晚上跟家长群发通知。",
-  },
-];
+function checkPrompts(
+  cases: EvalCase[],
+): Array<{ id: string; issues: string[] }> {
+  return cases.map((item) => {
+    const issues: string[] = [];
+    const prompt = buildPromptMessages(buildEvalContext(item))
+      .map((message) => message.content)
+      .join("\n\n");
 
-function buildContext(
-  rawInput: string,
-  style: "concise" | "detailed",
-): PromptContext {
+    // 改文风只带当前草稿，不带流水账，这是刻意设计
+    if (item.mode !== "restyle" && !prompt.includes(item.rawInput)) {
+      issues.push("prompt 缺少流水账");
+    }
+
+    for (const value of item.promptIncludes ?? []) {
+      if (!prompt.includes(value)) {
+        issues.push(`prompt 缺少“${value}”`);
+      }
+    }
+
+    if (
+      item.mode === "questions" &&
+      !prompt.includes("只输出 questions")
+    ) {
+      issues.push("questions 提示词不完整");
+    }
+    if (
+      item.mode === "final" &&
+      !prompt.includes("输出完整的 sections")
+    ) {
+      issues.push("final 提示词不完整");
+    }
+    if (item.mode === "restyle" && !prompt.includes("只改文风")) {
+      issues.push("restyle 提示词不完整");
+    }
+
+    if (item.mode !== "restyle") {
+      for (const name of item.studentNames ?? []) {
+        if (!prompt.includes(name)) {
+          issues.push(`prompt 缺少学生“${name}”`);
+        }
+      }
+    }
+
+    return { id: item.id, issues };
+  });
+}
+
+function runOffline(cases: EvalCase[], outDir: string): number {
+  const prompts = checkPrompts(cases).filter(
+    (entry) => entry.issues.length > 0,
+  );
+  const template = checkTemplate();
+
+  console.log(`\nPrompt 组装检查：${cases.length} 条`);
+  if (prompts.length === 0) {
+    console.log("✓ Prompt 通过");
+  }
+  for (const entry of prompts) {
+    console.error(`✗ ${entry.id}：${entry.issues.join("；")}`);
+  }
+
+  console.log("\n模板与草稿检查：");
+  if (template.length === 0) {
+    console.log("✓ 模板通过");
+  }
+  for (const issue of template) {
+    console.error(`✗ ${issue}`);
+  }
+
+  const failed = prompts.length + template.length;
+  console.log(
+    failed === 0
+      ? "\n✓ 离线评测全部通过"
+      : `\n✗ 离线评测失败 ${failed} 项`,
+  );
+
+  const report = {
+    generatedAt: new Date().toISOString(),
+    promptVersion: PROMPT_VERSION,
+    mode: "offline",
+    caseCount: cases.length,
+    failed,
+    prompts,
+    template,
+  };
+
+  writeFile(outDir, "report.json", JSON.stringify(report, null, 2));
+  writeFile(
+    outDir,
+    "report.md",
+    [
+      "# Work-Summary Eval Report",
+      "",
+      `- 模式：offline`,
+      `- Prompt 版本：${PROMPT_VERSION}`,
+      `- 用例数：${cases.length}`,
+      `- 失败项：${failed}`,
+    ].join("\n"),
+  );
+
+  return failed === 0 ? 0 : 1;
+}
+
+function summarize(results: CaseResult[]): Summary {
+  const passed = results.filter(
+    (result) => result.status === "passed",
+  ).length;
+  const failed = results.filter(
+    (result) => result.status === "failed",
+  ).length;
+  const errors = results.filter(
+    (result) => result.status === "error",
+  ).length;
+
+  const durations = results.map((result) => result.durationMs);
+  const promptTokens = results
+    .filter((result) => result.promptTokens > 0)
+    .map((result) => result.promptTokens);
+  const completionTokens = results
+    .filter((result) => result.completionTokens > 0)
+    .map((result) => result.completionTokens);
+
   return {
-    mode: "final",
-    reviewDate: "2026-11-13",
-    style,
-    settings: SETTINGS,
-    students: [
-      {
-        id: "student-1",
-        name: "林小满",
-        grade: "初一",
-        subjects: "数学、英语",
-        status: "在读",
-        note: null,
-      },
-    ],
-    recentReviews: [],
-    memories: [],
-    rawInput,
-    answers: [],
-    currentDraft: undefined,
-    round: 0,
+    total: results.length,
+    passed,
+    failed,
+    errors,
+    passRate: results.length === 0 ? 0 : passed / results.length,
+    avgDurationMs: average(durations),
+    p95DurationMs: percentile(durations, 0.95),
+    avgPromptTokens: average(promptTokens),
+    avgCompletionTokens: average(completionTokens),
   };
 }
 
-async function testFollowUpFlow() {
-  console.log("\n===== 追问 → 最终稿检查 =====");
+function summarizeByTag(
+  results: CaseResult[],
+): Array<{ tag: string; total: number; passed: number }> {
+  const tags = Array.from(
+    new Set(results.flatMap((result) => result.tags)),
+  ).sort();
 
-  const rawInput =
-    "今天接待了几位新家长，沟通了林小满的课堂表现，另外处理了日常排课。";
-  let current: ReviewDraft | null = null;
-  let answers: QAPair[] = [];
-  let askedRounds = 0;
-
-  for (let round = 0; round < MAX_FOLLOW_UP_ROUNDS; round += 1) {
-    const draft = await generateDraft({
-      ...buildContext(rawInput, "concise"),
-      mode: "questions",
-      round,
-      answers,
-      currentDraft: current
-        ? { ...current, questions: [] }
-        : undefined,
-    });
-
-    console.log(`第 ${round + 1} 轮追问：`, draft.questions);
-    assert.ok(
-      draft.questions.length <= 3,
-      "每轮追问不能超过 3 条",
+  return tags.map((tag) => {
+    const items = results.filter((result) =>
+      result.tags.includes(tag),
     );
-    assert.ok(
-      draft.questions.every(
-        (question) => typeof question.multiple === "boolean",
-      ),
-      "追问应带 multiple 标记",
-    );
-
-    if (draft.questions.length === 0) break;
-
-    askedRounds += 1;
-    current = draft;
-    answers = [
-      ...answers,
-      ...draft.questions.map((question) => ({
-        question: question.text,
-        answer: "没有补充",
-      })),
-    ];
-  }
-
-  assert.ok(askedRounds > 0, "至少应有一轮追问");
-
-  const finalDraft = await generateDraft({
-    ...buildContext(rawInput, "concise"),
-    mode: "final",
-    round: MAX_FOLLOW_UP_ROUNDS,
-    answers,
-    currentDraft: current
-      ? { ...current, questions: [] }
-      : undefined,
+    return {
+      tag,
+      total: items.length,
+      passed: items.filter(
+        (result) => result.status === "passed",
+      ).length,
+    };
   });
-
-  console.log(
-    "最终稿：\n",
-    renderReview(finalDraft, "2026-11-13", SETTINGS),
-  );
-  assert.equal(finalDraft.questions.length, 0, "最终稿不应再追问");
-  assert.ok(
-    finalDraft.sections.xueqing.length > 0,
-    "最终稿学情跟进不应为空",
-  );
-  console.log("✓ 追问与最终稿检查通过");
 }
 
-async function testRestyle() {
-  console.log("\n===== 改文风检查 =====");
+function formatAiReport(report: {
+  generatedAt: string;
+  promptVersion: string;
+  caseCount: number;
+  summary: Summary;
+  byTag: Array<{ tag: string; total: number; passed: number }>;
+  results: CaseResult[];
+}): string {
+  const { summary } = report;
+  const lines = [
+    "# Work-Summary Eval Report",
+    "",
+    `- 生成时间：${report.generatedAt}`,
+    `- Prompt 版本：${report.promptVersion}`,
+    `- 用例数：${report.caseCount}`,
+    "",
+    "## 汇总",
+    "",
+    "| 指标 | 数值 |",
+    "| --- | --- |",
+    `| 通过 / 失败 / 错误 | ${summary.passed} / ${summary.failed} / ${summary.errors} |`,
+    `| 通过率 | ${(summary.passRate * 100).toFixed(1)}% |`,
+    `| 平均耗时 | ${summary.avgDurationMs?.toFixed(0) ?? "—"} ms |`,
+    `| P95 耗时 | ${summary.p95DurationMs?.toFixed(0) ?? "—"} ms |`,
+    `| 平均 prompt tokens | ${summary.avgPromptTokens?.toFixed(0) ?? "—"} |`,
+    `| 平均 completion tokens | ${summary.avgCompletionTokens?.toFixed(0) ?? "—"} |`,
+    "",
+    "## 分类",
+    "",
+    "| 标签 | 通过 / 总数 |",
+    "| --- | --- |",
+    ...report.byTag.map(
+      (item) => `| ${item.tag} | ${item.passed} / ${item.total} |`,
+    ),
+    "",
+    "## 明细",
+  ];
 
-  const rawInput =
-    "今天林小满作业写完了，错题讲了两道，跟她妈妈微信说了下，另外把小橙AI的错题录了。";
-  const base = buildContext(rawInput, "concise");
+  for (const result of report.results) {
+    lines.push("", `### ${result.id} — ${result.status}`);
+    if (result.error) {
+      lines.push(`- 错误：${result.error}`);
+    }
+    for (const check of result.checks.filter(
+      (item) => !item.passed,
+    )) {
+      lines.push(`- ${check.name}：${check.detail}`);
+    }
+    if (result.judge) {
+      lines.push(
+        `- judge：事实 ${result.judge.factuality}/2，完整 ${result.judge.completeness}/2，可用 ${result.judge.usability}/2`,
+      );
+      lines.push(`- judge 理由：${result.judge.reason}`);
+    }
+    if (result.judgeError) {
+      lines.push(`- judge 失败：${result.judgeError}`);
+    }
+  }
 
-  const concise = await generateDraft({
-    ...base,
-    mode: "final",
-    round: MAX_FOLLOW_UP_ROUNDS,
-  });
+  return lines.join("\n");
+}
 
-  const detailed = await generateDraft({
-    ...base,
-    mode: "restyle",
-    style: "detailed",
-    round: MAX_FOLLOW_UP_ROUNDS,
-    currentDraft: concise,
-  });
+function compareBaseline(
+  report: {
+    summary: Summary;
+  },
+  baselinePath: string,
+): string {
+  if (!baselinePath || !fs.existsSync(baselinePath)) return "";
 
-  const backToConcise = await generateDraft({
-    ...base,
-    mode: "restyle",
-    style: "concise",
-    round: MAX_FOLLOW_UP_ROUNDS,
-    currentDraft: detailed,
-  });
+  try {
+    const baseline = JSON.parse(
+      fs.readFileSync(baselinePath, "utf8"),
+    ) as { summary?: { passRate?: number } };
+    const baseRate = baseline.summary?.passRate;
 
-  const countItems = (draft: ReviewDraft) =>
-    Object.values(draft.sections).reduce(
-      (sum, items) => sum + items.length,
-      0,
+    if (typeof baseRate !== "number") return "";
+
+    const delta = (report.summary.passRate - baseRate) * 100;
+    return [
+      "",
+      "## 与基线对比",
+      "",
+      `- 基线通过率：${(baseRate * 100).toFixed(1)}%`,
+      `- 本次变化：${delta >= 0 ? "+" : ""}${delta.toFixed(1)} 个百分点`,
+    ].join("\n");
+  } catch {
+    return "";
+  }
+}
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let nextIndex = 0;
+
+  const workers = Array.from(
+    { length: Math.min(limit, items.length) },
+    async () => {
+      while (true) {
+        const index = nextIndex;
+        nextIndex += 1;
+
+        if (index >= items.length) return;
+        results[index] = await fn(items[index]);
+      }
+    },
+  );
+
+  await Promise.all(workers);
+  return results;
+}
+
+async function runAi(
+  cases: EvalCase[],
+  outDir: string,
+): Promise<number> {
+  if (!process.env.REVIEW_DEEPSEEK_API_KEY?.trim()) {
+    console.error(
+      "未配置 REVIEW_DEEPSEEK_API_KEY，无法运行 AI 评测。先用 npm run eval 跑离线检查。",
     );
-  const countChars = (draft: ReviewDraft) =>
-    Object.values(draft.sections).flat().join("").length;
+    return 1;
+  }
 
-  console.log("简洁版：\n", renderReview(concise, "2026-11-13", SETTINGS));
-  console.log("详细版：\n", renderReview(detailed, "2026-11-13", SETTINGS));
-  console.log(
-    "再切回简洁：\n",
-    renderReview(backToConcise, "2026-11-13", SETTINGS),
-  );
-  console.log(
-    `条目数：${countItems(concise)} → ${countItems(detailed)} → ${countItems(
-      backToConcise,
-    )}`,
-  );
-  console.log(
-    `字数：${countChars(concise)} → ${countChars(detailed)} → ${countChars(
-      backToConcise,
-    )}`,
+  const useJudge = hasFlag("judge");
+  const judgeLimit = readNumberArg("judge-limit", 10);
+  const strict = hasFlag("strict");
+  const judgeIds = new Set(
+    cases
+      .filter((item) => item.mode !== "questions")
+      .slice(0, judgeLimit)
+      .map((item) => item.id),
   );
 
-  assert.equal(
-    countItems(detailed),
-    countItems(concise),
-    "切详细版不能增删条目",
+  console.log(
+    `\n开始 AI 评测：${cases.length} 条${useJudge ? `，judge 前 ${judgeLimit} 条` : ""}\n`,
   );
-  assert.equal(
-    countItems(backToConcise),
-    countItems(concise),
-    "切回简洁版不能增删条目",
+
+  const results = await mapWithConcurrency<EvalCase, CaseResult>(
+    cases,
+    2,
+    async (item) => {
+      const startedAt = Date.now();
+
+      try {
+        const { draft, usage } = await generateDraftWithUsage(
+          buildEvalContext(item),
+        );
+
+        const checks = runChecks({
+          mode: item.mode,
+          style: item.style,
+          draft,
+          expect: item.expect,
+          rawInput: item.rawInput,
+          answers: item.answers ?? [],
+          beforeDraft: item.currentDraft,
+        });
+
+        let judge: JudgeScore | undefined;
+        let judgeError: string | undefined;
+
+        if (useJudge && judgeIds.has(item.id)) {
+          try {
+            judge = await judgeDraft({
+              rawInput: item.rawInput,
+              draft,
+            });
+          } catch (error) {
+            judgeError =
+              error instanceof Error ? error.message : "judge 失败";
+          }
+        }
+
+        return {
+          id: item.id,
+          tags: item.tags,
+          status: checks.every((check) => check.passed)
+            ? "passed"
+            : "failed",
+          durationMs: Date.now() - startedAt,
+          promptTokens: usage.promptTokens,
+          completionTokens: usage.completionTokens,
+          checks,
+          judge,
+          judgeError,
+        };
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "未知错误";
+
+        // 空输入时模型返回空正文，被 finalizeDraft 拦下。
+        // 这是保护逻辑，不是评测失败，按通过处理并记录一条检查项。
+        if (
+          item.expect.allowEmpty &&
+          message.includes("没有生成有效正文")
+        ) {
+          return {
+            id: item.id,
+            tags: item.tags,
+            status: "passed",
+            durationMs: Date.now() - startedAt,
+            promptTokens: 0,
+            completionTokens: 0,
+            checks: [
+              {
+                name: "空输入保护",
+                passed: true,
+                detail: "模型没有编造正文",
+              },
+            ],
+          };
+        }
+
+        return {
+          id: item.id,
+          tags: item.tags,
+          status: "error",
+          durationMs: Date.now() - startedAt,
+          promptTokens: 0,
+          completionTokens: 0,
+          checks: [],
+          error: message,
+        };
+      }
+    },
   );
-  assert.ok(
-    countChars(detailed) > countChars(concise),
-    "详细版字数应增加",
-  );
-  assert.ok(
-    countChars(backToConcise) <= countChars(detailed),
-    "切回简洁版字数应减少",
-  );
-  console.log("✓ 改文风检查通过");
+
+  const summary = summarize(results);
+  const byTag = summarizeByTag(results);
+  const report = {
+    generatedAt: new Date().toISOString(),
+    promptVersion: PROMPT_VERSION,
+    caseCount: cases.length,
+    summary,
+    byTag,
+    results,
+  };
+
+  const markdown =
+    formatAiReport(report) +
+    compareBaseline(report, readArg("baseline"));
+
+  writeFile(outDir, "report.json", JSON.stringify(report, null, 2));
+  writeFile(outDir, "report.md", markdown);
+  console.log(markdown);
+
+  return strict
+    ? summary.failed + summary.errors > 0
+      ? 1
+      : 0
+    : summary.errors > 0
+      ? 1
+      : 0;
 }
 
 async function main() {
-  testTemplate();
+  const tags = readArg("tags")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+  const limit = readNumberArg("limit", 0);
 
-  if (!process.env.REVIEW_DEEPSEEK_API_KEY?.trim()) {
-    console.log(
-      "! 未配置 REVIEW_DEEPSEEK_API_KEY，跳过真实 AI 测试。配置后可运行 npm run eval。",
-    );
-    return;
+  let cases = EVAL_CASES.filter(
+    (item) =>
+      tags.length === 0 ||
+      item.tags.some((tag) => tags.includes(tag)),
+  );
+
+  if (limit > 0) cases = cases.slice(0, limit);
+
+  if (cases.length === 0) {
+    console.error("没有匹配的用例");
+    process.exit(1);
   }
 
-  for (const item of CASES) {
-    console.log(`\n===== ${item.name}（${item.style}）=====`);
-    const draft = await generateDraft({
-      ...buildContext(item.rawInput, item.style),
-      mode: "final",
-    });
-    const text = renderReview(draft, "2026-11-13", SETTINGS);
+  const validation = cases
+    .map((item) => ({ id: item.id, issues: validateCase(item) }))
+    .filter((entry) => entry.issues.length > 0);
 
-    console.log(text);
-    console.log("\n最终稿 notes：", draft.notes);
-
-    assert.ok(draft.sections.xueqing.length > 0, "学情跟进不应为空");
-    assert.equal(draft.questions.length, 0, "最终稿不应再追问");
-    assert.ok(!text.includes("尚云天"), "不能编造输入里没有的学生");
+  if (validation.length > 0) {
+    console.error("数据集自检失败：");
+    for (const entry of validation) {
+      console.error(`✗ ${entry.id}：${entry.issues.join("；")}`);
+    }
+    process.exit(1);
   }
 
-  await testFollowUpFlow();
-  await testRestyle();
+  const mode = readArg("mode", "offline");
+  const outDir = readArg("out", "eval");
+  const exitCode =
+    mode === "ai"
+      ? await runAi(cases, outDir)
+      : runOffline(cases, outDir);
 
-  console.log("\n✓ 真实 AI 测试通过");
+  process.exit(exitCode);
 }
 
 main().catch((error) => {
-  console.error(error);
+  console.error("评测失败：", error);
   process.exit(1);
 });
