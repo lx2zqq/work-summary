@@ -16,8 +16,41 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
-import type { MemoryPromptItem } from "@/lib/types";
+import type { SectionStreamEntry } from "@/lib/ai/stream-parser";
+import { numberPrefix } from "@/lib/template";
+import { SECTION_META, type MemoryPromptItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
+
+/** 流式生成时的实时预览：只展示已经完整的条目 */
+function StreamingPreview({ sections }: { sections: SectionStreamEntry[] }) {
+  return (
+    <div className="space-y-3.5">
+      {sections.map(({ key, items }) => (
+        <section key={key}>
+          <p className="text-sm font-extrabold text-ink">
+            🍊【{SECTION_META[key].title}】
+          </p>
+          <ul className="mt-1 space-y-0.5">
+            {items.map((item, index) => (
+              <li
+                key={`${key}-${index}`}
+                className="review-text text-sm leading-relaxed text-ink"
+              >
+                {numberPrefix(index)}
+                {item}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ))}
+
+      <div className="flex items-center gap-2 pt-1 text-xs font-bold text-ink-soft">
+        <Spinner className="h-3.5 w-3.5" />
+        正在生成…
+      </div>
+    </div>
+  );
+}
 
 type Props = {
   finalText: string;
@@ -37,6 +70,8 @@ type Props = {
   onExtractMemory: () => void;
   /** 演示模式：记忆链接改为登录页 */
   demoMode?: boolean;
+  /** 流式生成中已经收到的完整条目 */
+  streaming?: SectionStreamEntry[];
 };
 
 export function DraftCard({
@@ -56,6 +91,7 @@ export function DraftCard({
   onRegenerate,
   onExtractMemory,
   demoMode = false,
+  streaming = [],
 }: Props) {
   return (
     <section className="paper-card relative flex min-h-[540px] flex-col">
@@ -145,15 +181,21 @@ export function DraftCard({
         )}
 
         {loading ? (
-          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 rounded-[26px] bg-paper/85 backdrop-blur-[1px]">
-            <Spinner className="h-6 w-6" />
-            <p className="text-sm font-bold text-ink">{loadingMessage}</p>
-            <div className="flex gap-1.5">
-              <span className="loading-dot h-1.5 w-1.5 rounded-full bg-brand" />
-              <span className="loading-dot h-1.5 w-1.5 rounded-full bg-brand" />
-              <span className="loading-dot h-1.5 w-1.5 rounded-full bg-brand" />
+          streaming.length > 0 ? (
+            <div className="absolute inset-0 z-10 overflow-y-auto rounded-[26px] bg-paper/95 p-4">
+              <StreamingPreview sections={streaming} />
             </div>
-          </div>
+          ) : (
+            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 rounded-[26px] bg-paper/85 backdrop-blur-[1px]">
+              <Spinner className="h-6 w-6" />
+              <p className="text-sm font-bold text-ink">{loadingMessage}</p>
+              <div className="flex gap-1.5">
+                <span className="loading-dot h-1.5 w-1.5 rounded-full bg-brand" />
+                <span className="loading-dot h-1.5 w-1.5 rounded-full bg-brand" />
+                <span className="loading-dot h-1.5 w-1.5 rounded-full bg-brand" />
+              </div>
+            </div>
+          )
         ) : null}
       </div>
 

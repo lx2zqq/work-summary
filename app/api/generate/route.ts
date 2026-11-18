@@ -6,8 +6,15 @@ import {
   isAiConfigured,
   resolveToolsMode,
 } from "@/lib/ai/deepseek";
+import type { EventProperties } from "@/lib/analytics/events";
 import { trackEvent } from "@/lib/analytics/events";
 import type { PromptContext } from "@/lib/ai/prompt";
+import {
+  diffSections,
+  parsePartialSections,
+  type SectionStreamEntry,
+} from "@/lib/ai/stream-parser";
+import { encodeSSE } from "@/lib/sse";
 import type { ToolDeps } from "@/lib/ai/tools";
 import { firstIssue, requireApiSession } from "@/lib/api-helpers";
 import {
@@ -107,6 +114,104 @@ function buildToolDeps(settings: PromptContext["settings"]): ToolDeps {
   };
 }
 
+/**
+ * 流式生成：边生成边把已完成的条目推给前端。
+ * 只在 final 模式启用，追问和改文风的输出太短，流式没有意义。
+ */
+function streamGenerate(input: {
+  context: PromptContext;
+  input: GenerateRequest;
+  startedAt: number;
+  baseProperties: EventProperties;
+}): Response {
+  const { context, input: request, startedAt, baseProperties } = input;
+  const encoder = new TextEncoder();
+
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      let closed = false;
+
+      const send = (event: string, data: unknown) => {
+        if (closed) return;
+        controller.enqueue(encoder.encode(encodeSSE(event, data)));
+      };
+
+      try {
+        send("status", { message: "正在查询资料…" });
+
+        let buffer = "";
+        const parsed: SectionStreamEntry[] = [];
+        let latest: SectionStreamEntry[] = [];
+
+        const result = await generateDraftWithUsage(context, {
+          toolDeps: buildToolDeps(context.settings),
+          onContent: (chunk) => {
+            buffer += chunk;
+            latest = parsePartialSections(buffer);
+            const diff = diffSections(parsed, latest);
+
+            for (const entry of diff) {
+              parsed.push(entry);
+              send("section", entry);
+            }
+          },
+        });
+
+        await trackEvent({
+          event: "generate_finished",
+          reviewDate: request.date,
+          properties: {
+            ...baseProperties,
+            durationMs: Date.now() - startedAt,
+            promptTokens: result.usage.promptTokens,
+            completionTokens: result.usage.completionTokens,
+            retried: result.usage.retried,
+            fallback: false,
+            questionCount: result.draft.questions.length,
+            itemCount: countDraftItems(result.draft),
+            charCount: countDraftChars(result.draft),
+            toolCallCount: result.toolCallNames.length,
+            toolRounds: result.toolRounds,
+            degraded: result.degraded,
+            usedMemoryCount: result.memories.length,
+          },
+        });
+
+        send("done", {
+          draft: result.draft,
+          memories: result.memories,
+          fallback: false,
+        });
+      } catch (error) {
+        console.error("[generate:stream]", error);
+
+        await trackEvent({
+          event: "generate_failed",
+          reviewDate: request.date,
+          properties: {
+            ...baseProperties,
+            durationMs: Date.now() - startedAt,
+            errorKind: error instanceof AiError ? error.kind : "request",
+          },
+        });
+
+        send("error", { message: getAiErrorMessage(error) });
+      } finally {
+        closed = true;
+        controller.close();
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream; charset=utf-8",
+      "Cache-Control": "no-cache, no-transform",
+      "X-Accel-Buffering": "no",
+    },
+  });
+}
+
 export async function POST(request: Request) {
   const unauthorized = await requireApiSession();
   if (unauthorized) return unauthorized;
@@ -175,6 +280,15 @@ export async function POST(request: Request) {
       warning:
         "服务端还没有配置 REVIEW_DEEPSEEK_API_KEY，已按原文生成草稿；配置后会自动使用 AI 整理。",
       memories: context.memories,
+    });
+  }
+
+  if (input.stream && input.mode === "final") {
+    return streamGenerate({
+      context,
+      input,
+      startedAt,
+      baseProperties,
     });
   }
 

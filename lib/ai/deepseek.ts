@@ -136,6 +136,8 @@ export type GenerateOptions = {
   toolDeps?: ToolDeps;
   /** 测试用：注入 OpenAI client，生产环境不传 */
   client?: OpenAI;
+  /** 正文增量回调；不传则全程非流式 */
+  onContent?: (chunk: string) => void;
 };
 
 /** 保留原有调用方式；需要 token、工具和重试信息时用 generateDraftWithUsage */
@@ -234,6 +236,7 @@ export async function generateDraftWithUsage(
         messages,
         deps: options.toolDeps,
         budgetMs: AGENT_BUDGET_MS,
+        onContent: options.onContent,
       });
 
       content = result.content;

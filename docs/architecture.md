@@ -117,6 +117,24 @@
 
 **降级**：第一次调用若返回 400 且提到 `tools`，自动退回原来的全量预注入路径，并在埋点里记 `degraded=true`。`REVIEW_TOOLS_MODE=off` 可以强制关闭工具模式。
 
+## 流式输出
+
+最终稿支持 SSE 流式返回，边生成边展示已经完整落定的条目。
+
+```text
+POST /api/generate { stream: true }
+  → event: status   正在查询资料…
+  → event: section  { key: "xueqing", items: ["林小满：完成作业。"] }
+  → event: done     { draft, memories }
+```
+
+- 只有 `final` 模式流式，追问和改文风输出太短，没有收益；
+- 服务端用 `lib/ai/stream-parser.ts` 做增量解析，只推**已经闭合**的 JSON 字符串，避免半句话；
+- 工具调用的参数也是分片到达的，按 `index` 累积后再执行；
+- 流式失败时用同样的上下文非流式重发本轮，用户无感；前端拿不到 SSE 时也会退回普通请求。
+
+**已知限制**：`deepseek-flash` 是思考模式，首字前有 2~4 秒推理时间，流式只能覆盖正文生成的后半段。实测一次 4.7 秒的生成，首字出现在 4.0 秒。
+
 ## 可靠性设计
 
 1. **JSON 提取**：模型偶尔输出 Markdown 代码块或前后解释，`extractJson` 会截取第一个 `{` 到最后一个 `}`。

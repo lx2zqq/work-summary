@@ -34,10 +34,12 @@ import {
   updateGenerationResult,
   type GenerationJob,
 } from "@/lib/generation-store";
+import type { SectionStreamEntry } from "@/lib/ai/stream-parser";
 import {
   isMemoryExtractionStale,
   resolveMemoryCopyAction,
 } from "@/lib/memory";
+import { SSEDecoder } from "@/lib/sse";
 import { setSelectedDate } from "@/lib/selected-date";
 import { renderReview } from "@/lib/template";
 import {
@@ -104,6 +106,24 @@ type CallResult = {
   memories: MemoryPromptItem[];
 };
 
+/** 把流式推送的增量条目并到已有结果里 */
+function mergeSectionEntry(
+  previous: SectionStreamEntry[],
+  entry: SectionStreamEntry,
+): SectionStreamEntry[] {
+  const index = previous.findIndex((item) => item.key === entry.key);
+
+  if (index < 0) return [...previous, entry];
+
+  const next = [...previous];
+  next[index] = {
+    key: entry.key,
+    items: [...next[index].items, ...entry.items],
+  };
+
+  return next;
+}
+
 const QUESTION_LOADING_MESSAGES = [
   "正在检查有没有漏掉的信息…",
   "正在核对五个核心栏目…",
@@ -155,6 +175,10 @@ export function Workspace({
         ? "正在生成复盘正文…"
         : QUESTION_LOADING_MESSAGES[0],
   );
+  // 流式生成时已经收到的完整条目，生成结束后清空、交给正式草稿
+  const [streamingSections, setStreamingSections] = useState<
+    SectionStreamEntry[]
+  >([]);
   const [saving, setSaving] = useState(false);
   const [saveFailed, setSaveFailed] = useState(
     Boolean(jobForDate?.status === "done" && jobForDate.saveFailed),
@@ -592,6 +616,85 @@ export function Workspace({
     };
   }, [dirty, loading, hydratedDate, date, rawInput, draft, saveNow]);
 
+  /** 读取 SSE 流，边收边更新预览，最后返回结构化草稿 */
+  const readStreamResponse = useCallback(
+    async (
+      response: Response,
+      jobId: string,
+      maxQuestions: number,
+    ): Promise<CallResult> => {
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error("当前浏览器不支持流式读取");
+
+      const decoder = new TextDecoder();
+      const sse = new SSEDecoder();
+      let result: CallResult | null = null;
+      let streamError = "";
+
+      setStreamingSections([]);
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          for (const event of sse.push(decoder.decode(value, { stream: true }))) {
+            if (event.event === "status") {
+              const payload = event.data as { message?: string };
+              if (payload.message) setLoadingMessage(payload.message);
+              continue;
+            }
+
+            if (event.event === "section") {
+              const entry = event.data as SectionStreamEntry;
+              setStreamingSections((previous) =>
+                mergeSectionEntry(previous, entry),
+              );
+              continue;
+            }
+
+            if (event.event === "done") {
+              const payload = event.data as {
+                draft?: unknown;
+                fallback?: boolean;
+                warning?: string;
+                memories?: unknown;
+              };
+
+              result = {
+                jobId,
+                draft: normalizeDraft(
+                  payload.draft as Parameters<typeof normalizeDraft>[0],
+                  { maxQuestions },
+                ),
+                fallback: Boolean(payload.fallback),
+                warning: payload.warning,
+                memories: Array.isArray(payload.memories)
+                  ? (payload.memories as MemoryPromptItem[])
+                  : [],
+              };
+              continue;
+            }
+
+            if (event.event === "error") {
+              const payload = event.data as { message?: string };
+              streamError = payload.message || "生成失败";
+            }
+          }
+        }
+      } finally {
+        setStreamingSections([]);
+      }
+
+      if (!result) {
+        throw new Error(streamError || "流式生成没有返回结果");
+      }
+
+      return result;
+    },
+    [],
+  );
+
   const callGenerate = useCallback(
     async (config: CallConfig): Promise<CallResult> => {
       const inputText = (config.rawInput ?? rawInput).trim();
@@ -618,22 +721,60 @@ export function Workspace({
       });
       activeJobIdRef.current = job.id;
 
+      const wantsStream = config.mode === "final";
+      const maxQuestions =
+        config.mode === "questions" ? MAX_QUESTIONS_PER_ROUND : 0;
+      const payload = {
+        date,
+        rawInput: inputText,
+        style: config.style,
+        answers: config.answers,
+        mode: config.mode,
+        round: config.round,
+        currentDraft: hasDraftContent(draft) ? draft : undefined,
+      };
+
       try {
         const response = await fetch("/api/generate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            date,
-            rawInput: inputText,
-            style: config.style,
-            answers: config.answers,
-            mode: config.mode,
-            round: config.round,
-            currentDraft: hasDraftContent(draft) ? draft : undefined,
+            ...payload,
+            stream: wantsStream || undefined,
           }),
         });
 
-        const data = (await response.json().catch(() => ({}))) as {
+        const contentType = response.headers.get("Content-Type") ?? "";
+        const canStream =
+          wantsStream &&
+          response.ok &&
+          Boolean(response.body) &&
+          contentType.includes("text/event-stream");
+
+        if (canStream && response.body) {
+          try {
+            return await readStreamResponse(response, job.id, maxQuestions);
+          } catch (streamFailure) {
+            console.warn(
+              "[stream] 流式失败，回退非流式：",
+              streamFailure instanceof Error
+                ? streamFailure.message
+                : streamFailure,
+            );
+          }
+        }
+
+        // 非流式请求，或者流式失败后的兜底重发
+        const retry =
+          canStream && response.body
+            ? await fetch("/api/generate", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload),
+              })
+            : response;
+
+        const data = (await retry.json().catch(() => ({}))) as {
           error?: string;
           draft?: unknown;
           fallback?: boolean;
@@ -641,7 +782,7 @@ export function Workspace({
           memories?: unknown;
         };
 
-        if (!response.ok) {
+        if (!retry.ok) {
           throw new Error(data.error || "生成失败");
         }
 
@@ -649,12 +790,7 @@ export function Workspace({
           jobId: job.id,
           draft: normalizeDraft(
             data.draft as Parameters<typeof normalizeDraft>[0],
-            {
-              maxQuestions:
-                config.mode === "questions"
-                  ? MAX_QUESTIONS_PER_ROUND
-                  : 0,
-            },
+            { maxQuestions },
           ),
           fallback: Boolean(data.fallback),
           warning: data.warning,
@@ -678,7 +814,7 @@ export function Workspace({
         throw error;
       }
     },
-    [rawInput, date, draft],
+    [rawInput, date, draft, readStreamResponse],
   );
 
   const applyFallback = useCallback(
@@ -1517,6 +1653,7 @@ export function Workspace({
             onExtractMemory={() => {
               void extractMemory(true);
             }}
+            streaming={streamingSections}
           />
         </div>
       </div>
