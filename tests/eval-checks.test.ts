@@ -33,7 +33,9 @@ function input(overrides: Partial<CheckInput> = {}): CheckInput {
     style: "concise",
     draft: draft({
       xueqing: ["林小满：完成今日作业，错题已讲解。"],
-      richang: ["今天主要跟进了林小满的作业，后续继续关注订正质量。"],
+      richang: [
+        "今天主要跟进了林小满的作业完成情况，错题已讲解，后续继续关注订正质量并及时和家长同步进展。",
+      ],
     }),
     expect: { mustInclude: ["林小满"] },
     rawInput: "今天林小满作业完成，错题讲了两道。",

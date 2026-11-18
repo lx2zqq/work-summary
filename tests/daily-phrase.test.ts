@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   DAILY_PHRASES,
+  TARGET_PHRASE_MAX_LENGTH,
+  TARGET_PHRASE_MIN_LENGTH,
   detectPhraseTheme,
   pickDailyPhrase,
   pickDailyPhrases,
@@ -83,13 +85,35 @@ describe("pickDailyPhrases", () => {
     expect(detectPhraseTheme(draftWith("整理了资料"))).toBe("general");
   });
 
-  it("话术库每条不少于 20 字", () => {
+  it("话术库每条落在 45~60 字的目标区间", () => {
     const phrases = Object.values(DAILY_PHRASES).flat();
 
     expect(phrases.length).toBeGreaterThanOrEqual(40);
     for (const phrase of phrases) {
-      expect(phrase.length).toBeGreaterThanOrEqual(20);
-      expect(phrase.length).toBeLessThanOrEqual(160);
+      expect(phrase.length).toBeGreaterThanOrEqual(
+        TARGET_PHRASE_MIN_LENGTH,
+      );
+      expect(phrase.length).toBeLessThanOrEqual(
+        TARGET_PHRASE_MAX_LENGTH,
+      );
     }
+  });
+
+  it("话术不出现学生姓名、金额和未确认结果", () => {
+    const phrases = Object.values(DAILY_PHRASES).flat();
+
+    for (const phrase of phrases) {
+      expect(phrase).not.toMatch(/林小满|陈一鸣|周子航/);
+      expect(phrase).not.toMatch(/\d+(?:\.\d+)?\s*(?:元|万|块)/);
+      expect(phrase).not.toMatch(/待确认|待补充|未提供/);
+    }
+  });
+
+  it("句式有变化，不是全部同一个开头", () => {
+    const phrases = Object.values(DAILY_PHRASES).flat();
+    const openers = new Set(phrases.map((phrase) => phrase.slice(0, 2)));
+
+    // 49 条话术至少要有 12 种不同开头，避免整栏读起来像复制粘贴
+    expect(openers.size).toBeGreaterThanOrEqual(12);
   });
 });

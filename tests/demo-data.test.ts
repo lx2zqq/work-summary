@@ -49,10 +49,10 @@ describe("演示数据", () => {
     }
   });
 
-  it("日常工作复盘恰好 1 条，且不少于 20 字", () => {
+  it("日常工作复盘恰好 1 条，且和通用话术长度接近", () => {
     expect(DEMO_DRAFT_CONCISE.sections.richang).toHaveLength(1);
     expect(DEMO_DRAFT_CONCISE.sections.richang[0]?.length).toBeGreaterThanOrEqual(
-      20,
+      40,
     );
   });
 

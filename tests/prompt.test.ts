@@ -120,7 +120,7 @@ describe("buildPromptMessages", () => {
     expect(system?.content).not.toContain("【长期记忆】");
   });
 
-  it("最终模式要求 richang 恰好 1 条且不少于 20 字", () => {
+  it("最终模式要求 richang 恰好 1 条且 40-70 字", () => {
     const [system] = buildPromptMessages({
       ...BASE,
       mode: "final",
@@ -128,7 +128,7 @@ describe("buildPromptMessages", () => {
     });
 
     expect(system?.content).toContain("richang 必须恰好 1 条");
-    expect(system?.content).toContain("不少于 20 个汉字");
+    expect(system?.content).toContain("40-70 个汉字");
     expect(system?.content).not.toContain("dailyPhrase");
   });
 

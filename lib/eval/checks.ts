@@ -123,7 +123,7 @@ export function runChecks(input: CheckInput): CheckResult[] {
 
   results.push(result("结构", structureIssues));
 
-  // 日常工作复盘固定 1 条且不少于 20 字；空输入保护用例除外
+  // 日常工作复盘固定 1 条，且和通用话术长度接近；空输入保护用例除外
   if (mode === "final" && !expect.allowEmpty) {
     const richang = draft.sections.richang ?? [];
     const issues: string[] = [];
@@ -132,8 +132,8 @@ export function runChecks(input: CheckInput): CheckResult[] {
       issues.push(`需要 1 条，实际 ${richang.length} 条`);
     }
     for (const item of richang) {
-      if (item.trim().length < 20) {
-        issues.push(`“${item.slice(0, 12)}…”少于 20 字`);
+      if (item.trim().length < 35) {
+        issues.push(`“${item.slice(0, 12)}…”少于 35 字`);
       }
     }
 
