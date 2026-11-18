@@ -11,7 +11,7 @@ import { trackEvent } from "@/lib/analytics/events";
 import type { PromptContext } from "@/lib/ai/prompt";
 import {
   diffSections,
-  parsePartialSections,
+  parseStreamState,
   type SectionStreamEntry,
 } from "@/lib/ai/stream-parser";
 import { encodeSSE } from "@/lib/sse";
@@ -128,31 +128,51 @@ function streamGenerate(input: {
   const encoder = new TextEncoder();
 
   const stream = new ReadableStream<Uint8Array>({
-    async start(controller) {
+    // 不要在 start 里 await 整段生成：框架会在 start 的 Promise
+    // 长时间不 resolve 时提前关掉 controller，后续 enqueue 直接抛错
+    start(controller) {
       let closed = false;
 
       const send = (event: string, data: unknown) => {
         if (closed) return;
-        controller.enqueue(encoder.encode(encodeSSE(event, data)));
+
+        try {
+          controller.enqueue(encoder.encode(encodeSSE(event, data)));
+        } catch {
+          // 客户端已断开，后续不再尝试写入
+          closed = true;
+        }
       };
 
+      void (async () => {
       try {
         send("status", { message: "正在查询资料…" });
 
         let buffer = "";
-        const parsed: SectionStreamEntry[] = [];
+        // 保存的是「最新完整状态」，diff 才有正确的比对基准
         let latest: SectionStreamEntry[] = [];
+        let lastPartial = "";
+        let lastPartialAt = 0;
 
         const result = await generateDraftWithUsage(context, {
           toolDeps: buildToolDeps(context.settings),
           onContent: (chunk) => {
             buffer += chunk;
-            latest = parsePartialSections(buffer);
-            const diff = diffSections(parsed, latest);
+            const state = parseStreamState(buffer);
 
-            for (const entry of diff) {
-              parsed.push(entry);
-              send("section", entry);
+            const diff = diffSections(latest, state.sections);
+            latest = state.sections;
+
+            for (const entry of diff) send("section", entry);
+
+            // 正在写的那一句单独推，前端才有逐字效果；40ms 节流避免刷屏
+            if (state.partial && state.partial.text !== lastPartial) {
+              const now = Date.now();
+              if (now - lastPartialAt >= 40) {
+                lastPartial = state.partial.text;
+                lastPartialAt = now;
+                send("partial", state.partial);
+              }
             }
           },
         });
@@ -198,8 +218,13 @@ function streamGenerate(input: {
         send("error", { message: getAiErrorMessage(error) });
       } finally {
         closed = true;
-        controller.close();
+        try {
+          controller.close();
+        } catch {
+          // 已经关闭时忽略
+        }
       }
+      })();
     },
   });
 

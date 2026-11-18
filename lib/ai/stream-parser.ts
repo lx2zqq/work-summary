@@ -63,22 +63,47 @@ function readString(
   return null;
 }
 
+/** 当前正在写、还没闭合的那一句 */
+export type PartialText = {
+  key: SectionKey;
+  text: string;
+};
+
+export type StreamState = {
+  /** 已经闭合的完整条目 */
+  sections: SectionStreamEntry[];
+  /** 正在生成的半句，用于逐字展示 */
+  partial: PartialText | null;
+};
+
+/** 半截字符串无法 JSON.parse，手动还原常见转义 */
+function unescapePartial(raw: string): string {
+  return raw
+    .replace(/\\n/g, "\n")
+    .replace(/\\t/g, "\t")
+    .replace(/\\"/g, '"')
+    .replace(/\\\\/g, "\\");
+}
+
 /**
- * 从还没收完的 JSON 文本里，提取所有已经闭合的 section 条目。
+ * 从还没收完的 JSON 文本里，提取已闭合的条目和正在写的半句。
  *
  * 只认 `"sections": { "xueqing": ["...", "..."] }` 这种结构；
- * 半截的字符串、还没闭合的数组都不会返回，保证前端拿到的每一句都是完整的。
+ * 半截的字符串只走 partial，不混进正式条目。
  * 每次调用都从头扫一遍，调用方自己对比增量。
  */
-export function parsePartialSections(buffer: string): SectionStreamEntry[] {
+export function parseStreamState(buffer: string): StreamState {
+  const empty: StreamState = { sections: [], partial: null };
+
   const sectionsIndex = buffer.indexOf('"sections"');
-  if (sectionsIndex < 0) return [];
+  if (sectionsIndex < 0) return empty;
 
   let cursor = buffer.indexOf("{", sectionsIndex);
-  if (cursor < 0) return [];
+  if (cursor < 0) return empty;
   cursor += 1;
 
-  const result: SectionStreamEntry[] = [];
+  const sections: SectionStreamEntry[] = [];
+  let partial: PartialText | null = null;
 
   while (cursor < buffer.length) {
     cursor = skipWhitespace(buffer, cursor);
@@ -127,7 +152,17 @@ export function parsePartialSections(buffer: string): SectionStreamEntry[] {
       if (buffer[cursor] !== '"') break;
 
       const itemResult = readString(buffer, cursor);
-      if (!itemResult) break;
+
+      if (!itemResult) {
+        // 字符串还没闭合，就是当前正在写的那一句
+        if (isSectionKey(key)) {
+          const raw = unescapePartial(buffer.slice(cursor + 1));
+          if (raw.trim()) {
+            partial = { key, text: raw };
+          }
+        }
+        break;
+      }
 
       const value = itemResult.value.trim();
       if (value) items.push(value);
@@ -135,13 +170,17 @@ export function parsePartialSections(buffer: string): SectionStreamEntry[] {
     }
 
     if (isSectionKey(key) && items.length > 0) {
-      result.push({ key, items });
+      sections.push({ key, items });
     }
 
     if (!arrayClosed) break;
   }
 
-  return result;
+  return { sections, partial };
+}
+
+export function parsePartialSections(buffer: string): SectionStreamEntry[] {
+  return parseStreamState(buffer).sections;
 }
 
 /**

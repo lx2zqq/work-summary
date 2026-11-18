@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   diffSections,
   parsePartialSections,
+  parseStreamState,
 } from "@/lib/ai/stream-parser";
 
 describe("parsePartialSections", () => {
@@ -68,6 +69,42 @@ describe("parsePartialSections", () => {
     expect(parsePartialSections(text)).toEqual([
       { key: "xueqing", items: ["b"] },
     ]);
+  });
+});
+
+describe("parseStreamState", () => {
+  it("同时返回完整条目和正在写的半句", () => {
+    const state = parseStreamState(
+      '{"sections":{"xueqing":["林小满：完成作业。","陈一鸣：请假',
+    );
+
+    expect(state.sections).toEqual([
+      { key: "xueqing", items: ["林小满：完成作业。"] },
+    ]);
+    expect(state.partial).toEqual({
+      key: "xueqing",
+      text: "陈一鸣：请假",
+    });
+  });
+
+  it("没有半句时 partial 为空", () => {
+    expect(
+      parseStreamState('{"sections":{"xueqing":["完成。"]}}').partial,
+    ).toBeNull();
+  });
+
+  it("半句里的转义会被还原", () => {
+    const state = parseStreamState(
+      '{"sections":{"xueqing":["他说\\"好',
+    );
+
+    expect(state.partial?.text).toBe('他说"好');
+  });
+
+  it("还没进入数组时不返回半句", () => {
+    expect(
+      parseStreamState('{"sections":{"xueqing":[').partial,
+    ).toBeNull();
   });
 });
 

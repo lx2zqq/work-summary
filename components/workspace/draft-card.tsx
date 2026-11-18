@@ -16,30 +16,66 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
-import type { SectionStreamEntry } from "@/lib/ai/stream-parser";
+import type {
+  PartialText,
+  SectionStreamEntry,
+} from "@/lib/ai/stream-parser";
 import { numberPrefix } from "@/lib/template";
 import { SECTION_META, type MemoryPromptItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-/** 流式生成时的实时预览：只展示已经完整的条目 */
-function StreamingPreview({ sections }: { sections: SectionStreamEntry[] }) {
+/** 流式生成时的实时预览：完整条目 + 正在写的那一句 */
+function StreamingPreview({
+  sections,
+  partial,
+}: {
+  sections: SectionStreamEntry[];
+  partial: PartialText | null;
+}) {
+  const merged = sections.map((entry) => ({
+    key: entry.key,
+    items: [...entry.items],
+  }));
+
+  if (partial) {
+    const index = merged.findIndex((entry) => entry.key === partial.key);
+
+    if (index >= 0) merged[index].items.push(partial.text);
+    else merged.push({ key: partial.key, items: [partial.text] });
+  }
+
   return (
-    <div className="space-y-3.5">
-      {sections.map(({ key, items }) => (
+    <div data-streaming="true" className="space-y-3.5">
+      {merged.map(({ key, items }) => (
         <section key={key}>
           <p className="text-sm font-extrabold text-ink">
             🍊【{SECTION_META[key].title}】
           </p>
           <ul className="mt-1 space-y-0.5">
-            {items.map((item, index) => (
-              <li
-                key={`${key}-${index}`}
-                className="review-text text-sm leading-relaxed text-ink"
-              >
-                {numberPrefix(index)}
-                {item}
-              </li>
-            ))}
+            {items.map((item, index) => {
+              const typing = Boolean(
+                partial &&
+                  partial.key === key &&
+                  index === items.length - 1 &&
+                  item === partial.text,
+              );
+
+              return (
+                <li
+                  key={`${key}-${index}`}
+                  className="review-text text-sm leading-relaxed text-ink"
+                >
+                  {numberPrefix(index)}
+                  {item}
+                  {typing ? (
+                    <span
+                      aria-hidden
+                      className="ml-0.5 inline-block h-3.5 w-[2px] animate-pulse rounded-full bg-brand-deep align-middle"
+                    />
+                  ) : null}
+                </li>
+              );
+            })}
           </ul>
         </section>
       ))}
@@ -72,6 +108,8 @@ type Props = {
   demoMode?: boolean;
   /** 流式生成中已经收到的完整条目 */
   streaming?: SectionStreamEntry[];
+  /** 正在逐字生成的那一句 */
+  streamingPartial?: PartialText | null;
 };
 
 export function DraftCard({
@@ -92,6 +130,7 @@ export function DraftCard({
   onExtractMemory,
   demoMode = false,
   streaming = [],
+  streamingPartial = null,
 }: Props) {
   return (
     <section className="paper-card relative flex min-h-[540px] flex-col">
@@ -181,9 +220,12 @@ export function DraftCard({
         )}
 
         {loading ? (
-          streaming.length > 0 ? (
+          streaming.length > 0 || streamingPartial ? (
             <div className="absolute inset-0 z-10 overflow-y-auto rounded-[26px] bg-paper/95 p-4">
-              <StreamingPreview sections={streaming} />
+              <StreamingPreview
+                sections={streaming}
+                partial={streamingPartial}
+              />
             </div>
           ) : (
             <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 rounded-[26px] bg-paper/85 backdrop-blur-[1px]">

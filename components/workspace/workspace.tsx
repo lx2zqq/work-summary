@@ -34,7 +34,10 @@ import {
   updateGenerationResult,
   type GenerationJob,
 } from "@/lib/generation-store";
-import type { SectionStreamEntry } from "@/lib/ai/stream-parser";
+import type {
+  PartialText,
+  SectionStreamEntry,
+} from "@/lib/ai/stream-parser";
 import {
   isMemoryExtractionStale,
   resolveMemoryCopyAction,
@@ -179,6 +182,8 @@ export function Workspace({
   const [streamingSections, setStreamingSections] = useState<
     SectionStreamEntry[]
   >([]);
+  const [streamingPartial, setStreamingPartial] =
+    useState<PartialText | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveFailed, setSaveFailed] = useState(
     Boolean(jobForDate?.status === "done" && jobForDate.saveFailed),
@@ -632,6 +637,7 @@ export function Workspace({
       let streamError = "";
 
       setStreamingSections([]);
+      setStreamingPartial(null);
 
       try {
         while (true) {
@@ -650,6 +656,12 @@ export function Workspace({
               setStreamingSections((previous) =>
                 mergeSectionEntry(previous, entry),
               );
+              setStreamingPartial(null);
+              continue;
+            }
+
+            if (event.event === "partial") {
+              setStreamingPartial(event.data as PartialText);
               continue;
             }
 
@@ -684,6 +696,7 @@ export function Workspace({
         }
       } finally {
         setStreamingSections([]);
+        setStreamingPartial(null);
       }
 
       if (!result) {
@@ -1654,6 +1667,7 @@ export function Workspace({
               void extractMemory(true);
             }}
             streaming={streamingSections}
+            streamingPartial={streamingPartial}
           />
         </div>
       </div>
