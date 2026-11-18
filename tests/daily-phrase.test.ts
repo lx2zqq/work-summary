@@ -4,10 +4,15 @@ import {
   TARGET_PHRASE_MAX_LENGTH,
   TARGET_PHRASE_MIN_LENGTH,
   detectPhraseTheme,
+  detectThemeFromText,
   pickDailyPhrase,
   pickDailyPhrases,
 } from "@/lib/daily-phrase";
-import { emptyDraft, type ReviewDraft } from "@/lib/types";
+import {
+  emptyDraft,
+  type CustomPhrase,
+  type ReviewDraft,
+} from "@/lib/types";
 
 function draftWith(text: string): ReviewDraft {
   return {
@@ -85,6 +90,16 @@ describe("pickDailyPhrases", () => {
     expect(detectPhraseTheme(draftWith("整理了资料"))).toBe("general");
   });
 
+  it("口语化的会议说法也能识别", () => {
+    for (const text of [
+      "开完会把下周的排课捋了一遍",
+      "今天开了个会",
+      "参加例会",
+    ]) {
+      expect(detectThemeFromText(text)).toBe("meeting");
+    }
+  });
+
   it("话术库每条落在 45~60 字的目标区间", () => {
     const phrases = Object.values(DAILY_PHRASES).flat();
 
@@ -115,5 +130,70 @@ describe("pickDailyPhrases", () => {
 
     // 49 条话术至少要有 12 种不同开头，避免整栏读起来像复制粘贴
     expect(openers.size).toBeGreaterThanOrEqual(12);
+  });
+});
+
+describe("自定义话术", () => {
+  function customPhrases(count: number): CustomPhrase[] {
+    return Array.from({ length: count }, (_, index) => ({
+      id: `custom-${index}`,
+      theme: "general" as const,
+      content: `这是第 ${index} 条自定义话术，用来验证池长变化后的轮换结果仍然不重复。`,
+      createdAt: "2026-11-18T00:00:00.000Z",
+    }));
+  }
+
+  it("池长变化后，当天三条仍然不重复", () => {
+    for (let count = 0; count <= 20; count += 1) {
+      const phrases = pickDailyPhrases(
+        "2026-11-13",
+        undefined,
+        3,
+        customPhrases(count),
+      );
+
+      expect(new Set(phrases).size).toBe(3);
+    }
+  });
+
+  it("自定义话术会进入抽取池", () => {
+    const custom = customPhrases(1);
+    const seen = new Set<string>();
+
+    for (let day = 1; day <= 30; day += 1) {
+      const date = `2026-11-${String(day).padStart(2, "0")}`;
+      for (const phrase of pickDailyPhrases(date, undefined, 3, custom)) {
+        seen.add(phrase);
+      }
+    }
+
+    expect(seen.has(custom[0].content)).toBe(true);
+  });
+
+  it("主题池的自定义话术只在命中主题时使用", () => {
+    const custom: CustomPhrase[] = [
+      {
+        id: "exam-1",
+        theme: "exam",
+        content: "这是考试主题的自定义话术，只有命中考试主题时才会被抽到。",
+        createdAt: "2026-11-18T00:00:00.000Z",
+      },
+    ];
+
+    const exam = pickDailyPhrases(
+      "2026-11-13",
+      draftWith("今天期中复习"),
+      3,
+      custom,
+    );
+    const general = pickDailyPhrases(
+      "2026-11-13",
+      draftWith("整理了资料"),
+      3,
+      custom,
+    );
+
+    expect(exam.length).toBe(3);
+    expect(general).not.toContain(custom[0].content);
   });
 });

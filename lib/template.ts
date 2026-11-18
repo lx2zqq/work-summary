@@ -7,6 +7,7 @@ import {
   NO_DIFFICULTY_PHRASE,
   SECTION_META,
   type AppSettings,
+  type CustomPhrase,
   type ReviewDraft,
   type SectionKey,
 } from "./types";
@@ -70,12 +71,14 @@ function resolveGeneralPhrases(
   dailyItems: string[],
   draft: ReviewDraft,
   dateISO: string,
+  customPhrases: CustomPhrase[],
 ): string[] {
   // 多取几条，遇到重复或过短时还能补足目标条数
   const phrases = pickDailyPhrases(
     dateISO,
     draft,
     GENERAL_PHRASE_COUNT + 2,
+    customPhrases,
   );
   const result: string[] = [];
 
@@ -148,7 +151,12 @@ export function renderReview(
   if (settings.showFixedPhrase) {
     dailyItems = [
       ...dailyItems,
-      ...resolveGeneralPhrases(dailyItems, draft, dateISO),
+      ...resolveGeneralPhrases(
+        dailyItems,
+        draft,
+        dateISO,
+        settings.customPhrases ?? [],
+      ),
     ];
   }
   pushSection("richang", dailyItems);

@@ -1,6 +1,6 @@
-import type { ReviewDraft } from "./types";
+import type { CustomPhrase, PhraseTheme, ReviewDraft } from "./types";
 
-export type PhraseTheme = "general" | "exam" | "meeting" | "mistake";
+export type { PhraseTheme };
 
 /** 通用话术的最短有效长度；过短的条目不进入正文（兼容旧数据，不要调高） */
 export const MIN_DAILY_PHRASE_LENGTH = 20;
@@ -75,21 +75,55 @@ export const DAILY_PHRASES: Record<PhraseTheme, readonly string[]> = {
 
 const THEME_RULES: Array<{ theme: PhraseTheme; pattern: RegExp }> = [
   { theme: "exam", pattern: /期中|期末|考试|复习|提分|查漏补缺|成绩|背诵|默写/ },
-  { theme: "meeting", pattern: /会议|开会|教研|部门|教讨会/ },
+  {
+    theme: "meeting",
+    pattern: /会议|开会|开完会|开了个会|开了会|例会|教研|部门|教讨会/,
+  },
   { theme: "mistake", pattern: /错题/ },
 ];
 
-/** 每天从 general 池取 3 条时使用的间隔，与池长 13 互质，保证当天不重复 */
-const PHRASE_STEP = 5;
+function gcd(a: number, b: number): number {
+  return b === 0 ? a : gcd(b, a % b);
+}
 
-export function detectPhraseTheme(draft: ReviewDraft): PhraseTheme {
-  const corpus = Object.values(draft.sections ?? {}).flat().join(" ");
+/**
+ * 步长必须和池长互质，才能保证一天内不重复。
+ * 加入自定义话术后池长会变，不能再写死 5。
+ */
+function pickStep(length: number): number {
+  if (length <= 1) return 1;
 
+  return (
+    [5, 7, 11, 13, 17, 19].find(
+      (step) => step < length && gcd(step, length) === 1,
+    ) ?? 1
+  );
+}
+
+function phrasePool(
+  theme: PhraseTheme,
+  customPhrases: CustomPhrase[],
+): string[] {
+  return [
+    ...DAILY_PHRASES[theme],
+    ...customPhrases
+      .filter((phrase) => phrase.theme === theme && phrase.content.trim())
+      .map((phrase) => phrase.content.trim()),
+  ];
+}
+
+/** 按关键词判断一段文字的主题，插话润色和草稿检测共用 */
+export function detectThemeFromText(text: string): PhraseTheme {
   for (const rule of THEME_RULES) {
-    if (rule.pattern.test(corpus)) return rule.theme;
+    if (rule.pattern.test(text)) return rule.theme;
   }
 
   return "general";
+}
+
+export function detectPhraseTheme(draft: ReviewDraft): PhraseTheme {
+  const corpus = Object.values(draft.sections ?? {}).flat().join(" ");
+  return detectThemeFromText(corpus);
 }
 
 function dayNumber(dateISO: string): number {
@@ -108,22 +142,23 @@ export function pickDailyPhrases(
   dateISO: string,
   draft?: ReviewDraft,
   count = 3,
+  customPhrases: CustomPhrase[] = [],
 ): string[] {
   const theme = draft ? detectPhraseTheme(draft) : "general";
   const day = Math.abs(dayNumber(dateISO));
   const picks: string[] = [];
 
   if (theme !== "general" && count > 0) {
-    const pool = DAILY_PHRASES[theme];
+    const pool = phrasePool(theme, customPhrases);
     picks.push(pool[day % pool.length]);
   }
 
-  const general = DAILY_PHRASES.general;
+  const general = phrasePool("general", customPhrases);
   const start = day % general.length;
+  const step = pickStep(general.length);
 
   for (let i = 0; picks.length < count && i < general.length; i += 1) {
-    const candidate =
-      general[(start + i * PHRASE_STEP) % general.length];
+    const candidate = general[(start + i * step) % general.length];
     if (!picks.includes(candidate)) picks.push(candidate);
   }
 

@@ -166,6 +166,19 @@ export const memoryExtractionSchema = z.object({
     .default([]),
 });
 
+export const phrasePreviewSchema = z.object({
+  text: z
+    .string()
+    .trim()
+    .min(2, "至少写几个字")
+    .max(300, "太长了，先精简一下"),
+});
+
+export const addPhraseSchema = z.object({
+  phrase: z.string().trim().min(1).max(200),
+  theme: z.enum(["general", "exam", "meeting", "mistake"]),
+});
+
 export const settingsPatchSchema = z
   .object({
     defaultStyle: reviewStyleSchema.optional(),

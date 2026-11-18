@@ -38,6 +38,7 @@ function mapSettings(
     showKunnan: row.showKunnan,
     showFixedPhrase: row.showFixedPhrase,
     enableMemory: row.enableMemory,
+    customPhrases: row.customPhrases ?? [],
   };
 }
 

@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Segmented } from "@/components/ui/segmented";
 import { Switch } from "@/components/ui/switch";
+import { PhraseLibrary } from "@/components/settings/phrase-library";
 import { todayISO } from "@/lib/date";
 import { resetGenerationStore } from "@/lib/generation-store";
 import { renderReview } from "@/lib/template";
@@ -237,6 +238,14 @@ export function SettingsForm({
           {preview}
         </pre>
       </section>
+
+      <PhraseLibrary
+        initialPhrases={settings.customPhrases}
+        demoMode={demoMode}
+        onPhrasesChange={(phrases) =>
+          setSettings((current) => ({ ...current, customPhrases: phrases }))
+        }
+      />
 
       <section className="paper-card p-4 sm:p-5">
         <div className="flex items-center gap-2">

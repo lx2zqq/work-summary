@@ -10,6 +10,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import type {
+  CustomPhrase,
   MemoryCategory,
   MemoryScope,
   QAPair,
@@ -67,6 +68,11 @@ export const settings = pgTable("settings", {
   showKunnan: boolean("show_kunnan").notNull().default(false),
   showFixedPhrase: boolean("show_fixed_phrase").notNull().default(true),
   enableMemory: boolean("enable_memory").notNull().default(true),
+  /** 用户自己添加的通用话术，和内置库一起参与每日轮换 */
+  customPhrases: jsonb("custom_phrases")
+    .$type<CustomPhrase[]>()
+    .notNull()
+    .default([]),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .defaultNow()
     .notNull(),

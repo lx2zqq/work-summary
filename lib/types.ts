@@ -95,12 +95,26 @@ export type MemoryPromptItem = {
   importance: number;
 };
 
+export type PhraseTheme = "general" | "exam" | "meeting" | "mistake";
+
+/** 用户自己添加的通用话术，和内置库一起参与每日轮换 */
+export type CustomPhrase = {
+  id: string;
+  theme: PhraseTheme;
+  content: string;
+  createdAt: string;
+};
+
+/** 自定义话术最多能存多少条，避免稀释内置库风格 */
+export const MAX_CUSTOM_PHRASES = 50;
+
 export type AppSettings = {
   defaultStyle: ReviewStyle;
   showJiaoyan: boolean;
   showKunnan: boolean;
   showFixedPhrase: boolean;
   enableMemory: boolean;
+  customPhrases: CustomPhrase[];
 };
 
 export type ReviewRecord = {
@@ -207,6 +221,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   showKunnan: false,
   showFixedPhrase: true,
   enableMemory: true,
+  customPhrases: [],
 };
 
 export function emptySections(): Record<SectionKey, string[]> {
