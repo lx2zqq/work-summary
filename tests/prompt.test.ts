@@ -152,6 +152,102 @@ describe("buildPromptMessages", () => {
     expect(closed?.content).not.toContain("dailyPhrase");
   });
 
+  it("工具模式不再预注入学生名单、长期记忆和最近复盘", () => {
+    const memory = {
+      id: "memory-1",
+      scope: "student" as const,
+      studentName: "林小满",
+      category: "家长沟通" as const,
+      content: "林小满妈妈偏好微信沟通。",
+      importance: 2,
+    };
+    const context: PromptContext = {
+      ...BASE,
+      mode: "final",
+      round: MAX_FOLLOW_UP_ROUNDS,
+      toolsEnabled: true,
+      students: [
+        {
+          id: "student-1",
+          name: "林小满",
+          grade: "高一",
+          subjects: "数学",
+          status: "在读",
+          note: null,
+        },
+      ],
+      memories: [memory],
+      recentReviews: [{ date: "2026-11-12", text: "昨天的复盘正文" }],
+    };
+
+    const [system, user] = buildPromptMessages(context);
+
+    expect(system?.content).toContain("【可用工具】");
+    expect(system?.content).not.toContain("【学生名单】");
+    expect(system?.content).not.toContain("【最近复盘】");
+    expect(system?.content).not.toContain("长期记忆使用规则");
+    expect(user?.content).not.toContain("【长期记忆");
+    expect(user?.content).not.toContain("林小满妈妈偏好微信沟通");
+    expect(user?.content).not.toContain("昨天的复盘正文");
+  });
+
+  it("工具模式的追问阶段要求先查学生记忆", () => {
+    const [system] = buildPromptMessages({
+      ...BASE,
+      toolsEnabled: true,
+    });
+
+    expect(system?.content).toContain("【工具追问规则】");
+    expect(system?.content).toContain(
+      "流水账里出现任何学生姓名时，必须先调用 search_memories",
+    );
+    expect(system?.content).toContain("【可用工具】");
+  });
+
+  it("关闭工具时保持原来的预注入行为", () => {
+    const [system] = buildPromptMessages({
+      ...BASE,
+      mode: "final",
+      round: MAX_FOLLOW_UP_ROUNDS,
+      toolsEnabled: false,
+      students: [
+        {
+          id: "student-1",
+          name: "林小满",
+          grade: "高一",
+          subjects: "数学",
+          status: "在读",
+          note: null,
+        },
+      ],
+      recentReviews: [{ date: "2026-11-12", text: "昨天的复盘正文" }],
+    });
+
+    expect(system?.content).toContain("【学生名单】");
+    expect(system?.content).toContain("【最近复盘】");
+    expect(system?.content).toContain("昨天的复盘正文");
+    expect(system?.content).not.toContain("【可用工具】");
+  });
+
+  it("改文风模式即使开着工具也不包含工具说明", () => {
+    const draft = {
+      ...emptyDraft(),
+      sections: {
+        ...emptyDraft().sections,
+        xueqing: ["林小满：完成今日校内作业。"],
+      },
+    };
+
+    const [system] = buildPromptMessages({
+      ...BASE,
+      mode: "restyle",
+      toolsEnabled: true,
+      currentDraft: draft,
+    });
+
+    expect(system?.content).not.toContain("【可用工具】");
+  });
+
   it("改文风模式只以当前草稿为底稿，不重新提取流水账", () => {
     const draft = {
       ...emptyDraft(),

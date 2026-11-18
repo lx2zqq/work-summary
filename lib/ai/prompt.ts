@@ -13,7 +13,7 @@ import {
 } from "@/lib/types";
 
 /** 改 prompt 时递增，eval 报告会带上这个版本，方便对比 */
-export const PROMPT_VERSION = "2026-11-15.2";
+export const PROMPT_VERSION = "2026-11-18.1";
 
 export type PromptMode = "questions" | "final" | "restyle";
 
@@ -29,6 +29,11 @@ export type PromptContext = {
   answers: QAPair[];
   currentDraft?: ReviewDraft;
   round: number;
+  /**
+   * 工具模式：学生名单、长期记忆、历史复盘不再预注入，由模型按需调用工具查询。
+   * 关闭时退回全量预注入，用于模型不支持 tools 时的降级。
+   */
+  toolsEnabled?: boolean;
 };
 
 export type PromptMessage = {
@@ -143,6 +148,24 @@ const MEMORY_USAGE_RULES = `【长期记忆使用规则】
 - 最终稿：如果今天的内容和记忆相关，可以自然体现连续性；不相关就忽略。
 - 长期记忆和最近复盘重复时，只使用一次。`;
 
+const TOOL_GUIDE = `【可用工具】
+你可以调用以下工具查询数据，只在真的需要时调用：
+
+- search_students：查学生名单。不确定姓名写法、需要补年级/科目时使用。
+- search_memories：查长期记忆。流水账里出现学生姓名时，必须先查该学生的记忆；用户提到“上次”“之前”“一直”这类背景时也要查。不传条件时返回重要度最高的几条。
+- search_reviews：查历史复盘正文。用户提到“上次”“前几天”“前段时间”做过的事，或需要核对之前的工作进展时使用。
+
+【工具使用规则】
+- 工具返回的是历史数据，不是今天发生的事，绝对不要写成今天的进展。
+- 不要在正文里出现“根据记忆”“历史记录”“上次”等字样。
+- 同一个查询不要重复调用；没查到就基于今天的事实继续写，不要编造。
+- 最多调用 3 轮，信息够了就直接输出结果。`;
+
+const TOOL_QUESTION_RULES = `【工具追问规则】
+- 流水账里出现任何学生姓名时，必须先调用 search_memories 查该学生，再生成问题。
+- 如果记忆里该学生有未完成事项（例如待反馈家长、待跟进续费、待订正），必须围绕该事项生成问题。
+- 不要为了用工具而调用。今天没提到任何学生、也没有历史相关表述时，直接生成问题。`;
+
 const RESTYLE_EXAMPLES = `【文风对比示例】
 当前草稿：林小满：完成作业，错题已讲解。
 简洁版：林小满：完成今日作业，错题已讲解。
@@ -203,6 +226,8 @@ function formatRecentReviews(
 function buildSystemPrompt(context: PromptContext): string {
   const isQuestions = context.mode === "questions";
   const isRestyle = context.mode === "restyle";
+  // 改文风只改措辞，不需要外部数据，永远不走工具
+  const usesTools = context.toolsEnabled === true && !isRestyle;
   const outputSchema = isQuestions
     ? OUTPUT_SCHEMA_QUESTIONS
     : OUTPUT_SCHEMA_FINAL;
@@ -214,7 +239,7 @@ function buildSystemPrompt(context: PromptContext): string {
 ${CORE_SECTION_BRIEF}
 
 ${QUESTION_RULES}
-
+${usesTools ? `\n${TOOL_QUESTION_RULES}\n` : ""}
 ${QUESTION_EXAMPLES}`
     : isRestyle
       ? `【本次任务：只改文风】
@@ -232,6 +257,8 @@ ${FINAL_RULES}
 
 ${FINAL_EXAMPLES}`;
 
+  const toolBlock = usesTools ? TOOL_GUIDE : "";
+
   const styleBlock = isQuestions
     ? ""
     : `【文风】
@@ -248,19 +275,21 @@ ${STYLE_RULES[context.style]}
         }`
       : "";
 
-  const studentsBlock = isRestyle
-    ? ""
-    : `【学生名单】
+  // 工具模式下这些数据由模型主动查询，不再整块塞进 prompt
+  const studentsBlock =
+    isRestyle || usesTools
+      ? ""
+      : `【学生名单】
 ${formatStudents(context.students)}`;
 
   const recentBlock =
-    context.mode === "final"
+    context.mode === "final" && !usesTools
       ? `【最近复盘】
 ${formatRecentReviews(context.recentReviews)}`
       : "";
 
   const memoryRules =
-    !isRestyle && context.memories.length > 0
+    !isRestyle && !usesTools && context.memories.length > 0
       ? MEMORY_USAGE_RULES
       : "";
 
@@ -272,7 +301,9 @@ ${formatRecentReviews(context.recentReviews)}`
 3. ${
     isRestyle
       ? "不确定的信息宁可留空，也不要猜；改文风时不要新增内容。"
-      : "不确定的信息宁可留空并生成追问，也不要猜。"
+      : usesTools
+        ? "不确定 student、记忆或历史信息时先调用工具查询；查不到再留空或生成追问，绝不能猜。"
+        : "不确定的信息宁可留空并生成追问，也不要猜。"
   }
 4. 只输出 JSON，不要输出解释、Markdown 代码块或任何多余文字。
 
@@ -280,6 +311,8 @@ ${formatRecentReviews(context.recentReviews)}`
 ${outputSchema}
 
 ${modeBlock}
+
+${toolBlock}
 
 ${styleBlock}
 
@@ -305,7 +338,7 @@ function buildUserPrompt(context: PromptContext): string {
 
   const parts: string[] = [];
 
-  if (context.memories.length > 0) {
+  if (!context.toolsEnabled && context.memories.length > 0) {
     parts.push(
       `【长期记忆（只在相关时参考，不要写成今天发生的事）】\n${formatMemoriesForPrompt(context.memories)}`,
     );
@@ -331,7 +364,7 @@ function buildUserPrompt(context: PromptContext): string {
       `【本轮信息】第 ${context.round + 1} 轮追问，最多 ${MAX_FOLLOW_UP_ROUNDS} 轮。请只输出 questions 和 notes，不要输出 sections。`,
     );
 
-    if (context.memories.length > 0) {
+    if (!context.toolsEnabled && context.memories.length > 0) {
       parts.push(
         "【本轮记忆要求】如果长期记忆里有今天提到的学生的未跟进事项，请至少有 1 个问题确认进展。",
       );

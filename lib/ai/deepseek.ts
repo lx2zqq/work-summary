@@ -8,22 +8,28 @@ import {
   MAX_QUESTIONS_PER_ROUND,
   SECTION_ORDER,
   emptySections,
+  type MemoryPromptItem,
   type ReviewDraft,
 } from "@/lib/types";
+import {
+  AGENT_BUDGET_MS,
+  isToolsUnsupportedError,
+  runAgent,
+} from "./agent";
+import { AiError } from "./errors";
 import { buildPromptMessages, type PromptContext } from "./prompt";
+import type { ToolDeps } from "./tools";
+
+export { AiError } from "./errors";
+export type { AiErrorKind } from "./errors";
 
 const DEFAULT_BASE_URL = "https://api.deepseek.com";
 const DEFAULT_MODEL = "deepseek-flash";
 
-export class AiError extends Error {
-  constructor(
-    message: string,
-    public readonly kind: "config" | "output" | "request" = "request",
-  ) {
-    super(message);
-    this.name = "AiError";
-  }
-}
+/** 整个生成请求的预算，路由 maxDuration 是 60 秒 */
+const TOTAL_BUDGET_MS = 50_000;
+/** 格式纠错重试的最后期限保护，留时间给兜底和响应 */
+const MIN_RETRY_BUDGET_MS = 8_000;
 
 export function isAiConfigured(): boolean {
   return Boolean(process.env.REVIEW_DEEPSEEK_API_KEY?.trim());
@@ -31,6 +37,15 @@ export function isAiConfigured(): boolean {
 
 export function getAiModelName(): string {
   return process.env.REVIEW_DEEPSEEK_MODEL?.trim() || DEFAULT_MODEL;
+}
+
+/**
+ * 工具模式开关。
+ * auto：优先用工具，模型不支持时自动降级到预注入；
+ * off：强制使用原来的全量预注入。
+ */
+export function resolveToolsMode(): "auto" | "off" {
+  return process.env.REVIEW_TOOLS_MODE?.trim() === "off" ? "off" : "auto";
 }
 
 export function createClient(): OpenAI {
@@ -103,106 +118,228 @@ export type AiUsage = {
   retried: boolean;
 };
 
-/** 保留原有调用方式；需要 token 和重试信息时用 generateDraftWithUsage */
+export type GenerateResult = {
+  draft: ReviewDraft;
+  usage: AiUsage;
+  /** 实际请求模型的轮数，1 表示没有走工具循环 */
+  toolRounds: number;
+  /** 是否因为模型不支持工具而退回预注入 */
+  degraded: boolean;
+  /** 按顺序记录的工具名，用于埋点和评测 */
+  toolCallNames: string[];
+  /** 本次实际用到的记忆，回传给前端展示 */
+  memories: MemoryPromptItem[];
+};
+
+export type GenerateOptions = {
+  /** 工具执行依赖；没传时退回单次调用 */
+  toolDeps?: ToolDeps;
+  /** 测试用：注入 OpenAI client，生产环境不传 */
+  client?: OpenAI;
+};
+
+/** 保留原有调用方式；需要 token、工具和重试信息时用 generateDraftWithUsage */
 export async function generateDraft(
   context: PromptContext,
+  options: GenerateOptions = {},
 ): Promise<ReviewDraft> {
-  const { draft } = await generateDraftWithUsage(context);
+  const { draft } = await generateDraftWithUsage(context, options);
   return draft;
+}
+
+type CallOnceResult = {
+  content: string;
+  promptTokens: number;
+  completionTokens: number;
+};
+
+async function callOnce(input: {
+  client: OpenAI;
+  model: string;
+  messages: ChatCompletionMessageParam[];
+  temperature: number;
+  timeout: number;
+}): Promise<CallOnceResult> {
+  let completion;
+
+  try {
+    completion = await input.client.chat.completions.create(
+      {
+        model: input.model,
+        messages: input.messages,
+        temperature: input.temperature,
+        max_tokens: 3000,
+        response_format: { type: "json_object" },
+      },
+      { timeout: input.timeout },
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "未知错误";
+    throw new AiError(`AI 调用失败：${message}`, "request");
+  }
+
+  const content = completion.choices[0]?.message?.content?.trim() ?? "";
+
+  if (completion.usage) {
+    console.info(
+      `[ai] ${input.model} tokens: prompt=${completion.usage.prompt_tokens}, completion=${completion.usage.completion_tokens}`,
+    );
+  }
+
+  return {
+    content,
+    promptTokens: completion.usage?.prompt_tokens ?? 0,
+    completionTokens: completion.usage?.completion_tokens ?? 0,
+  };
+}
+
+function toMessages(context: PromptContext): ChatCompletionMessageParam[] {
+  return buildPromptMessages(context).map((message) => ({
+    role: message.role,
+    content: message.content,
+  }));
 }
 
 export async function generateDraftWithUsage(
   context: PromptContext,
-): Promise<{ draft: ReviewDraft; usage: AiUsage }> {
-  const client = createClient();
+  options: GenerateOptions = {},
+): Promise<GenerateResult> {
+  const client = options.client ?? createClient();
   const model = getAiModelName();
+  const startedAt = Date.now();
 
-  const messages: ChatCompletionMessageParam[] = buildPromptMessages(
-    context,
-  ).map((message) => ({
-    role: message.role,
-    content: message.content,
-  }));
-
-  let content = "";
   const usage: AiUsage = {
     promptTokens: 0,
     completionTokens: 0,
     retried: false,
   };
 
-  try {
-    const completion = await client.chat.completions.create({
+  let messages = toMessages(context);
+  let content = "";
+  let toolRounds = 1;
+  let degraded = false;
+  let toolCallNames: string[] = [];
+  let memories: MemoryPromptItem[] = context.memories;
+
+  const useTools =
+    context.toolsEnabled === true &&
+    context.mode !== "restyle" &&
+    options.toolDeps !== undefined;
+
+  if (useTools && options.toolDeps) {
+    try {
+      const result = await runAgent({
+        client,
+        model,
+        messages,
+        deps: options.toolDeps,
+        budgetMs: AGENT_BUDGET_MS,
+      });
+
+      content = result.content;
+      usage.promptTokens += result.promptTokens;
+      usage.completionTokens += result.completionTokens;
+      toolRounds = result.rounds;
+      toolCallNames = result.toolCallNames;
+      memories = result.memories;
+    } catch (error) {
+      // 模型不支持 tools 时退回预注入，保证换模型后线上不中断
+      if (!isToolsUnsupportedError(error)) throw error;
+
+      console.warn(
+        "[ai] 当前模型不支持工具调用，已降级到预注入模式：",
+        error instanceof Error ? error.message : error,
+      );
+
+      degraded = true;
+      toolRounds = 1;
+      messages = toMessages({ ...context, toolsEnabled: false });
+      memories = context.memories;
+
+      const fallback = await callOnce({
+        client,
+        model,
+        messages,
+        temperature: 0.25,
+        timeout: Math.min(
+          25_000,
+          Math.max(1_000, TOTAL_BUDGET_MS - (Date.now() - startedAt)),
+        ),
+      });
+
+      content = fallback.content;
+      usage.promptTokens += fallback.promptTokens;
+      usage.completionTokens += fallback.completionTokens;
+    }
+  } else {
+    const result = await callOnce({
+      client,
       model,
       messages,
       temperature: 0.25,
-      max_tokens: 3000,
-      response_format: { type: "json_object" },
+      timeout: 25_000,
     });
 
-    content = completion.choices[0]?.message?.content?.trim() ?? "";
-
-    if (completion.usage) {
-      usage.promptTokens += completion.usage.prompt_tokens ?? 0;
-      usage.completionTokens += completion.usage.completion_tokens ?? 0;
-      console.info(
-        `[ai] ${model} tokens: prompt=${completion.usage.prompt_tokens}, completion=${completion.usage.completion_tokens}`,
-      );
-    }
-  } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "未知错误";
-    throw new AiError(`AI 调用失败：${message}`, "request");
+    content = result.content;
+    usage.promptTokens += result.promptTokens;
+    usage.completionTokens += result.completionTokens;
   }
 
   const first = parseDraft(content);
   if (first.draft) {
-    return { draft: finalizeDraft(first.draft, context), usage };
+    return {
+      draft: finalizeDraft(first.draft, context),
+      usage,
+      toolRounds,
+      degraded,
+      toolCallNames,
+      memories,
+    };
   }
 
-  // 第一次格式不对时，把错误告诉模型再试一次
+  // 第一次格式不对时，把错误告诉模型再试一次；重试不再带工具，避免继续消耗预算
+  const remaining = TOTAL_BUDGET_MS - (Date.now() - startedAt);
+  if (remaining < MIN_RETRY_BUDGET_MS) {
+    throw new AiError(first.error || "AI 返回内容格式不对", "output");
+  }
+
   usage.retried = true;
-  const retryMessages: ChatCompletionMessageParam[] = [
-    ...messages,
-    { role: "assistant", content: content || "（空输出）" },
-    {
-      role: "user",
-      content: `上面的输出不能使用：${first.error}。请只输出修正后的完整 JSON，不要输出解释或 Markdown 代码块。`,
-    },
-  ];
 
-  try {
-    const retry = await client.chat.completions.create({
-      model,
-      messages: retryMessages,
-      temperature: 0.1,
-      max_tokens: 3000,
-      response_format: { type: "json_object" },
-    });
+  const retry = await callOnce({
+    client,
+    model,
+    messages: [
+      ...messages,
+      { role: "assistant", content: content || "（空输出）" },
+      {
+        role: "user",
+        content: `上面的输出不能使用：${first.error}。请只输出修正后的完整 JSON，不要输出解释或 Markdown 代码块。`,
+      },
+    ],
+    temperature: 0.1,
+    timeout: Math.min(25_000, remaining),
+  });
 
-    const retryContent = retry.choices[0]?.message?.content?.trim() ?? "";
-    const second = parseDraft(retryContent);
+  usage.promptTokens += retry.promptTokens;
+  usage.completionTokens += retry.completionTokens;
 
-    if (retry.usage) {
-      usage.promptTokens += retry.usage.prompt_tokens ?? 0;
-      usage.completionTokens += retry.usage.completion_tokens ?? 0;
-    }
-
-    if (second.draft) {
-      return { draft: finalizeDraft(second.draft, context), usage };
-    }
-
-    throw new AiError(
-      "AI 返回的内容格式不对，已自动重试一次，请稍后再试",
-      "output",
-    );
-  } catch (error) {
-    if (error instanceof AiError) throw error;
-    const message = error instanceof Error ? error.message : "未知错误";
-    throw new AiError(`AI 重试失败：${message}`, "request");
+  const second = parseDraft(retry.content);
+  if (second.draft) {
+    return {
+      draft: finalizeDraft(second.draft, context),
+      usage,
+      toolRounds,
+      degraded,
+      toolCallNames,
+      memories,
+    };
   }
-}
 
+  throw new AiError(
+    "AI 返回的内容格式不对，已自动重试一次，请稍后再试",
+    "output",
+  );
+}
 
 export function finalizeDraft(
   draft: ReviewDraft,

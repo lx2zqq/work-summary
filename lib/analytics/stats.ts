@@ -25,8 +25,12 @@ export type StatsSummary = {
   copyRate: number;
   avgItemDelta: number | null;
   avgCharDelta: number | null;
-  /** 生成时带上记忆的请求比例；不代表记忆一定被采纳 */
+  /** 生成前服务端准备了记忆的请求比例；工具模式下不代表模型真的查过 */
   memoryHitRate: number;
+  /** 模型实际查到记忆的生成比例；只有工具模式的数据才有 */
+  toolMemoryHitRate: number;
+  /** 平均每次生成调用工具的次数 */
+  avgToolCalls: number | null;
   memoryExtractions: number;
 };
 
@@ -128,6 +132,14 @@ export function summarizeEvents(input: StatsEvent[]): StatsSummary {
     (event) => (toNumber(event.properties.memoryCount) ?? 0) > 0,
   ).length;
 
+  const toolMemoryStarts = finished.filter(
+    (event) => (toNumber(event.properties.usedMemoryCount) ?? 0) > 0,
+  ).length;
+
+  const toolCallCounts = finished
+    .map((event) => toNumber(event.properties.toolCallCount))
+    .filter((value): value is number => value !== null);
+
   // 同一天可能重新生成多次：取最后一次最终稿和最后一次保存做对比
   const finalByDate = new Map<string, StatsEvent>();
   for (const event of finalFinished) {
@@ -184,6 +196,8 @@ export function summarizeEvents(input: StatsEvent[]): StatsSummary {
     avgItemDelta: average(itemDeltas),
     avgCharDelta: average(charDeltas),
     memoryHitRate: ratio(memoryStarts, started.length),
+    toolMemoryHitRate: ratio(toolMemoryStarts, finished.length),
+    avgToolCalls: average(toolCallCounts),
     memoryExtractions: memory.length,
   };
 }
@@ -214,6 +228,8 @@ export function formatStatsMarkdown(
     `| 平均条目改动数 | ${number(summary.avgItemDelta)} |`,
     `| 平均字数改动 | ${number(summary.avgCharDelta, 0)} |`,
     `| 记忆注入率 | ${percent(summary.memoryHitRate)} |`,
+    `| 工具记忆命中率 | ${percent(summary.toolMemoryHitRate)} |`,
+    `| 平均工具调用次数 | ${number(summary.avgToolCalls, 2)} |`,
     `| 记忆提取次数 | ${summary.memoryExtractions} |`,
   ].join("\n");
 }

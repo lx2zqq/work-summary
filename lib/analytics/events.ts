@@ -45,12 +45,18 @@ export const eventPropertiesSchema = z
     inputCharCount: count(100_000),
     answerCount: count(200),
     memoryCount: count(200),
+    /** 模型实际查到的记忆条数；工具模式下才是真实使用量 */
+    usedMemoryCount: count(200),
     answeredCount: count(20),
     usedOptionCount: count(20),
     skipped: z.boolean().optional(),
     created: count(50),
     updated: count(50),
-    errorKind: z.enum(["config", "request", "output"]).optional(),
+    errorKind: z.enum(["config", "request", "output", "timeout"]).optional(),
+    /** 本次生成调用的工具次数和模型轮数，只记数量不记参数 */
+    toolCallCount: count(20),
+    toolRounds: z.number().int().min(0).max(10).optional(),
+    degraded: z.boolean().optional(),
   })
   .strict();
 

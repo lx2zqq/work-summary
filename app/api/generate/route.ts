@@ -4,11 +4,16 @@ import {
   generateDraftWithUsage,
   getAiErrorMessage,
   isAiConfigured,
+  resolveToolsMode,
 } from "@/lib/ai/deepseek";
 import { trackEvent } from "@/lib/analytics/events";
 import type { PromptContext } from "@/lib/ai/prompt";
+import type { ToolDeps } from "@/lib/ai/tools";
 import { firstIssue, requireApiSession } from "@/lib/api-helpers";
 import {
+  findMemories,
+  findReviews,
+  findStudents,
   getRecentReviews,
   getSettings,
   listActiveMemories,
@@ -28,7 +33,10 @@ import {
 
 export const maxDuration = 60;
 
-async function buildContext(input: GenerateRequest): Promise<PromptContext> {
+async function buildContext(
+  input: GenerateRequest,
+  toolsEnabled: boolean,
+): Promise<PromptContext> {
   // 串行读取，避免 Supabase 连接池在并发查询时卡住
   const settings = await getSettings();
   const students = await listStudents();
@@ -65,6 +73,37 @@ async function buildContext(input: GenerateRequest): Promise<PromptContext> {
       ? { ...normalizeDraft(input.currentDraft), questions: [] }
       : undefined,
     round: input.round,
+    // 工具模式下这些数据不再进 prompt，但降级时可以直接复用，不用二次查询
+    toolsEnabled,
+  };
+}
+
+/** 工具执行依赖：全部只读，且都受设置开关控制 */
+function buildToolDeps(settings: PromptContext["settings"]): ToolDeps {
+  return {
+    searchStudents: (input) =>
+      findStudents({
+        query: input.query,
+        status: input.status,
+        grade: input.grade,
+        limit: 20,
+      }),
+    searchMemories: (input) =>
+      settings.enableMemory
+        ? findMemories({
+            studentName: input.studentName,
+            keyword: input.keyword,
+            scope: input.scope,
+            limit: input.limit ?? 8,
+          })
+        : Promise.resolve([]),
+    searchReviews: (input) =>
+      findReviews({
+        keyword: input.keyword,
+        beforeDate: input.beforeDate,
+        afterDate: input.afterDate,
+        limit: input.limit ?? 2,
+      }),
   };
 }
 
@@ -83,10 +122,11 @@ export async function POST(request: Request) {
   }
 
   const input = parsed.data;
+  const toolsMode = resolveToolsMode();
   let context: PromptContext | null = null;
 
   try {
-    context = await buildContext(input);
+    context = await buildContext(input, toolsMode === "auto");
   } catch (error) {
     console.error("[generate:db]", error);
     return NextResponse.json(
@@ -139,7 +179,10 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { draft, usage } = await generateDraftWithUsage(context);
+    const { draft, usage, toolCallNames, toolRounds, degraded, memories } =
+      await generateDraftWithUsage(context, {
+        toolDeps: buildToolDeps(context.settings),
+      });
 
     await trackEvent({
       event: "generate_finished",
@@ -154,10 +197,14 @@ export async function POST(request: Request) {
         questionCount: draft.questions.length,
         itemCount: countDraftItems(draft),
         charCount: countDraftChars(draft),
+        toolCallCount: toolCallNames.length,
+        toolRounds,
+        degraded,
+        usedMemoryCount: memories.length,
       },
     });
 
-    return NextResponse.json({ draft, memories: context.memories });
+    return NextResponse.json({ draft, memories });
   } catch (error) {
     console.error("[generate:ai]", error);
 

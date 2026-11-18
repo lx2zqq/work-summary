@@ -1,4 +1,5 @@
 import type { PromptContext } from "@/lib/ai/prompt";
+import type { ToolDeps } from "@/lib/ai/tools";
 import type { EvalExpect } from "@/lib/eval/checks";
 import {
   DEFAULT_SETTINGS,
@@ -88,6 +89,56 @@ export function buildEvalContext(item: EvalCase): PromptContext {
     currentDraft: item.currentDraft,
     round:
       item.mode === "questions" ? 0 : MAX_FOLLOW_UP_ROUNDS,
+    // 改文风不走工具，其余用例都按工具模式评测
+    toolsEnabled: item.mode !== "restyle",
+  };
+}
+
+/**
+ * 用用例里的假数据模拟数据库查询。
+ * 只做简单的包含匹配，够验证“模型有没有查、查到什么”，不追求和 SQL 等价。
+ */
+export function buildEvalToolDeps(item: EvalCase): ToolDeps {
+  const students: Student[] = (item.studentNames ?? []).map(
+    (name, index) => ({
+      id: STUDENT_IDS[index % STUDENT_IDS.length],
+      name,
+      grade: null,
+      subjects: null,
+      status: "在读",
+      note: null,
+    }),
+  );
+
+  const memories: MemoryPromptItem[] = (item.memories ?? []).map(
+    (memory, index) => ({
+      id: `memory-${index + 1}`,
+      scope: memory.studentName ? "student" : "general",
+      studentName: memory.studentName ?? null,
+      category: memory.category,
+      content: memory.content,
+      importance: memory.importance ?? 2,
+    }),
+  );
+
+  return {
+    searchStudents: async (input) =>
+      students.filter(
+        (student) =>
+          (!input.query || student.name.includes(input.query)) &&
+          (!input.grade || (student.grade ?? "").includes(input.grade)),
+      ),
+    searchMemories: async (input) =>
+      memories
+        .filter(
+          (memory) =>
+            (!input.studentName ||
+              (memory.studentName ?? "").includes(input.studentName)) &&
+            (!input.keyword || memory.content.includes(input.keyword)) &&
+            (!input.scope || memory.scope === input.scope),
+        )
+        .slice(0, input.limit ?? 8),
+    searchReviews: async () => [],
   };
 }
 

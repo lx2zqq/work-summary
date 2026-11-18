@@ -8,6 +8,7 @@ import { percentile } from "@/lib/analytics/stats";
 import {
   EVAL_CASES,
   buildEvalContext,
+  buildEvalToolDeps,
   validateCase,
   type EvalCase,
 } from "@/eval/cases";
@@ -32,6 +33,9 @@ type CaseResult = {
   durationMs: number;
   promptTokens: number;
   completionTokens: number;
+  toolCallNames: string[];
+  toolRounds: number;
+  degraded: boolean;
   checks: CheckResult[];
   judge?: JudgeScore;
   judgeError?: string;
@@ -48,6 +52,9 @@ type Summary = {
   p95DurationMs: number | null;
   avgPromptTokens: number | null;
   avgCompletionTokens: number | null;
+  avgToolCalls: number | null;
+  toolCallRate: number;
+  degradedCount: number;
 };
 
 const args = process.argv.slice(2);
@@ -167,10 +174,23 @@ function checkPrompts(
       issues.push("prompt 缺少流水账");
     }
 
+    const usesTools = item.mode !== "restyle";
+    // 工具模式下学生和记忆不再进 prompt，但必须能通过工具查到
+    const background = [
+      ...(item.studentNames ?? []),
+      ...(item.memories ?? []).map((memory) =>
+        `${memory.studentName ?? ""} ${memory.content}`,
+      ),
+    ].join("\n");
+
     for (const value of item.promptIncludes ?? []) {
-      if (!prompt.includes(value)) {
-        issues.push(`prompt 缺少“${value}”`);
-      }
+      if (prompt.includes(value)) continue;
+      if (usesTools && background.includes(value)) continue;
+      issues.push(`prompt 缺少“${value}”`);
+    }
+
+    if (usesTools && !prompt.includes("【可用工具】")) {
+      issues.push("工具模式缺少工具说明");
     }
 
     if (
@@ -189,7 +209,8 @@ function checkPrompts(
       issues.push("restyle 提示词不完整");
     }
 
-    if (item.mode !== "restyle") {
+    // 工具模式下名单由 search_students 提供，不再要求出现在 prompt 里
+    if (!usesTools) {
       for (const name of item.studentNames ?? []) {
         if (!prompt.includes(name)) {
           issues.push(`prompt 缺少学生“${name}”`);
@@ -276,6 +297,10 @@ function summarize(results: CaseResult[]): Summary {
     .filter((result) => result.completionTokens > 0)
     .map((result) => result.completionTokens);
 
+  const withToolCalls = results.filter(
+    (result) => result.toolCallNames.length > 0,
+  ).length;
+
   return {
     total: results.length,
     passed,
@@ -286,6 +311,11 @@ function summarize(results: CaseResult[]): Summary {
     p95DurationMs: percentile(durations, 0.95),
     avgPromptTokens: average(promptTokens),
     avgCompletionTokens: average(completionTokens),
+    avgToolCalls: average(
+      results.map((result) => result.toolCallNames.length),
+    ),
+    toolCallRate: results.length === 0 ? 0 : withToolCalls / results.length,
+    degradedCount: results.filter((result) => result.degraded).length,
   };
 }
 
@@ -336,6 +366,9 @@ function formatAiReport(report: {
     `| P95 耗时 | ${summary.p95DurationMs?.toFixed(0) ?? "—"} ms |`,
     `| 平均 prompt tokens | ${summary.avgPromptTokens?.toFixed(0) ?? "—"} |`,
     `| 平均 completion tokens | ${summary.avgCompletionTokens?.toFixed(0) ?? "—"} |`,
+    `| 平均工具调用次数 | ${summary.avgToolCalls?.toFixed(2) ?? "—"} |`,
+    `| 发生过工具调用的用例 | ${(summary.toolCallRate * 100).toFixed(0)}% |`,
+    `| 降级次数 | ${summary.degradedCount} |`,
     "",
     "## 分类",
     "",
@@ -458,9 +491,10 @@ async function runAi(
       const startedAt = Date.now();
 
       try {
-        const { draft, usage } = await generateDraftWithUsage(
-          buildEvalContext(item),
-        );
+        const { draft, usage, toolCallNames, toolRounds, degraded } =
+          await generateDraftWithUsage(buildEvalContext(item), {
+            toolDeps: buildEvalToolDeps(item),
+          });
 
         const checks = runChecks({
           mode: item.mode,
@@ -470,6 +504,9 @@ async function runAi(
           rawInput: item.rawInput,
           answers: item.answers ?? [],
           beforeDraft: item.currentDraft,
+          // 改文风不走工具，传 undefined 表示跳过工具检查
+          toolCallNames: item.mode === "restyle" ? undefined : toolCallNames,
+          studentNames: item.studentNames,
         });
 
         let judge: JudgeScore | undefined;
@@ -496,6 +533,9 @@ async function runAi(
           durationMs: Date.now() - startedAt,
           promptTokens: usage.promptTokens,
           completionTokens: usage.completionTokens,
+          toolCallNames,
+          toolRounds,
+          degraded,
           checks,
           judge,
           judgeError,
@@ -517,6 +557,9 @@ async function runAi(
             durationMs: Date.now() - startedAt,
             promptTokens: 0,
             completionTokens: 0,
+            toolCallNames: [],
+            toolRounds: 1,
+            degraded: false,
             checks: [
               {
                 name: "空输入保护",
@@ -534,6 +577,9 @@ async function runAi(
           durationMs: Date.now() - startedAt,
           promptTokens: 0,
           completionTokens: 0,
+          toolCallNames: [],
+          toolRounds: 0,
+          degraded: false,
           checks: [],
           error: message,
         };

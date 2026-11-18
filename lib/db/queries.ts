@@ -1,6 +1,6 @@
 import "server-only";
 
-import { desc, eq, lt } from "drizzle-orm";
+import { and, desc, eq, gte, ilike, lt } from "drizzle-orm";
 import { normalizeDraft } from "@/lib/draft";
 import type { StudentInput } from "@/lib/schema";
 import { renderReview } from "@/lib/template";
@@ -11,6 +11,8 @@ import {
   type AppSettings,
   type Memory,
   type MemoryInput,
+  type MemoryPromptItem,
+  type MemoryScope,
   type QAPair,
   type ReviewDraft,
   type ReviewListItem,
@@ -362,6 +364,105 @@ export async function deleteMemory(id: string): Promise<boolean> {
     .returning({ id: memories.id });
 
   return Boolean(row);
+}
+
+/** 工具 search_students 的查询实现：所有条件都是可选的模糊/等值匹配 */
+export async function findStudents(input: {
+  query?: string;
+  status?: StudentStatus;
+  grade?: string;
+  limit?: number;
+}): Promise<Student[]> {
+  const conditions = [];
+
+  if (input.query) {
+    conditions.push(ilike(students.name, `%${input.query}%`));
+  }
+  if (input.status) {
+    conditions.push(eq(students.status, input.status));
+  }
+  if (input.grade) {
+    conditions.push(ilike(students.grade, `%${input.grade}%`));
+  }
+
+  const rows = await getDb()
+    .select()
+    .from(students)
+    .where(conditions.length > 0 ? and(...conditions) : undefined)
+    .orderBy(students.createdAt)
+    .limit(input.limit ?? 20);
+
+  return rows.map(mapStudent);
+}
+
+/** 工具 search_memories 的查询实现：不传条件时返回重要度最高的几条 */
+export async function findMemories(input: {
+  studentName?: string;
+  keyword?: string;
+  scope?: MemoryScope;
+  limit?: number;
+}): Promise<MemoryPromptItem[]> {
+  const conditions = [eq(memories.status, "active")];
+
+  if (input.studentName) {
+    conditions.push(ilike(memories.studentName, `%${input.studentName}%`));
+  }
+  if (input.keyword) {
+    conditions.push(ilike(memories.content, `%${input.keyword}%`));
+  }
+  if (input.scope) {
+    conditions.push(eq(memories.scope, input.scope));
+  }
+
+  const rows = await getDb()
+    .select()
+    .from(memories)
+    .where(and(...conditions))
+    .orderBy(desc(memories.importance), desc(memories.updatedAt))
+    .limit(input.limit ?? 8);
+
+  return rows.map((row) => ({
+    id: row.id,
+    scope: row.scope,
+    studentName: row.studentName,
+    category: row.category,
+    content: row.content,
+    importance: row.importance,
+  }));
+}
+
+/** 工具 search_reviews 的查询实现：按关键词和日期范围查历史正文 */
+export async function findReviews(input: {
+  keyword?: string;
+  beforeDate?: string;
+  afterDate?: string;
+  limit?: number;
+}): Promise<Array<{ date: string; text: string }>> {
+  const conditions = [];
+
+  if (input.beforeDate) {
+    conditions.push(lt(reviews.reviewDate, input.beforeDate));
+  }
+  if (input.afterDate) {
+    conditions.push(gte(reviews.reviewDate, input.afterDate));
+  }
+  if (input.keyword) {
+    conditions.push(ilike(reviews.finalText, `%${input.keyword}%`));
+  }
+
+  const rows = await getDb()
+    .select({
+      reviewDate: reviews.reviewDate,
+      finalText: reviews.finalText,
+    })
+    .from(reviews)
+    .where(conditions.length > 0 ? and(...conditions) : undefined)
+    .orderBy(desc(reviews.reviewDate))
+    .limit(input.limit ?? 2);
+
+  return rows
+    .filter((row) => row.finalText.trim().length > 0)
+    .map((row) => ({ date: row.reviewDate, text: row.finalText }));
 }
 
 export async function markMemoryExtracted(date: string): Promise<string> {

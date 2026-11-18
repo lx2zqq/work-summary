@@ -29,6 +29,8 @@ export type EvalExpect = {
   detailedMustBeLonger?: boolean;
   /** 输入几乎没有信息量时，空正文是正确行为 */
   allowEmpty?: boolean;
+  /** 必须调用过的工具名，用于验证工具模式真的在查数据 */
+  toolCalls?: string[];
 };
 
 export type CheckInput = {
@@ -39,6 +41,10 @@ export type CheckInput = {
   rawInput: string;
   answers: QAPair[];
   beforeDraft?: ReviewDraft;
+  /** 本次生成实际调用过的工具；不传表示不是工具模式，跳过工具检查 */
+  toolCallNames?: string[];
+  /** 学生名单，用于检查“提到学生却没查记忆” */
+  studentNames?: string[];
 };
 
 export type CheckResult = {
@@ -235,7 +241,30 @@ export function runChecks(input: CheckInput): CheckResult[] {
     results.push(result("追问质量", issues));
   }
 
-  // 6. 占位词
+  // 6. 工具调用
+  if (input.toolCallNames) {
+    const issues: string[] = [];
+    const called = new Set(input.toolCallNames);
+
+    for (const name of expect.toolCalls ?? []) {
+      if (!called.has(name)) issues.push(`没有调用 ${name}`);
+    }
+
+    // 流水账提到了学生，却一次都没查记忆，说明模型跳过了背景查询
+    if (mode !== "restyle") {
+      const mentioned = (input.studentNames ?? []).filter((name) =>
+        input.rawInput.includes(name),
+      );
+
+      if (mentioned.length > 0 && !called.has("search_memories")) {
+        issues.push(`提到了 ${mentioned.join("、")} 但没有查询记忆`);
+      }
+    }
+
+    results.push(result("工具调用", issues));
+  }
+
+  // 7. 占位词
   if (expect.noPlaceholders !== false) {
     const found = PLACEHOLDERS.filter((value) => allText.includes(value));
     results.push(
