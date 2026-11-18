@@ -30,6 +30,8 @@ type Props = {
   initialAnswers?: Record<string, QuestionAnswer>;
   onSubmit: (answers: QAPair[]) => void;
   onSkip: () => void;
+  /** 演示模式：记忆链接改为登录页 */
+  demoMode?: boolean;
 };
 
 export function QuestionsCard({
@@ -41,6 +43,7 @@ export function QuestionsCard({
   initialAnswers,
   onSubmit,
   onSkip,
+  demoMode = false,
 }: Props) {
   const [answers, setAnswers] = useState<Record<string, QuestionAnswer>>(
     () => initialAnswers ?? {},
@@ -128,7 +131,10 @@ export function QuestionsCard({
                   +{memories.length - 3}
                 </span>
               ) : null}
-              <Link href="/memories" className="underline">
+              <Link
+                href={demoMode ? "/login" : "/memories"}
+                className="underline"
+              >
                 查看
               </Link>
             </div>

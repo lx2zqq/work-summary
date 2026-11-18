@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { LoginForm } from "@/components/login-form";
 import {
@@ -42,6 +43,15 @@ export default async function LoginPage({
         <div className="paper-card relative mt-6 p-6">
           <span className="washi-tape" />
           <LoginForm next={safeNext} />
+        </div>
+
+        <div className="mt-4 text-center">
+          <Link
+            href="/demo"
+            className="text-sm font-bold text-brand-deep underline underline-offset-4 hover:text-brand"
+          >
+            先看看效果，不用密码
+          </Link>
         </div>
 
         <div className="mt-5 flex justify-center gap-2 text-brand/60">

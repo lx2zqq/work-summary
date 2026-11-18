@@ -35,6 +35,8 @@ type Props = {
   onEdit: () => void;
   onRegenerate: () => void;
   onExtractMemory: () => void;
+  /** 演示模式：记忆链接改为登录页 */
+  demoMode?: boolean;
 };
 
 export function DraftCard({
@@ -53,6 +55,7 @@ export function DraftCard({
   onEdit,
   onRegenerate,
   onExtractMemory,
+  demoMode = false,
 }: Props) {
   return (
     <section className="paper-card relative flex min-h-[540px] flex-col">
@@ -72,7 +75,10 @@ export function DraftCard({
               <p className="mt-0.5 flex items-center gap-1 text-[10px] text-ink-soft/80">
                 <Brain className="h-3 w-3" />
                 记忆 {memories.length} 条
-                <Link href="/memories" className="underline">
+                <Link
+                  href={demoMode ? "/login" : "/memories"}
+                  className="underline"
+                >
                   查看
                 </Link>
               </p>

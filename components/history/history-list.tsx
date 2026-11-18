@@ -11,7 +11,14 @@ import { formatDateCN, weekdayCN } from "@/lib/date";
 import type { ReviewListItem } from "@/lib/types";
 import { truncate } from "@/lib/utils";
 
-export function HistoryList({ items }: { items: ReviewListItem[] }) {
+export function HistoryList({
+  items,
+  demoMode = false,
+}: {
+  items: ReviewListItem[];
+  /** 演示模式：隐藏“打开”，避免跳回真实工作台 */
+  demoMode?: boolean;
+}) {
   if (items.length === 0) {
     return (
       <div className="paper-card border-dashed px-6 py-14 text-center">
@@ -80,13 +87,15 @@ export function HistoryList({ items }: { items: ReviewListItem[] }) {
                 <Copy className="h-4 w-4" />
                 复制
               </Button>
-              <Link
-                href={`/?date=${item.reviewDate}`}
-                className="inline-flex h-9 items-center gap-2 rounded-full border-2 border-line bg-paper px-3.5 text-xs font-bold text-ink-soft shadow-[0_3px_0_#eadccd] transition-all hover:-translate-y-0.5 hover:bg-cream hover:text-ink active:translate-y-0.5 active:shadow-none"
-              >
-                <ExternalLink className="h-4 w-4" />
-                打开
-              </Link>
+              {demoMode ? null : (
+                <Link
+                  href={`/?date=${item.reviewDate}`}
+                  className="inline-flex h-9 items-center gap-2 rounded-full border-2 border-line bg-paper px-3.5 text-xs font-bold text-ink-soft shadow-[0_3px_0_#eadccd] transition-all hover:-translate-y-0.5 hover:bg-cream hover:text-ink active:translate-y-0.5 active:shadow-none"
+                >
+                  <ExternalLink className="h-4 w-4" />
+                  打开
+                </Link>
+              )}
             </div>
           </div>
         </article>

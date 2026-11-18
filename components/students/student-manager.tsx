@@ -44,10 +44,18 @@ const EMPTY_FORM: FormState = {
   note: "",
 };
 
+/** 演示模式用内存实现；生产不传，走接口 */
+export type StudentStore = {
+  save: (id: string | null, input: Omit<Student, "id">) => Promise<Student>;
+  remove: (id: string) => Promise<void>;
+};
+
 export function StudentManager({
   initialStudents,
+  store,
 }: {
   initialStudents: Student[];
+  store?: StudentStore;
 }) {
   const [students, setStudents] = useState(initialStudents);
   const [open, setOpen] = useState(false);
@@ -85,31 +93,38 @@ export function StudentManager({
 
     setSaving(true);
 
+    const payload = {
+      name: form.name,
+      grade: form.grade || null,
+      subjects: form.subjects || null,
+      status: form.status,
+      note: form.note || null,
+    };
+
     try {
-      const response = await fetch(
-        editing ? `/api/students/${editing.id}` : "/api/students",
-        {
-          method: editing ? "PATCH" : "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: form.name,
-            grade: form.grade || null,
-            subjects: form.subjects || null,
-            status: form.status,
-            note: form.note || null,
-          }),
-        },
-      );
-      const data = (await response.json().catch(() => ({}))) as {
-        error?: string;
-        student?: Student;
-      };
+      const student = store
+        ? await store.save(editing?.id ?? null, payload)
+        : await (async () => {
+            const response = await fetch(
+              editing ? `/api/students/${editing.id}` : "/api/students",
+              {
+                method: editing ? "PATCH" : "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload),
+              },
+            );
+            const data = (await response.json().catch(() => ({}))) as {
+              error?: string;
+              student?: Student;
+            };
 
-      if (!response.ok || !data.student) {
-        throw new Error(data.error || "保存失败");
-      }
+            if (!response.ok || !data.student) {
+              throw new Error(data.error || "保存失败");
+            }
 
-      const student = data.student;
+            return data.student;
+          })();
+
       setStudents((previous) =>
         editing
           ? previous.map((item) =>
@@ -132,15 +147,19 @@ export function StudentManager({
     setDeleting(true);
 
     try {
-      const response = await fetch(`/api/students/${deleteTarget.id}`, {
-        method: "DELETE",
-      });
-      const data = (await response.json().catch(() => ({}))) as {
-        error?: string;
-      };
+      if (store) {
+        await store.remove(deleteTarget.id);
+      } else {
+        const response = await fetch(`/api/students/${deleteTarget.id}`, {
+          method: "DELETE",
+        });
+        const data = (await response.json().catch(() => ({}))) as {
+          error?: string;
+        };
 
-      if (!response.ok) {
-        throw new Error(data.error || "删除失败");
+        if (!response.ok) {
+          throw new Error(data.error || "删除失败");
+        }
       }
 
       setStudents((previous) =>

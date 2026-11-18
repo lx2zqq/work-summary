@@ -25,28 +25,50 @@ const NAV: NavItem[] = [
   { href: "/settings", label: "设置", icon: Settings },
 ];
 
-export function AppShell({ children }: { children: React.ReactNode }) {
+export function AppShell({
+  children,
+  basePath = "",
+}: {
+  children: React.ReactNode;
+  /** 演示模式传 "/demo"，所有导航都指到演示路由 */
+  basePath?: string;
+}) {
+  const isDemo = basePath.length > 0;
+  const hrefFor = (href: string) =>
+    href === "/" ? basePath || "/" : `${basePath}${href}`;
+  const brandClass = "group flex items-center gap-2.5";
+
+  const brand = (
+    <>
+      <span className="relative flex h-11 w-11 items-center justify-center rounded-full border-2 border-cocoa/20 bg-brand-soft shadow-[0_3px_0_#f0d4dd] transition-transform group-hover:-rotate-3">
+        <MascotFace className="h-9 w-9" />
+        <DoodleStar className="absolute -right-1 -top-1 h-3.5 w-3.5 text-butter" />
+      </span>
+      <span className="leading-tight">
+        <span className="block text-[15px] font-extrabold tracking-tight text-ink">
+          学管复盘助手
+        </span>
+        <span className="block text-[11px] text-ink-soft">
+          今天的流水账，变成规范的复盘
+        </span>
+      </span>
+    </>
+  );
+
   return (
     <div className="min-h-dvh">
       <header className="sticky top-0 z-30 border-b-2 border-line/70 bg-cream/90 pt-[env(safe-area-inset-top)] backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-3 px-4 sm:px-6">
-          <HomeNavLink className="group flex items-center gap-2.5">
-            <span className="relative flex h-11 w-11 items-center justify-center rounded-full border-2 border-cocoa/20 bg-brand-soft shadow-[0_3px_0_#f0d4dd] transition-transform group-hover:-rotate-3">
-              <MascotFace className="h-9 w-9" />
-              <DoodleStar className="absolute -right-1 -top-1 h-3.5 w-3.5 text-butter" />
-            </span>
-            <span className="leading-tight">
-              <span className="block text-[15px] font-extrabold tracking-tight text-ink">
-                学管复盘助手
-              </span>
-              <span className="block text-[11px] text-ink-soft">
-                今天的流水账，变成规范的复盘
-              </span>
-            </span>
-          </HomeNavLink>
+          {isDemo ? (
+            <Link href={basePath} className={brandClass}>
+              {brand}
+            </Link>
+          ) : (
+            <HomeNavLink className={brandClass}>{brand}</HomeNavLink>
+          )}
 
           <div className="flex items-center gap-2">
-            <GenerationIndicator />
+            {isDemo ? null : <GenerationIndicator />}
             <nav className="hidden items-center gap-1.5 md:flex">
               {NAV.map((item) => {
                 const Icon = item.icon;
@@ -59,14 +81,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   </>
                 );
 
-                return item.href === "/" ? (
+                return !isDemo && item.href === "/" ? (
                   <HomeNavLink key={item.href} className={className}>
                     {content}
                   </HomeNavLink>
                 ) : (
                   <Link
                     key={item.href}
-                    href={item.href}
+                    href={hrefFor(item.href)}
                     className={className}
                   >
                     {content}
@@ -97,12 +119,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </>
             );
 
-            return item.href === "/" ? (
+            return !isDemo && item.href === "/" ? (
               <HomeNavLink key={item.href} className={className}>
                 {content}
               </HomeNavLink>
             ) : (
-              <Link key={item.href} href={item.href} className={className}>
+              <Link
+                key={item.href}
+                href={hrefFor(item.href)}
+                className={className}
+              >
                 {content}
               </Link>
             );

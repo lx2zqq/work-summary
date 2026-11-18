@@ -73,6 +73,8 @@ type Props = {
   loading: boolean;
   onChange: (value: string) => void;
   onGenerate: () => void;
+  /** 演示模式：隐藏语音（会调转写接口），链接改登录页 */
+  demoMode?: boolean;
 };
 
 export function RawInputCard({
@@ -83,6 +85,7 @@ export function RawInputCard({
   loading,
   onChange,
   onGenerate,
+  demoMode = false,
 }: Props) {
   const [forceRecorder, setForceRecorder] = useState(false);
   const androidWeChat = useSyncExternalStore(
@@ -206,7 +209,7 @@ export function RawInputCard({
           <Users className="h-3.5 w-3.5" />
           <span>还没有学生名单</span>
           <Link
-            href="/students"
+            href={demoMode ? "/login" : "/students"}
             className="font-bold text-brand-deep underline underline-offset-2"
           >
             去添加
@@ -214,6 +217,7 @@ export function RawInputCard({
         </div>
       )}
 
+      {demoMode ? null : (
       <div className="mt-3 flex justify-end">
         <button
           type="button"
@@ -248,6 +252,7 @@ export function RawInputCard({
           ) : null}
         </button>
       </div>
+      )}
 
       <Textarea
         aria-label="工作流水账"

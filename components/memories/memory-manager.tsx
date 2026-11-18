@@ -16,14 +16,22 @@ import {
   MEMORY_CATEGORIES,
   type Memory,
   type MemoryCategory,
+  type MemoryInput,
   type MemoryScope,
   type Student,
 } from "@/lib/types";
+
+/** 演示模式用内存实现；生产不传，走接口 */
+export type MemoryStore = {
+  save: (id: string | null, input: MemoryInput) => Promise<Memory>;
+  remove: (id: string) => Promise<void>;
+};
 
 type Props = {
   initialMemories: Memory[];
   students: Student[];
   memoryEnabled: boolean;
+  store?: MemoryStore;
 };
 
 type FormState = {
@@ -108,6 +116,7 @@ export function MemoryManager({
   initialMemories,
   students,
   memoryEnabled,
+  store,
 }: Props) {
   const [memories, setMemories] = useState(initialMemories);
   const [query, setQuery] = useState("");
@@ -186,36 +195,42 @@ export function MemoryManager({
 
     setSaving(true);
 
+    const payload = {
+      scope: form.scope,
+      studentId:
+        form.scope === "student" ? form.studentId || null : null,
+      studentName:
+        form.scope === "student"
+          ? form.studentName.trim() || null
+          : null,
+      category: form.category,
+      content,
+      importance: Number(form.importance),
+    };
+
     try {
-      const response = await fetch(
-        editing ? `/api/memories/${editing.id}` : "/api/memories",
-        {
-          method: editing ? "PATCH" : "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            scope: form.scope,
-            studentId:
-              form.scope === "student" ? form.studentId || null : null,
-            studentName:
-              form.scope === "student"
-                ? form.studentName.trim() || null
-                : null,
-            category: form.category,
-            content,
-            importance: Number(form.importance),
-          }),
-        },
-      );
-      const data = (await response.json().catch(() => ({}))) as {
-        error?: string;
-        memory?: Memory;
-      };
+      const memory = store
+        ? await store.save(editing?.id ?? null, payload)
+        : await (async () => {
+            const response = await fetch(
+              editing ? `/api/memories/${editing.id}` : "/api/memories",
+              {
+                method: editing ? "PATCH" : "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload),
+              },
+            );
+            const data = (await response.json().catch(() => ({}))) as {
+              error?: string;
+              memory?: Memory;
+            };
 
-      if (!response.ok || !data.memory) {
-        throw new Error(data.error || "保存失败");
-      }
+            if (!response.ok || !data.memory) {
+              throw new Error(data.error || "保存失败");
+            }
 
-      const memory = data.memory;
+            return data.memory;
+          })();
 
       setMemories((previous) =>
         editing
@@ -239,15 +254,19 @@ export function MemoryManager({
     setDeleting(true);
 
     try {
-      const response = await fetch(`/api/memories/${deleteTarget.id}`, {
-        method: "DELETE",
-      });
-      const data = (await response.json().catch(() => ({}))) as {
-        error?: string;
-      };
+      if (store) {
+        await store.remove(deleteTarget.id);
+      } else {
+        const response = await fetch(`/api/memories/${deleteTarget.id}`, {
+          method: "DELETE",
+        });
+        const data = (await response.json().catch(() => ({}))) as {
+          error?: string;
+        };
 
-      if (!response.ok) {
-        throw new Error(data.error || "删除失败");
+        if (!response.ok) {
+          throw new Error(data.error || "删除失败");
+        }
       }
 
       setMemories((previous) =>

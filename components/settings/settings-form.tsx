@@ -1,6 +1,7 @@
 "use client";
 
 import { Bot, LogOut, Settings2, Sparkles } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -18,10 +19,18 @@ import type {
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
+/** 演示模式用内存实现；生产不传，走接口 */
+export type SettingsStore = {
+  update: (patch: Partial<AppSettings>) => Promise<AppSettings>;
+};
+
 type Props = {
   initialSettings: AppSettings;
   aiModel: string;
   aiConfigured: boolean;
+  store?: SettingsStore;
+  /** 演示模式：隐藏退出登录，改成回登录页 */
+  demoMode?: boolean;
 };
 
 type ToggleKey =
@@ -78,6 +87,8 @@ export function SettingsForm({
   initialSettings,
   aiModel,
   aiConfigured,
+  store,
+  demoMode = false,
 }: Props) {
   const router = useRouter();
   const [settings, setSettings] = useState(initialSettings);
@@ -95,6 +106,12 @@ export function SettingsForm({
     setPendingKey(Object.keys(patch)[0] ?? "settings");
 
     try {
+      if (store) {
+        setSettings(await store.update(patch));
+        toast.success("设置已保存（演示，刷新后恢复默认）");
+        return;
+      }
+
       const response = await fetch("/api/settings", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -241,18 +258,30 @@ export function SettingsForm({
             </Badge>
           </div>
 
-          <div className="flex items-center justify-between gap-3 rounded-2xl bg-cream-deep/60 px-3.5 py-3">
-            <div className="text-sm font-bold text-ink">退出登录</div>
-            <Button
-              variant="danger"
-              size="sm"
-              loading={loggingOut}
-              onClick={handleLogout}
-            >
-              <LogOut className="h-4 w-4" />
-              退出
-            </Button>
-          </div>
+          {demoMode ? (
+            <div className="flex items-center justify-between gap-3 rounded-2xl bg-cream-deep/60 px-3.5 py-3">
+              <div className="text-sm font-bold text-ink">去真实环境</div>
+              <Link
+                href="/login"
+                className="inline-flex h-8 items-center rounded-full border-2 border-line bg-paper px-3.5 text-xs font-bold text-ink-soft"
+              >
+                去登录
+              </Link>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between gap-3 rounded-2xl bg-cream-deep/60 px-3.5 py-3">
+              <div className="text-sm font-bold text-ink">退出登录</div>
+              <Button
+                variant="danger"
+                size="sm"
+                loading={loggingOut}
+                onClick={handleLogout}
+              >
+                <LogOut className="h-4 w-4" />
+                退出
+              </Button>
+            </div>
+          )}
         </div>
       </section>
     </div>
