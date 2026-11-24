@@ -1,13 +1,6 @@
 "use client";
 
-import {
-  Brain,
-  Check,
-  Copy,
-  FileText,
-  Pencil,
-  RefreshCw,
-} from "lucide-react";
+import { Brain, Check, Copy, FileText, Pencil } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { ChiikawaMascot } from "@/components/mascots";
@@ -146,7 +139,6 @@ type Props = {
   sampleText: string;
   onCopy: () => void;
   onEdit: () => void;
-  onRegenerate: () => void;
   onExtractMemory: () => void;
   /** 演示模式：记忆链接改为登录页 */
   demoMode?: boolean;
@@ -170,7 +162,6 @@ export function DraftCard({
   sampleText,
   onCopy,
   onEdit,
-  onRegenerate,
   onExtractMemory,
   demoMode = false,
   streaming = [],
@@ -268,15 +259,6 @@ export function DraftCard({
             >
               <Pencil className="h-4 w-4" />
               编辑内容
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onRegenerate}
-              disabled={loading}
-            >
-              <RefreshCw className="h-4 w-4" />
-              重新生成
             </Button>
             {memoryEnabled ? (
               <Button

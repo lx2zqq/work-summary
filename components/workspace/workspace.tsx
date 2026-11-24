@@ -199,6 +199,10 @@ export function Workspace({
   const [archived, setArchived] = useState(
     Boolean(initialReview?.finalText.trim()),
   );
+  // 记录上次生成用的流水账，用来判断左侧按钮是否该恢复炭黑
+  const [rawBaseline, setRawBaseline] = useState(
+    (jobForDate?.rawInput ?? initialReview?.rawInput ?? "").trim(),
+  );
   const [memoryExtractedAt, setMemoryExtractedAt] = useState<
     string | null
   >(initialReview?.memoryExtractedAt ?? null);
@@ -335,6 +339,7 @@ export function Workspace({
       setStyle(job.style);
       setConversation(job.conversationAfter);
       setRound(job.round);
+      setRawBaseline(job.rawInput.trim());
       setRestoredAnswers(
         answersFromConversation(
           draftQuestionsRef.current,
@@ -354,6 +359,7 @@ export function Workspace({
     setStyle(job.style);
     setConversation(job.conversationAfter);
     setRound(job.round);
+    setRawBaseline(job.rawInput.trim());
     setUsedMemories(result?.memories ?? []);
     setSavedAt(job.savedAt ?? null);
     setSaveFailed(Boolean(job.saveFailed));
@@ -611,6 +617,10 @@ export function Workspace({
       updatedAt: savedAt,
     });
   }, [memoryExtractedAt, dirty, savedAt]);
+
+  // 有成品或追问时左侧按钮默认降级，改过流水账才恢复炭黑
+  const generatePrimary =
+    (!questioning && !hasFinalContent) || rawInput.trim() !== rawBaseline;
 
   const hasAnyInput = rawInput.trim().length > 0 || hasFinalContent;
 
@@ -931,6 +941,7 @@ export function Workspace({
       setStyle(config.style);
       setConversation(config.conversationAfter);
       setRound(config.round);
+      setRawBaseline((config.rawInput ?? rawInput).trim());
       setUsedMemories([]);
       setRestoredAnswers({});
       markDirty();
@@ -1016,6 +1027,7 @@ export function Workspace({
         setStyle(config.style);
         setConversation(config.conversationAfter);
         setRound(config.round);
+        setRawBaseline((config.rawInput ?? rawInput).trim());
         setUsedMemories(data.memories);
         setRestoredAnswers({});
         markDirty();
@@ -1122,6 +1134,7 @@ export function Workspace({
           setStyle(config.style);
           setConversation(config.conversationAfter);
           setRound(config.round);
+          setRawBaseline((config.rawInput ?? rawInput).trim());
           setUsedMemories(data.memories);
           setRestoredAnswers({});
           markDirty();
@@ -1294,6 +1307,7 @@ export function Workspace({
       setStyle(review?.style ?? initialSettings.defaultStyle);
       setConversation(review?.conversation ?? []);
       setRound(review?.round ?? 0);
+      setRawBaseline((review?.rawInput ?? "").trim());
       savedAtRef.current = review?.updatedAt ?? null;
       setSavedAt(review?.updatedAt ?? null);
       setArchived(Boolean(review?.finalText.trim()));
@@ -1319,6 +1333,7 @@ export function Workspace({
     setStyle(job.style);
     setConversation(job.conversationAfter);
     setRound(job.round);
+    setRawBaseline(job.rawInput.trim());
     setUsedMemories(result.memories);
     setRestoredAnswers({});
     setArchived(false);
@@ -1690,6 +1705,7 @@ export function Workspace({
             saveStatus={saveStatus}
             switchingDate={loadingKind === "date"}
             canSave={hasAnyInput}
+            primaryAction={generatePrimary}
             onChange={(value) => {
               setRawInput(value);
               markDirty();
@@ -1754,7 +1770,6 @@ export function Workspace({
                   void handleCopy();
                 }}
                 onEdit={() => setEditorOpen(true)}
-                onRegenerate={handleGenerate}
                 onExtractMemory={() => {
                   void extractMemory(true);
                 }}

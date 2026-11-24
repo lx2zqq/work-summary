@@ -12,6 +12,7 @@ import { Input, Label, Textarea } from "@/components/ui/input";
 import { Segmented } from "@/components/ui/segmented";
 import { Select } from "@/components/ui/select";
 import { formatDateCN } from "@/lib/date";
+import { formatMemoryImportance } from "@/lib/memory";
 import {
   MEMORY_CATEGORIES,
   type Memory,
@@ -77,11 +78,6 @@ const SCOPE_FILTER_OPTIONS: Array<{ value: ScopeFilter; label: string }> = [
   { value: "student", label: "学生" },
   { value: "general", label: "通用" },
 ];
-
-function importanceLabel(importance: number): string {
-  const value = Math.max(1, Math.min(3, importance));
-  return `${"●".repeat(value)}${"○".repeat(3 - value)}`;
-}
 
 function groupMemories(memories: Memory[]): {
   students: MemoryGroup[];
@@ -350,6 +346,8 @@ export function MemoryManager({
   }
 
   function renderMemoryCard(memory: Memory) {
+    const importance = formatMemoryImportance(memory.importance);
+
     return (
       <article key={memory.id} className="paper-card p-4">
         <div className="flex items-start justify-between gap-3">
@@ -358,13 +356,13 @@ export function MemoryManager({
               <Badge tone="blue">{memory.category}</Badge>
               <span
                 className="flex items-center gap-1 text-[11px] text-ink-soft"
-                title={`重要度 ${Math.min(3, Math.max(1, memory.importance))}/3`}
-                aria-label={`重要度 ${Math.min(3, Math.max(1, memory.importance))}/3`}
+                title={`重要度：${importance.label}`}
+                aria-label={`重要度：${importance.label}`}
               >
                 <span className="tracking-[0.2em] text-brand-deep">
-                  {importanceLabel(memory.importance)}
+                  {importance.dots}
                 </span>
-                重要度 {Math.min(3, Math.max(1, memory.importance))}/3
+                {importance.label}
               </span>
             </div>
             <p className="mt-2 text-[13px] leading-relaxed text-ink">

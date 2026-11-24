@@ -83,6 +83,8 @@ type Props = {
   saveStatus: SaveStatus;
   switchingDate: boolean;
   canSave: boolean;
+  /** 右侧面板已有可操作主按钮时，左侧生成按钮降级为次按钮 */
+  primaryAction?: boolean;
   onChange: (value: string) => void;
   onStyleChange: (style: ReviewStyle) => void;
   onGenerate: () => void;
@@ -105,6 +107,7 @@ export function RawInputCard({
   saveStatus,
   switchingDate,
   canSave,
+  primaryAction = true,
   onChange,
   onStyleChange,
   onGenerate,
@@ -439,6 +442,7 @@ export function RawInputCard({
           </div>
 
           <Button
+            variant={primaryAction ? "primary" : "secondary"}
             onClick={onGenerate}
             loading={loading}
             disabled={!value.trim()}

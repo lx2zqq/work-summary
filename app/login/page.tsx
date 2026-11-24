@@ -41,9 +41,10 @@ export default async function LoginPage({
         <div className="mt-4 text-center">
           <Link
             href="/demo"
-            className="text-sm font-medium text-brand-deep underline underline-offset-4 hover:text-brand"
+            className="inline-flex items-center gap-1 text-sm text-ink-soft transition-colors hover:text-brand-deep hover:underline hover:underline-offset-4"
           >
             先看看效果，不用密码
+            <span aria-hidden>→</span>
           </Link>
         </div>
       </div>

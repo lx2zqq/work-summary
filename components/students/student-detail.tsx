@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Drawer, DrawerContent } from "@/components/ui/drawer";
 import { avatarTone } from "@/lib/avatar-tone";
 import { formatDateCN } from "@/lib/date";
+import { formatMemoryImportance } from "@/lib/memory";
 import { reviewSummary } from "@/lib/review-text";
 import type { Memory, ReviewSnippet, Student, StudentStatus } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -38,52 +39,62 @@ export function StudentDetail({
   if (!student) return null;
 
   const lastReview = reviews[0]?.reviewDate ?? null;
+  const lastReviewShort = lastReview
+    ? lastReview.slice(5).replace("-", "/")
+    : null;
 
   return (
     <Drawer open={open} onOpenChange={onOpenChange}>
       <DrawerContent
-        title={student.name}
-        description={[student.grade, student.subjects]
-          .filter(Boolean)
-          .join(" · ") || "还没有填写年级和科目"}
-      >
-        <div className="flex items-start gap-3">
+        leading={
           <div
             className={cn(
-              "flex h-14 w-14 shrink-0 items-center justify-center rounded-xl text-lg font-medium",
+              "flex h-10 w-10 items-center justify-center rounded-xl text-sm font-medium",
               avatarTone(student.name),
             )}
           >
             {student.name.slice(0, 1)}
           </div>
-          <div className="min-w-0">
+        }
+        title={
+          <span className="flex flex-wrap items-center gap-2">
+            {student.name}
             <Badge tone={STATUS_TONE[student.status] ?? "stone"}>
               {student.status}
             </Badge>
-            {student.note ? (
-              <p className="mt-1.5 text-xs leading-relaxed text-ink-soft">
-                {student.note}
-              </p>
-            ) : null}
-          </div>
-        </div>
+          </span>
+        }
+        description={[student.grade, student.subjects]
+          .filter(Boolean)
+          .join(" · ") || "还没有填写年级和科目"}
+      >
+        {student.note ? (
+          <p className="mb-4 text-xs leading-relaxed text-ink-soft">
+            {student.note}
+          </p>
+        ) : null}
 
-        <div className="mt-4 grid grid-cols-3 divide-x divide-line/70 rounded-xl border border-line/60 bg-cream/50 py-2.5 text-center">
+        <div className="grid grid-cols-3 divide-x divide-line/70 rounded-xl border border-line/60 bg-cream/50 py-3 text-center">
           <div>
-            <p className="font-serif text-xl leading-none text-ink">
+            <p className="flex h-6 items-center justify-center font-serif text-xl leading-none text-ink tabular-nums">
               {memories.length}
             </p>
             <p className="mt-1 text-[10px] text-ink-soft">长期记忆</p>
           </div>
           <div>
-            <p className="font-serif text-xl leading-none text-ink">
+            <p className="flex h-6 items-center justify-center font-serif text-xl leading-none text-ink tabular-nums">
               {reviews.length}
             </p>
             <p className="mt-1 text-[10px] text-ink-soft">相关复盘</p>
           </div>
           <div>
-            <p className="text-[11px] font-medium leading-none text-ink">
-              {lastReview ? formatDateCN(lastReview) : "暂无"}
+            <p
+              className="flex h-6 items-center justify-center font-serif text-xl leading-none text-ink tabular-nums"
+              title={lastReview ? formatDateCN(lastReview) : "还没有相关复盘"}
+            >
+              {lastReviewShort ?? (
+                <span className="font-sans text-sm text-ink-soft">暂无</span>
+              )}
             </p>
             <p className="mt-1 text-[10px] text-ink-soft">最近跟进</p>
           </div>
@@ -101,27 +112,38 @@ export function StudentDetail({
                 还没有这个学生的长期记忆。
               </p>
             ) : (
-              memories.map((memory) => (
-                <div
-                  key={memory.id}
-                  className="rounded-lg border border-line/60 bg-cream/40 p-3"
-                >
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge tone="blue">{memory.category}</Badge>
-                    <span className="text-[10px] text-ink-soft">
-                      重要度 {Math.min(3, Math.max(1, memory.importance))}/3
-                    </span>
+              memories.map((memory) => {
+                const importance = formatMemoryImportance(memory.importance);
+
+                return (
+                  <div
+                    key={memory.id}
+                    className="rounded-lg border border-line/60 bg-cream/40 p-3"
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge tone="blue">{memory.category}</Badge>
+                      <span
+                        className="flex items-center gap-1 text-[10px] text-ink-soft"
+                        title={`重要度：${importance.label}`}
+                        aria-label={`重要度：${importance.label}`}
+                      >
+                        <span className="tracking-[0.18em] text-brand-deep">
+                          {importance.dots}
+                        </span>
+                        {importance.label}
+                      </span>
+                    </div>
+                    <p className="mt-1.5 text-[13px] leading-relaxed text-ink">
+                      {memory.content}
+                    </p>
+                    <p className="mt-1 text-[10px] text-ink-soft">
+                      {memory.sourceDate
+                        ? formatDateCN(memory.sourceDate)
+                        : "手动添加"}
+                    </p>
                   </div>
-                  <p className="mt-1.5 text-[13px] leading-relaxed text-ink">
-                    {memory.content}
-                  </p>
-                  <p className="mt-1 text-[10px] text-ink-soft">
-                    {memory.sourceDate
-                      ? formatDateCN(memory.sourceDate)
-                      : "手动添加"}
-                  </p>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </section>

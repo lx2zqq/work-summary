@@ -8,6 +8,21 @@ import type {
 // 同一件事的不同说法大致在这个相似度以上，直接合并更新
 export const MEMORY_MERGE_THRESHOLD = 0.42;
 
+const IMPORTANCE_LABELS = ["一般", "重要", "很重要"] as const;
+
+/** 重要度统一展示：实心圆点 + 中文标签，避免 2/3 这种机械写法 */
+export function formatMemoryImportance(importance: number): {
+  dots: string;
+  label: string;
+} {
+  const level = Math.min(3, Math.max(1, Math.round(importance)));
+
+  return {
+    dots: `${"●".repeat(level)}${"○".repeat(3 - level)}`,
+    label: IMPORTANCE_LABELS[level - 1] ?? "一般",
+  };
+}
+
 export type MemoryCopyAction = "none" | "first" | "refresh";
 
 /**

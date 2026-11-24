@@ -51,7 +51,6 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         {children}
         <Toaster
           position="top-center"
-          closeButton
           toastOptions={{
             style: {
               borderRadius: "12px",

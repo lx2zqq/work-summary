@@ -54,6 +54,8 @@ export function DemoWorkspace() {
   const [loadingMessage, setLoadingMessage] = useState("");
   const [editorOpen, setEditorOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>("input");
+  // 记录上次生成用的流水账，用来判断左侧按钮是否该恢复炭黑
+  const [baseline, setBaseline] = useState(rawInput.trim());
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -82,6 +84,7 @@ export function DemoWorkspace() {
 
   function handleGenerate() {
     if (loading) return;
+    setBaseline(rawInput.trim());
     setActiveTab("preview");
     runStep("正在检查有没有漏掉的信息…", () => {
       setWorkspace({
@@ -138,6 +141,8 @@ export function DemoWorkspace() {
 
   const hasContent = hasDraftContent(draft);
   const questioning = stage === "questions";
+  const generatePrimary =
+    (!questioning && !hasContent) || rawInput.trim() !== baseline;
 
   return (
     <div className="space-y-4">
@@ -184,6 +189,7 @@ export function DemoWorkspace() {
             saveStatus="idle"
             switchingDate={false}
             canSave={false}
+            primaryAction={generatePrimary}
             onChange={(value) => setWorkspace({ rawInput: value })}
             onStyleChange={handleStyleChange}
             onGenerate={handleGenerate}
@@ -238,7 +244,6 @@ export function DemoWorkspace() {
                   void handleCopy();
                 }}
                 onEdit={() => setEditorOpen(true)}
-                onRegenerate={handleGenerate}
                 onExtractMemory={() => {
                   toast.info("演示模式不会调用模型，登录后可以体验完整功能");
                 }}

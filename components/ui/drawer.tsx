@@ -12,11 +12,14 @@ export const DrawerClose = DialogPrimitive.Close;
 export function DrawerContent({
   title,
   description,
+  leading,
   children,
   className,
 }: {
-  title: string;
+  title: React.ReactNode;
   description?: string;
+  /** 标题左侧的头像或图标位 */
+  leading?: React.ReactNode;
   children: React.ReactNode;
   className?: string;
 }) {
@@ -30,15 +33,18 @@ export function DrawerContent({
         )}
       >
         <div className="flex items-start justify-between gap-3 border-b border-line/70 px-5 py-4">
-          <div>
-            <DialogPrimitive.Title className="text-base font-semibold tracking-tight text-ink">
-              {title}
-            </DialogPrimitive.Title>
-            {description ? (
-              <DialogPrimitive.Description className="mt-1 text-xs leading-relaxed text-ink-soft">
-                {description}
-              </DialogPrimitive.Description>
-            ) : null}
+          <div className="flex min-w-0 items-start gap-3">
+            {leading ? <div className="shrink-0">{leading}</div> : null}
+            <div className="min-w-0">
+              <DialogPrimitive.Title className="text-base font-semibold tracking-tight text-ink">
+                {title}
+              </DialogPrimitive.Title>
+              {description ? (
+                <DialogPrimitive.Description className="mt-1 text-xs leading-relaxed text-ink-soft">
+                  {description}
+                </DialogPrimitive.Description>
+              ) : null}
+            </div>
           </div>
           <DialogPrimitive.Close className="rounded-lg p-1.5 text-ink-soft transition-colors hover:bg-cream-deep hover:text-ink">
             <X className="h-4 w-4" />
