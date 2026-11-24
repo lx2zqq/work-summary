@@ -1,17 +1,20 @@
 {
-  "generatedAt": "2026-11-15T08:46:53.931Z",
-  "promptVersion": "2026-11-15.1",
+  "generatedAt": "2026-11-24T12:31:35.423Z",
+  "promptVersion": "2026-11-24.1",
   "caseCount": 30,
   "summary": {
     "total": 30,
-    "passed": 30,
-    "failed": 0,
+    "passed": 29,
+    "failed": 1,
     "errors": 0,
-    "passRate": 1,
-    "avgDurationMs": 2465.5,
-    "p95DurationMs": 5527,
-    "avgPromptTokens": 1407.357142857143,
-    "avgCompletionTokens": 331.89285714285717
+    "passRate": 0.9666666666666667,
+    "avgDurationMs": 4160.433333333333,
+    "p95DurationMs": 7449,
+    "avgPromptTokens": 3710.7586206896553,
+    "avgCompletionTokens": 529.0344827586207,
+    "avgToolCalls": 1.6666666666666667,
+    "toolCallRate": 0.5333333333333333,
+    "degradedCount": 0
   },
   "byTag": [
     {
@@ -33,11 +36,6 @@
       "tag": "core-sections",
       "total": 4,
       "passed": 4
-    },
-    {
-      "tag": "daily-phrase",
-      "total": 1,
-      "passed": 1
     },
     {
       "tag": "detailed",
@@ -67,12 +65,12 @@
     {
       "tag": "filter",
       "total": 1,
-      "passed": 1
+      "passed": 0
     },
     {
       "tag": "final",
       "total": 23,
-      "passed": 23
+      "passed": 22
     },
     {
       "tag": "irrelevant",
@@ -97,7 +95,7 @@
     {
       "tag": "memory",
       "total": 5,
-      "passed": 5
+      "passed": 4
     },
     {
       "tag": "multi-student",
@@ -140,6 +138,11 @@
       "passed": 5
     },
     {
+      "tag": "richang",
+      "total": 1,
+      "passed": 1
+    },
+    {
       "tag": "short",
       "total": 5,
       "passed": 5
@@ -164,12 +167,23 @@
         "core-sections"
       ],
       "status": "passed",
-      "durationMs": 1008,
-      "promptTokens": 1452,
-      "completionTokens": 87,
+      "durationMs": 6781,
+      "promptTokens": 4668,
+      "completionTokens": 217,
+      "toolCallNames": [
+        "search_students",
+        "search_memories"
+      ],
+      "toolRounds": 2,
+      "degraded": false,
       "checks": [
         {
           "name": "结构",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "日常工作复盘",
           "passed": true,
           "detail": ""
         },
@@ -189,11 +203,22 @@
           "detail": ""
         },
         {
+          "name": "工具调用",
+          "passed": true,
+          "detail": ""
+        },
+        {
           "name": "占位词",
           "passed": true,
           "detail": ""
         }
-      ]
+      ],
+      "judge": {
+        "factuality": 1,
+        "completeness": 2,
+        "usability": 2,
+        "reason": "事实基本一致，但“后续检查订正情况”流水账未提及，属轻微推断；信息归类完整，空栏未硬凑，措辞可直接发送。"
+      }
     },
     {
       "id": "short-002",
@@ -203,12 +228,20 @@
         "performance"
       ],
       "status": "passed",
-      "durationMs": 3021,
-      "promptTokens": 1458,
-      "completionTokens": 374,
+      "durationMs": 4957,
+      "promptTokens": 2257,
+      "completionTokens": 227,
+      "toolCallNames": [],
+      "toolRounds": 1,
+      "degraded": false,
       "checks": [
         {
           "name": "结构",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "日常工作复盘",
           "passed": true,
           "detail": ""
         },
@@ -223,11 +256,22 @@
           "detail": ""
         },
         {
+          "name": "工具调用",
+          "passed": true,
+          "detail": ""
+        },
+        {
           "name": "占位词",
           "passed": true,
           "detail": ""
         }
-      ]
+      ],
+      "judge": {
+        "factuality": 1,
+        "completeness": 2,
+        "usability": 1,
+        "reason": "事实基本可追溯，但“后续需确认年级科目和接待安排”属流水账外推断；核心信息已归类，空栏目未硬凑；JSON结构及空栏目需稍作整理才能发钉钉。"
+      }
     },
     {
       "id": "short-003",
@@ -237,9 +281,65 @@
         "detailed"
       ],
       "status": "passed",
-      "durationMs": 3018,
-      "promptTokens": 1497,
-      "completionTokens": 307,
+      "durationMs": 6685,
+      "promptTokens": 2330,
+      "completionTokens": 756,
+      "toolCallNames": [],
+      "toolRounds": 1,
+      "degraded": false,
+      "checks": [
+        {
+          "name": "结构",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "日常工作复盘",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "禁止内容",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "栏目覆盖",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "工具调用",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "占位词",
+          "passed": true,
+          "detail": ""
+        }
+      ],
+      "judge": {
+        "factuality": 2,
+        "completeness": 2,
+        "usability": 2,
+        "reason": "三件事均有流水账支撑，无编造；空栏目未硬凑，归类基本合理，可直接复制，仅课表更新归入学情略欠贴切。"
+      }
+    },
+    {
+      "id": "short-004",
+      "tags": [
+        "short",
+        "final",
+        "anti-hallucination"
+      ],
+      "status": "passed",
+      "durationMs": 7449,
+      "promptTokens": 2248,
+      "completionTokens": 598,
+      "toolCallNames": [],
+      "toolRounds": 1,
+      "degraded": false,
       "checks": [
         {
           "name": "结构",
@@ -257,30 +357,22 @@
           "detail": ""
         },
         {
+          "name": "工具调用",
+          "passed": true,
+          "detail": ""
+        },
+        {
           "name": "占位词",
           "passed": true,
           "detail": ""
         }
-      ]
-    },
-    {
-      "id": "short-004",
-      "tags": [
-        "short",
-        "final",
-        "anti-hallucination"
       ],
-      "status": "passed",
-      "durationMs": 1615,
-      "promptTokens": 0,
-      "completionTokens": 0,
-      "checks": [
-        {
-          "name": "空输入保护",
-          "passed": true,
-          "detail": "模型没有编造正文"
-        }
-      ]
+      "judge": {
+        "factuality": 1,
+        "completeness": 2,
+        "usability": 2,
+        "reason": "日常描述基本贴合流水账，但补充了“提前梳理明日待办”等未提及计划，属轻微推断；栏目未硬凑，可直接发送。"
+      }
     },
     {
       "id": "short-005",
@@ -290,12 +382,23 @@
         "core-sections"
       ],
       "status": "passed",
-      "durationMs": 1230,
-      "promptTokens": 1450,
-      "completionTokens": 120,
+      "durationMs": 8837,
+      "promptTokens": 4670,
+      "completionTokens": 607,
+      "toolCallNames": [
+        "search_students",
+        "search_memories"
+      ],
+      "toolRounds": 2,
+      "degraded": false,
       "checks": [
         {
           "name": "结构",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "日常工作复盘",
           "passed": true,
           "detail": ""
         },
@@ -315,11 +418,22 @@
           "detail": ""
         },
         {
+          "name": "工具调用",
+          "passed": true,
+          "detail": ""
+        },
+        {
           "name": "占位词",
           "passed": true,
           "detail": ""
         }
-      ]
+      ],
+      "judge": {
+        "factuality": 1,
+        "completeness": 2,
+        "usability": 1,
+        "reason": "流水账仅提录数学错题和电话沟通续费；复盘补充“小橙AI”及后续跟进属轻微推断；核心信息完整，空栏目未硬凑；措辞基本规范但需确认系统名。"
+      }
     },
     {
       "id": "medium-001",
@@ -329,12 +443,23 @@
         "core-sections"
       ],
       "status": "passed",
-      "durationMs": 5527,
-      "promptTokens": 1511,
-      "completionTokens": 830,
+      "durationMs": 4609,
+      "promptTokens": 4865,
+      "completionTokens": 789,
+      "toolCallNames": [
+        "search_memories",
+        "search_students"
+      ],
+      "toolRounds": 2,
+      "degraded": false,
       "checks": [
         {
           "name": "结构",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "日常工作复盘",
           "passed": true,
           "detail": ""
         },
@@ -350,6 +475,11 @@
         },
         {
           "name": "栏目覆盖",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "工具调用",
           "passed": true,
           "detail": ""
         },
@@ -368,12 +498,20 @@
         "optional-sections"
       ],
       "status": "passed",
-      "durationMs": 2944,
-      "promptTokens": 1461,
-      "completionTokens": 425,
+      "durationMs": 3280,
+      "promptTokens": 2260,
+      "completionTokens": 525,
+      "toolCallNames": [],
+      "toolRounds": 1,
+      "degraded": false,
       "checks": [
         {
           "name": "结构",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "日常工作复盘",
           "passed": true,
           "detail": ""
         },
@@ -384,6 +522,11 @@
         },
         {
           "name": "栏目覆盖",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "工具调用",
           "passed": true,
           "detail": ""
         },
@@ -402,12 +545,25 @@
         "multi-student"
       ],
       "status": "passed",
-      "durationMs": 2373,
-      "promptTokens": 1465,
-      "completionTokens": 298,
+      "durationMs": 3568,
+      "promptTokens": 7230,
+      "completionTokens": 331,
+      "toolCallNames": [
+        "search_memories",
+        "search_memories",
+        "search_students",
+        "search_students"
+      ],
+      "toolRounds": 3,
+      "degraded": false,
       "checks": [
         {
           "name": "结构",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "日常工作复盘",
           "passed": true,
           "detail": ""
         },
@@ -423,6 +579,11 @@
         },
         {
           "name": "栏目覆盖",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "工具调用",
           "passed": true,
           "detail": ""
         },
@@ -441,12 +602,23 @@
         "parent"
       ],
       "status": "passed",
-      "durationMs": 1273,
-      "promptTokens": 1498,
-      "completionTokens": 113,
+      "durationMs": 2241,
+      "promptTokens": 4825,
+      "completionTokens": 269,
+      "toolCallNames": [
+        "search_students",
+        "search_memories"
+      ],
+      "toolRounds": 2,
+      "degraded": false,
       "checks": [
         {
           "name": "结构",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "日常工作复盘",
           "passed": true,
           "detail": ""
         },
@@ -462,6 +634,11 @@
         },
         {
           "name": "栏目覆盖",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "工具调用",
           "passed": true,
           "detail": ""
         },
@@ -480,12 +657,23 @@
         "performance"
       ],
       "status": "passed",
-      "durationMs": 949,
-      "promptTokens": 1454,
-      "completionTokens": 85,
+      "durationMs": 2275,
+      "promptTokens": 4683,
+      "completionTokens": 246,
+      "toolCallNames": [
+        "search_memories",
+        "search_students"
+      ],
+      "toolRounds": 2,
+      "degraded": false,
       "checks": [
         {
           "name": "结构",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "日常工作复盘",
           "passed": true,
           "detail": ""
         },
@@ -501,6 +689,11 @@
         },
         {
           "name": "栏目覆盖",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "工具调用",
           "passed": true,
           "detail": ""
         },
@@ -519,12 +712,24 @@
         "core-sections"
       ],
       "status": "passed",
-      "durationMs": 1426,
-      "promptTokens": 1498,
-      "completionTokens": 143,
+      "durationMs": 7294,
+      "promptTokens": 7406,
+      "completionTokens": 1245,
+      "toolCallNames": [
+        "search_memories",
+        "search_students",
+        "search_students"
+      ],
+      "toolRounds": 3,
+      "degraded": false,
       "checks": [
         {
           "name": "结构",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "日常工作复盘",
           "passed": true,
           "detail": ""
         },
@@ -540,6 +745,11 @@
         },
         {
           "name": "栏目覆盖",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "工具调用",
           "passed": true,
           "detail": ""
         },
@@ -558,12 +768,27 @@
         "detailed"
       ],
       "status": "passed",
-      "durationMs": 5420,
-      "promptTokens": 1538,
-      "completionTokens": 731,
+      "durationMs": 6356,
+      "promptTokens": 5129,
+      "completionTokens": 953,
+      "toolCallNames": [
+        "search_students",
+        "search_students",
+        "search_students",
+        "search_memories",
+        "search_memories",
+        "search_memories"
+      ],
+      "toolRounds": 2,
+      "degraded": false,
       "checks": [
         {
           "name": "结构",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "日常工作复盘",
           "passed": true,
           "detail": ""
         },
@@ -574,6 +799,11 @@
         },
         {
           "name": "栏目覆盖",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "工具调用",
           "passed": true,
           "detail": ""
         },
@@ -592,12 +822,29 @@
         "performance"
       ],
       "status": "passed",
-      "durationMs": 2286,
-      "promptTokens": 1494,
-      "completionTokens": 318,
+      "durationMs": 5635,
+      "promptTokens": 5111,
+      "completionTokens": 825,
+      "toolCallNames": [
+        "search_students",
+        "search_students",
+        "search_students",
+        "search_students",
+        "search_memories",
+        "search_memories",
+        "search_memories",
+        "search_memories"
+      ],
+      "toolRounds": 2,
+      "degraded": false,
       "checks": [
         {
           "name": "结构",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "日常工作复盘",
           "passed": true,
           "detail": ""
         },
@@ -608,6 +855,11 @@
         },
         {
           "name": "栏目覆盖",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "工具调用",
           "passed": true,
           "detail": ""
         },
@@ -626,12 +878,23 @@
         "difficulty"
       ],
       "status": "passed",
-      "durationMs": 4418,
-      "promptTokens": 1507,
-      "completionTokens": 648,
+      "durationMs": 4187,
+      "promptTokens": 4955,
+      "completionTokens": 666,
+      "toolCallNames": [
+        "search_memories",
+        "search_memories"
+      ],
+      "toolRounds": 2,
+      "degraded": false,
       "checks": [
         {
           "name": "结构",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "日常工作复盘",
           "passed": true,
           "detail": ""
         },
@@ -642,6 +905,11 @@
         },
         {
           "name": "栏目覆盖",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "工具调用",
           "passed": true,
           "detail": ""
         },
@@ -660,12 +928,28 @@
         "voice-style"
       ],
       "status": "passed",
-      "durationMs": 3940,
-      "promptTokens": 1534,
-      "completionTokens": 642,
+      "durationMs": 6429,
+      "promptTokens": 7834,
+      "completionTokens": 977,
+      "toolCallNames": [
+        "search_students",
+        "search_students",
+        "search_students",
+        "search_memories",
+        "search_memories",
+        "search_memories",
+        "search_memories"
+      ],
+      "toolRounds": 3,
+      "degraded": false,
       "checks": [
         {
           "name": "结构",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "日常工作复盘",
           "passed": true,
           "detail": ""
         },
@@ -676,6 +960,11 @@
         },
         {
           "name": "栏目覆盖",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "工具调用",
           "passed": true,
           "detail": ""
         },
@@ -694,9 +983,12 @@
         "empty"
       ],
       "status": "passed",
-      "durationMs": 2022,
+      "durationMs": 2041,
       "promptTokens": 0,
       "completionTokens": 0,
+      "toolCallNames": [],
+      "toolRounds": 1,
+      "degraded": false,
       "checks": [
         {
           "name": "空输入保护",
@@ -713,12 +1005,20 @@
         "long-input"
       ],
       "status": "passed",
-      "durationMs": 4186,
-      "promptTokens": 1733,
-      "completionTokens": 604,
+      "durationMs": 5821,
+      "promptTokens": 2566,
+      "completionTokens": 1062,
+      "toolCallNames": [],
+      "toolRounds": 1,
+      "degraded": false,
       "checks": [
         {
           "name": "结构",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "日常工作复盘",
           "passed": true,
           "detail": ""
         },
@@ -729,6 +1029,11 @@
         },
         {
           "name": "栏目覆盖",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "工具调用",
           "passed": true,
           "detail": ""
         },
@@ -747,12 +1052,23 @@
         "numbers"
       ],
       "status": "passed",
-      "durationMs": 2295,
-      "promptTokens": 1458,
-      "completionTokens": 309,
+      "durationMs": 2447,
+      "promptTokens": 4679,
+      "completionTokens": 235,
+      "toolCallNames": [
+        "search_students",
+        "search_memories"
+      ],
+      "toolRounds": 2,
+      "degraded": false,
       "checks": [
         {
           "name": "结构",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "日常工作复盘",
           "passed": true,
           "detail": ""
         },
@@ -768,6 +1084,11 @@
         },
         {
           "name": "栏目覆盖",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "工具调用",
           "passed": true,
           "detail": ""
         },
@@ -786,12 +1107,20 @@
         "negative"
       ],
       "status": "passed",
-      "durationMs": 1898,
-      "promptTokens": 1460,
-      "completionTokens": 248,
+      "durationMs": 2225,
+      "promptTokens": 2259,
+      "completionTokens": 361,
+      "toolCallNames": [],
+      "toolRounds": 1,
+      "degraded": false,
       "checks": [
         {
           "name": "结构",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "日常工作复盘",
           "passed": true,
           "detail": ""
         },
@@ -802,6 +1131,11 @@
         },
         {
           "name": "栏目覆盖",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "工具调用",
           "passed": true,
           "detail": ""
         },
@@ -820,12 +1154,20 @@
         "negative"
       ],
       "status": "passed",
-      "durationMs": 1853,
-      "promptTokens": 1454,
-      "completionTokens": 248,
+      "durationMs": 5375,
+      "promptTokens": 2253,
+      "completionTokens": 970,
+      "toolCallNames": [],
+      "toolRounds": 1,
+      "degraded": false,
       "checks": [
         {
           "name": "结构",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "日常工作复盘",
           "passed": true,
           "detail": ""
         },
@@ -836,6 +1178,11 @@
         },
         {
           "name": "栏目覆盖",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "工具调用",
           "passed": true,
           "detail": ""
         },
@@ -853,9 +1200,15 @@
         "questions"
       ],
       "status": "passed",
-      "durationMs": 4368,
-      "promptTokens": 1390,
-      "completionTokens": 678,
+      "durationMs": 5372,
+      "promptTokens": 4540,
+      "completionTokens": 787,
+      "toolCallNames": [
+        "search_students",
+        "search_memories"
+      ],
+      "toolRounds": 2,
+      "degraded": false,
       "checks": [
         {
           "name": "结构",
@@ -864,6 +1217,11 @@
         },
         {
           "name": "追问质量",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "工具调用",
           "passed": true,
           "detail": ""
         },
@@ -882,12 +1240,20 @@
         "irrelevant"
       ],
       "status": "passed",
-      "durationMs": 1011,
-      "promptTokens": 1624,
-      "completionTokens": 61,
+      "durationMs": 3759,
+      "promptTokens": 2251,
+      "completionTokens": 744,
+      "toolCallNames": [],
+      "toolRounds": 1,
+      "degraded": false,
       "checks": [
         {
           "name": "结构",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "日常工作复盘",
           "passed": true,
           "detail": ""
         },
@@ -903,6 +1269,11 @@
         },
         {
           "name": "栏目覆盖",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "工具调用",
           "passed": true,
           "detail": ""
         },
@@ -921,12 +1292,23 @@
         "conflict"
       ],
       "status": "passed",
-      "durationMs": 1173,
-      "promptTokens": 1616,
-      "completionTokens": 142,
+      "durationMs": 3834,
+      "promptTokens": 4741,
+      "completionTokens": 601,
+      "toolCallNames": [
+        "search_students",
+        "search_memories"
+      ],
+      "toolRounds": 2,
+      "degraded": false,
       "checks": [
         {
           "name": "结构",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "日常工作复盘",
           "passed": true,
           "detail": ""
         },
@@ -946,6 +1328,11 @@
           "detail": ""
         },
         {
+          "name": "工具调用",
+          "passed": true,
+          "detail": ""
+        },
+        {
           "name": "占位词",
           "passed": true,
           "detail": ""
@@ -959,9 +1346,15 @@
         "questions"
       ],
       "status": "passed",
-      "durationMs": 6150,
-      "promptTokens": 1382,
-      "completionTokens": 997,
+      "durationMs": 5083,
+      "promptTokens": 4509,
+      "completionTokens": 683,
+      "toolCallNames": [
+        "search_memories",
+        "search_students"
+      ],
+      "toolRounds": 2,
+      "degraded": false,
       "checks": [
         {
           "name": "结构",
@@ -970,6 +1363,11 @@
         },
         {
           "name": "追问质量",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "工具调用",
           "passed": true,
           "detail": ""
         },
@@ -987,15 +1385,26 @@
         "final",
         "filter"
       ],
-      "status": "passed",
-      "durationMs": 1594,
-      "promptTokens": 1647,
-      "completionTokens": 179,
+      "status": "failed",
+      "durationMs": 2419,
+      "promptTokens": 4693,
+      "completionTokens": 221,
+      "toolCallNames": [
+        "search_students",
+        "search_memories"
+      ],
+      "toolRounds": 2,
+      "degraded": false,
       "checks": [
         {
           "name": "结构",
           "passed": true,
           "detail": ""
+        },
+        {
+          "name": "日常工作复盘",
+          "passed": false,
+          "detail": "“今天主要跟进了林小满的作…”少于 35 字"
         },
         {
           "name": "必含事实",
@@ -1009,6 +1418,11 @@
         },
         {
           "name": "名单外学生",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "工具调用",
           "passed": true,
           "detail": ""
         },
@@ -1027,9 +1441,12 @@
         "detailed"
       ],
       "status": "passed",
-      "durationMs": 1067,
-      "promptTokens": 970,
-      "completionTokens": 87,
+      "durationMs": 1366,
+      "promptTokens": 953,
+      "completionTokens": 99,
+      "toolCallNames": [],
+      "toolRounds": 1,
+      "degraded": false,
       "checks": [
         {
           "name": "结构",
@@ -1071,9 +1488,12 @@
         "concise"
       ],
       "status": "passed",
-      "durationMs": 1016,
-      "promptTokens": 963,
-      "completionTokens": 86,
+      "durationMs": 942,
+      "promptTokens": 912,
+      "completionTokens": 75,
+      "toolCallNames": [],
+      "toolRounds": 1,
+      "degraded": false,
       "checks": [
         {
           "name": "结构",
@@ -1110,9 +1530,12 @@
         "empty-sections"
       ],
       "status": "passed",
-      "durationMs": 1136,
-      "promptTokens": 965,
-      "completionTokens": 82,
+      "durationMs": 987,
+      "promptTokens": 948,
+      "completionTokens": 106,
+      "toolCallNames": [],
+      "toolRounds": 1,
+      "degraded": false,
       "checks": [
         {
           "name": "结构",
@@ -1141,12 +1564,15 @@
       "tags": [
         "style",
         "restyle",
-        "daily-phrase"
+        "richang"
       ],
       "status": "passed",
-      "durationMs": 2398,
-      "promptTokens": 947,
-      "completionTokens": 344,
+      "durationMs": 722,
+      "promptTokens": 874,
+      "completionTokens": 54,
+      "toolCallNames": [],
+      "toolRounds": 1,
+      "degraded": false,
       "checks": [
         {
           "name": "结构",
@@ -1167,11 +1593,6 @@
           "name": "条目数不变",
           "passed": true,
           "detail": ""
-        },
-        {
-          "name": "固定话术不变",
-          "passed": true,
-          "detail": ""
         }
       ]
     },
@@ -1183,9 +1604,12 @@
         "detailed"
       ],
       "status": "passed",
-      "durationMs": 1350,
-      "promptTokens": 980,
-      "completionTokens": 107,
+      "durationMs": 1837,
+      "promptTokens": 963,
+      "completionTokens": 113,
+      "toolCallNames": [],
+      "toolRounds": 1,
+      "degraded": false,
       "checks": [
         {
           "name": "结构",

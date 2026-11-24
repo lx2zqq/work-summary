@@ -125,6 +125,8 @@ type Props = {
   finalText: string;
   hasContent: boolean;
   loading: boolean;
+  /** 正在生成追问：优先展示等待态，不显示上一次的正文 */
+  waitingForQuestions?: boolean;
   loadingMessage: string;
   notes: string[];
   memories: MemoryPromptItem[];
@@ -150,6 +152,7 @@ export function DraftCard({
   finalText,
   hasContent,
   loading,
+  waitingForQuestions = false,
   loadingMessage,
   notes,
   memories,
@@ -165,8 +168,12 @@ export function DraftCard({
   streaming = [],
   streamingPartial = null,
 }: Props) {
+  const effectiveHasContent = hasContent && !waitingForQuestions;
   const showStreaming =
-    loading && (streaming.length > 0 || Boolean(streamingPartial));
+    loading &&
+    !waitingForQuestions &&
+    (streaming.length > 0 || Boolean(streamingPartial));
+  const showWaiting = loading && !showStreaming && !effectiveHasContent;
   const charCount = finalText.replace(/\s/g, "").length;
   const [copied, setCopied] = useState(false);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -201,7 +208,7 @@ export function DraftCard({
           </div>
           <div>
             <h2 className="text-sm font-semibold text-ink">复盘预览</h2>
-            {memories.length > 0 ? (
+            {!waitingForQuestions && memories.length > 0 ? (
               <p className="mt-0.5 flex items-center gap-1 text-[10px] text-ink-soft">
                 <Brain className="h-3 w-3" />
                 记忆 {memories.length} 条
@@ -218,12 +225,12 @@ export function DraftCard({
 
         <div className="flex shrink-0 items-center gap-2">
           {loading ? <Spinner className="h-3.5 w-3.5" /> : null}
-          {hasContent ? (
+          {effectiveHasContent ? (
             <span className="text-[11px] tabular-nums text-ink-soft">
               共 {charCount} 字
             </span>
           ) : null}
-          {hasContent ? (
+          {effectiveHasContent ? (
             <Badge tone="green">
               <Check className="mr-1 h-3 w-3" />
               可发送
@@ -234,7 +241,7 @@ export function DraftCard({
         </div>
       </header>
 
-      {notes.length > 0 ? (
+      {!waitingForQuestions && notes.length > 0 ? (
         <div className="mb-2 space-y-1.5 px-1">
           {notes.map((note, index) => (
             <div
@@ -255,21 +262,21 @@ export function DraftCard({
               partial={streamingPartial}
             />
           </div>
-        ) : hasContent ? (
-          <div className="paper-sheet flex-1 p-4 sm:p-5">
-            <pre className="review-text text-ink">{finalText}</pre>
-          </div>
-        ) : loading ? (
+        ) : showWaiting ? (
           <div className="paper-sheet flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
             <Spinner className="h-5 w-5" />
             <p className="text-sm font-medium text-ink">{loadingMessage}</p>
+          </div>
+        ) : effectiveHasContent ? (
+          <div className="paper-sheet flex-1 p-4 sm:p-5">
+            <pre className="review-text text-ink">{finalText}</pre>
           </div>
         ) : (
           <EmptyPreview sampleText={sampleText} />
         )}
       </div>
 
-      {hasContent ? (
+      {effectiveHasContent ? (
         <footer className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-line/60 px-1 pt-3">
           <div className="flex flex-wrap items-center gap-1">
             <Button

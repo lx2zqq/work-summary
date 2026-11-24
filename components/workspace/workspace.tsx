@@ -156,6 +156,9 @@ export function Workspace({
 
   const loading = loadingKind !== null;
   const questioning = draft.questions.length > 0;
+  // 轮次到上限后即使还残留旧问题，也不再把用户带回追问卡
+  const showQuestions =
+    questioning && !loading && round < MAX_FOLLOW_UP_ROUNDS;
   const hasFinalContent = hasDraftContent(draft);
   // 移动端右侧 Tab 的状态提示：待回答追问显示数量，已有正文显示圆点
   const previewBadge = questioning
@@ -787,7 +790,7 @@ export function Workspace({
         >
           <div
             key={
-              questioning && !loading
+              showQuestions
                 ? "questions"
                 : loading
                   ? "draft-loading"
@@ -795,7 +798,7 @@ export function Workspace({
             }
             className="panel-swap"
           >
-            {questioning && !loading ? (
+            {showQuestions ? (
               <QuestionsCard
                 key={`${date}-${round}-${draft.questions
                   .map((question) => `${question.id}:${question.text}`)
@@ -816,6 +819,7 @@ export function Workspace({
                 finalText={finalText}
                 hasContent={hasFinalContent}
                 loading={loading}
+                waitingForQuestions={loadingKind === "questions"}
                 loadingMessage={loadingMessage}
                 notes={draft.notes}
                 memories={usedMemories}

@@ -1,3 +1,4 @@
+import type OpenAI from "openai";
 import { z } from "zod";
 import {
   AiError,
@@ -36,46 +37,63 @@ const JUDGE_RULES = `你是复盘质量评审。只根据用户提供的流水�
 {"factuality":0-2,"completeness":0-2,"usability":0-2,"reason":"不超过 80 字"}
 不要输出 JSON 以外的内容。`;
 
-export async function judgeDraft(input: {
-  rawInput: string;
-  draft: ReviewDraft;
-}): Promise<JudgeScore> {
-  const client = createClient();
-  const model = getAiModelName();
+/** 思考模式会占用正文 token，最多重试一次，避免 judge 结果偶发为空 */
+const JUDGE_MAX_ATTEMPTS = 2;
+const JUDGE_MAX_TOKENS = 1200;
 
-  const completion = await client.chat.completions.create({
-    model,
-    temperature: 0,
-    max_tokens: 500,
-    response_format: { type: "json_object" },
-    messages: [
-      { role: "system", content: JUDGE_RULES },
-      {
-        role: "user",
-        content: [
-          `【流水账】\n${input.rawInput}`,
-          `【复盘正文】\n${JSON.stringify(input.draft.sections, null, 2)}`,
-          "请只输出 JSON。",
-        ].join("\n\n"),
-      },
-    ],
-  });
-
-  const content = completion.choices[0]?.message?.content?.trim() ?? "";
+function parseJudgeScore(content: string): JudgeScore | null {
+  if (!content) return null;
 
   try {
     const parsed = judgeSchema.safeParse(
       JSON.parse(extractJson(content)),
     );
-
-    if (!parsed.success) {
-      throw new AiError("judge 输出字段不符合要求", "output");
-    }
-
-    return parsed.data;
-  } catch (error) {
-    if (error instanceof AiError) throw error;
-    console.error("[judge] 原始输出：", content.slice(0, 500));
-    throw new AiError("judge 输出不是合法 JSON", "output");
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
   }
+}
+
+export async function judgeDraft(
+  input: {
+    rawInput: string;
+    draft: ReviewDraft;
+  },
+  options: { client?: OpenAI } = {},
+): Promise<JudgeScore> {
+  const client = options.client ?? createClient();
+  const model = getAiModelName();
+  let lastContent = "";
+
+  for (let attempt = 0; attempt < JUDGE_MAX_ATTEMPTS; attempt += 1) {
+    const completion = await client.chat.completions.create({
+      model,
+      temperature: 0,
+      // 降低思考强度，避免推理内容把 JSON 正文挤掉
+      reasoning_effort: "low",
+      max_tokens: JUDGE_MAX_TOKENS,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: JUDGE_RULES },
+        {
+          role: "user",
+          content: [
+            `【流水账】\n${input.rawInput}`,
+            `【复盘正文】\n${JSON.stringify(input.draft.sections, null, 2)}`,
+            attempt === 0
+              ? "请只输出 JSON。"
+              : "上一次输出不是合法 JSON。请直接输出符合约定的 JSON，不要解释。",
+          ].join("\n\n"),
+        },
+      ],
+    });
+
+    lastContent = completion.choices[0]?.message?.content?.trim() ?? "";
+    const score = parseJudgeScore(lastContent);
+
+    if (score) return score;
+  }
+
+  console.error("[judge] 原始输出：", lastContent.slice(0, 500));
+  throw new AiError("judge 输出不是合法 JSON", "output");
 }

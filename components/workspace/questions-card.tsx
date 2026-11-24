@@ -116,7 +116,7 @@ export function QuestionsCard({
                 需要再确认 {questions.length} 件事
               </h2>
               <span className="rounded-full bg-paper px-2 py-0.5 text-[10px] font-medium text-brand-deep ring-1 ring-brand/30">
-                第 {round + 1} / {maxRounds} 轮
+                第 {Math.min(round + 1, maxRounds)} / {maxRounds} 轮
               </span>
             </div>
             {memories.length > 0 ? (
