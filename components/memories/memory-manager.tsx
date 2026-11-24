@@ -1,14 +1,16 @@
 "use client";
 
-import { Brain, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { Brain, Pencil, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { UsagiMascot } from "@/components/mascots";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input, Label, Textarea } from "@/components/ui/input";
+import { SearchInput } from "@/components/ui/search-input";
 import { Segmented } from "@/components/ui/segmented";
 import { Select } from "@/components/ui/select";
 import { formatDateCN } from "@/lib/date";
@@ -390,7 +392,7 @@ export function MemoryManager({
               aria-label="删除这条记忆"
               onClick={() => setDeleteTarget(memory)}
             >
-              <Trash2 className="h-4 w-4 text-[#a94b42]" />
+              <Trash2 className="h-4 w-4 text-danger" />
             </Button>
           </div>
         </div>
@@ -418,15 +420,12 @@ export function MemoryManager({
         </div>
 
         <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
-          <div className="relative sm:w-52 sm:shrink-0">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-soft/60" />
-            <Input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="搜索内容、学生或分类…"
-              className="h-9 pl-8 text-xs"
-            />
-          </div>
+          <SearchInput
+            value={query}
+            onValueChange={setQuery}
+            placeholder="搜索内容、学生或分类…"
+            className="sm:w-52 sm:shrink-0"
+          />
 
           <Segmented<ScopeFilter>
             options={SCOPE_FILTER_OPTIONS}
@@ -489,7 +488,7 @@ export function MemoryManager({
         ) : null}
 
         {!memoryEnabled ? (
-          <p className="mt-3 rounded-lg bg-butter-soft px-3 py-2 text-[11px] leading-relaxed text-[#7a5c2a] ring-1 ring-butter/50">
+          <p className="mt-3 rounded-lg bg-butter-soft px-3 py-2 text-[11px] leading-relaxed text-warning-deep ring-1 ring-butter/50">
             长期记忆已关闭：不会提取或参考，已有记忆保留。
             <Link href="/settings" className="ml-1 underline">
               去设置
@@ -693,37 +692,21 @@ export function MemoryManager({
         </DialogContent>
       </Dialog>
 
-      <Dialog
+      <ConfirmDialog
         open={Boolean(deleteTarget)}
         onOpenChange={(next) => {
           if (!next) setDeleteTarget(null);
         }}
+        title="删除这条记忆？"
+        description="删除后不会影响已经生成的历史复盘。"
+        confirmLabel="删除"
+        loading={deleting}
+        onConfirm={() => void handleDelete()}
       >
-        <DialogContent
-          title="删除这条记忆？"
-          description="删除后不会影响已经生成的历史复盘。"
-        >
-          <p className="mt-3 rounded-lg bg-cream-deep/60 px-3 py-2 text-sm leading-relaxed text-ink-soft">
-            {deleteTarget?.content}
-          </p>
-          <div className="mt-4 flex justify-end gap-2">
-            <Button
-              variant="ghost"
-              onClick={() => setDeleteTarget(null)}
-              disabled={deleting}
-            >
-              取消
-            </Button>
-            <Button
-              variant="danger"
-              loading={deleting}
-              onClick={() => void handleDelete()}
-            >
-              删除
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+        <p className="rounded-lg bg-cream-deep/60 px-3 py-2 text-sm leading-relaxed text-ink-soft">
+          {deleteTarget?.content}
+        </p>
+      </ConfirmDialog>
     </div>
   );
 }

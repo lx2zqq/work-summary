@@ -137,6 +137,8 @@ export function DemoWorkspace() {
 
     if (ok) toast.success("已复制，可以粘贴到钉钉");
     else toast.error("复制失败，请手动选择文本");
+
+    return ok;
   }
 
   const hasContent = hasDraftContent(draft);
@@ -240,9 +242,7 @@ export function DemoWorkspace() {
                 memoryStale={false}
                 extractingMemory={false}
                 sampleText={sampleText}
-                onCopy={() => {
-                  void handleCopy();
-                }}
+                onCopy={handleCopy}
                 onEdit={() => setEditorOpen(true)}
                 onExtractMemory={() => {
                   toast.info("演示模式不会调用模型，登录后可以体验完整功能");

@@ -25,10 +25,10 @@ export function DialogContent({
 }: DialogContentProps) {
   return (
     <DialogPrimitive.Portal>
-      <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-cocoa/20 backdrop-blur-[3px]" />
+      <DialogPrimitive.Overlay className="dialog-overlay fixed inset-0 z-50 bg-cocoa/20 backdrop-blur-[3px]" />
       <DialogPrimitive.Content
         className={cn(
-          "paper-card fixed left-1/2 top-1/2 z-50 max-h-[88dvh] w-[calc(100%-1.5rem)] max-w-xl -translate-x-1/2 -translate-y-1/2 overflow-y-auto p-5 outline-none sm:p-6",
+          "dialog-panel paper-card fixed left-1/2 top-1/2 z-50 max-h-[88dvh] w-[calc(100%-1.5rem)] max-w-xl -translate-x-1/2 -translate-y-1/2 overflow-y-auto p-5 outline-none sm:p-6",
           className,
         )}
         {...props}

@@ -1,18 +1,18 @@
 "use client";
 
-import { ArrowUpRight, Copy, Search, Trash2 } from "lucide-react";
+import { ArrowUpRight, Copy, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ChiikawaMascot } from "@/components/mascots";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonClass } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { MonthText } from "@/components/ui/date-text";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
+import { SearchInput } from "@/components/ui/search-input";
 import { Select } from "@/components/ui/select";
 import { copyText } from "@/lib/clipboard";
-import { formatDateCN, weekdayCN } from "@/lib/date";
+import { formatDateCN, todayISO, weekdayCN } from "@/lib/date";
 import {
   dayOfMonth,
   matchStudents,
@@ -25,6 +25,31 @@ export type ReviewStats = {
   total: number;
   monthDays: number;
 };
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** 搜索词在摘要里柔和高亮，保留原文本给屏幕阅读器 */
+function highlightKeyword(text: string, keyword: string) {
+  const needle = keyword.trim();
+  if (!needle) return text;
+
+  const pattern = new RegExp(`(${escapeRegExp(needle)})`, "gi");
+
+  return text.split(pattern).map((part, index) =>
+    part.toLowerCase() === needle.toLowerCase() ? (
+      <mark
+        key={`${part}-${index}`}
+        className="rounded-sm bg-butter-soft px-0.5 text-ink"
+      >
+        {part}
+      </mark>
+    ) : (
+      part
+    ),
+  );
+}
 
 export function HistoryList({
   items,
@@ -99,10 +124,19 @@ export function HistoryList({
       setList((previous) =>
         previous.filter((item) => item.id !== deleteTarget.id),
       );
-      setLocalStats((previous) => ({
-        ...previous,
-        total: Math.max(0, previous.total - 1),
-      }));
+      setLocalStats((previous) => {
+        // reviewDate 唯一，删掉当月的一条就等于少了一个复盘日
+        const deletedMonth = deleteTarget.reviewDate.slice(0, 7);
+        const currentMonth = todayISO().slice(0, 7);
+
+        return {
+          total: Math.max(0, previous.total - 1),
+          monthDays:
+            deletedMonth === currentMonth
+              ? Math.max(0, previous.monthDays - 1)
+              : previous.monthDays,
+        };
+      });
       setDeleteTarget(null);
       toast.success("已删除这篇复盘");
     } catch (error) {
@@ -148,15 +182,12 @@ export function HistoryList({
         </div>
 
         <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
-          <div className="relative min-w-0 flex-1 sm:w-56 sm:flex-none">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-soft/60" />
-            <Input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="搜索复盘内容…"
-              className="h-9 pl-8 text-xs"
-            />
-          </div>
+          <SearchInput
+            value={query}
+            onValueChange={setQuery}
+            placeholder="搜索复盘内容…"
+            className="min-w-0 flex-1 sm:w-56 sm:flex-none"
+          />
 
           <Select
             value={studentId}
@@ -266,7 +297,7 @@ export function HistoryList({
                           </div>
 
                           <p className="mt-1.5 line-clamp-2 text-[13px] leading-relaxed text-ink-soft">
-                            {summary}
+                            {highlightKeyword(summary, query)}
                           </p>
 
                           {mentioned.length > 0 ? (
@@ -325,7 +356,7 @@ export function HistoryList({
                                 aria-label={`删除 ${formatDateCN(item.reviewDate)} 的复盘`}
                                 onClick={() => setDeleteTarget(item)}
                               >
-                                <Trash2 className="h-4 w-4 text-[#a94b42]" />
+                                <Trash2 className="h-4 w-4 text-danger" />
                               </Button>
                             </>
                           )}
@@ -340,40 +371,22 @@ export function HistoryList({
         </div>
       )}
 
-      <Dialog
+      <ConfirmDialog
         open={Boolean(deleteTarget)}
         onOpenChange={(next) => {
           if (!next) setDeleteTarget(null);
         }}
-      >
-        <DialogContent
-          title="删除这篇复盘？"
-          description={
-            deleteTarget
-              ? `${formatDateCN(deleteTarget.reviewDate)} 的复盘会被永久删除，长期记忆不受影响。`
-              : undefined
-          }
-        >
-          <div className="mt-5 flex justify-end gap-2">
-            <Button
-              variant="ghost"
-              onClick={() => setDeleteTarget(null)}
-              disabled={deleting}
-            >
-              取消
-            </Button>
-            <Button
-              variant="danger"
-              loading={deleting}
-              onClick={() => {
-                void handleDelete();
-              }}
-            >
-              确认删除
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+        title="删除这篇复盘？"
+        description={
+          deleteTarget
+            ? `${formatDateCN(deleteTarget.reviewDate)} 的复盘会被永久删除，长期记忆不受影响。`
+            : undefined
+        }
+        loading={deleting}
+        onConfirm={() => {
+          void handleDelete();
+        }}
+      />
     </div>
   );
 }

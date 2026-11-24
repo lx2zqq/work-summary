@@ -81,7 +81,7 @@ export function LoginForm({ next }: { next: string }) {
       </div>
 
       {error ? (
-        <p className="rounded-lg border border-[#e9cdc8] bg-[#fdf0ee] px-3 py-2.5 text-sm font-medium leading-relaxed text-[#a94b42]">
+        <p className="rounded-lg border border-danger-line bg-danger-soft px-3 py-2.5 text-sm font-medium leading-relaxed text-danger">
           {error}
         </p>
       ) : null}

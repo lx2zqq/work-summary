@@ -217,7 +217,7 @@ export function SettingsForm({
 
         <section className="paper-card p-4 sm:p-5">
           <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-sky-soft text-[#4e7f99]">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-sky-soft text-info">
               <Bot className="h-4 w-4" />
             </div>
             <h2 className="text-sm font-semibold text-ink">模型与账号</h2>

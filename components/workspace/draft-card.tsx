@@ -2,7 +2,7 @@
 
 import { Brain, Check, Copy, FileText, Pencil } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ChiikawaMascot } from "@/components/mascots";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -137,7 +137,8 @@ type Props = {
   extractingMemory: boolean;
   /** 空状态里「查看模板示例」用的渲染结果 */
   sampleText: string;
-  onCopy: () => void;
+  /** 返回 false 表示复制失败，按钮不显示「已复制」 */
+  onCopy: () => void | boolean | Promise<void | boolean>;
   onEdit: () => void;
   onExtractMemory: () => void;
   /** 演示模式：记忆链接改为登录页 */
@@ -169,6 +170,24 @@ export function DraftCard({
 }: Props) {
   const showStreaming =
     loading && (streaming.length > 0 || Boolean(streamingPartial));
+  const charCount = finalText.replace(/\s/g, "").length;
+  const [copied, setCopied] = useState(false);
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    };
+  }, []);
+
+  async function handleCopyClick() {
+    const result = await onCopy();
+    if (result === false) return;
+
+    setCopied(true);
+    if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    copyTimerRef.current = setTimeout(() => setCopied(false), 1800);
+  }
 
   const memoryTitle = memoryExtractedAt
     ? memoryStale
@@ -203,6 +222,11 @@ export function DraftCard({
         <div className="flex shrink-0 items-center gap-2">
           {loading ? <Spinner className="h-3.5 w-3.5" /> : null}
           {hasContent ? (
+            <span className="text-[11px] tabular-nums text-ink-soft">
+              共 {charCount} 字
+            </span>
+          ) : null}
+          {hasContent ? (
             <Badge tone="green">
               <Check className="mr-1 h-3 w-3" />
               可发送
@@ -218,7 +242,7 @@ export function DraftCard({
           {notes.map((note, index) => (
             <div
               key={`${note}-${index}`}
-              className="rounded-lg bg-butter-soft px-3 py-2 text-xs leading-relaxed text-[#7a5c2a] ring-1 ring-butter/50"
+              className="rounded-lg bg-butter-soft px-3 py-2 text-xs leading-relaxed text-warning-deep ring-1 ring-butter/50"
             >
               {note}
             </div>
@@ -275,9 +299,20 @@ export function DraftCard({
             ) : null}
           </div>
 
-          <Button size="sm" onClick={onCopy} disabled={loading}>
-            <Copy className="h-4 w-4" />
-            复制
+          <Button
+            size="sm"
+            onClick={() => {
+              void handleCopyClick();
+            }}
+            disabled={loading}
+            title={copied ? "已复制到剪贴板" : "复制成品，粘贴到钉钉"}
+          >
+            {copied ? (
+              <Check className="h-4 w-4" />
+            ) : (
+              <Copy className="h-4 w-4" />
+            )}
+            {copied ? "已复制" : "复制"}
           </Button>
         </footer>
       ) : null}

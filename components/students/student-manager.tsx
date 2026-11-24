@@ -1,13 +1,15 @@
 "use client";
 
-import { Pencil, Plus, Search, Trash2, UserRound } from "lucide-react";
+import { Pencil, Plus, Trash2, UserRound } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { HachiwareMascot } from "@/components/mascots";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input, Label, Textarea } from "@/components/ui/input";
+import { SearchInput } from "@/components/ui/search-input";
 import { Select } from "@/components/ui/select";
 import { avatarTone } from "@/lib/avatar-tone";
 import { formatDateShort } from "@/lib/date";
@@ -246,15 +248,12 @@ export function StudentManager({
         </p>
 
         <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
-          <div className="relative min-w-0 flex-1 sm:w-48 sm:flex-none">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-soft/60" />
-            <Input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="搜索姓名、年级、科目…"
-              className="h-9 pl-8 text-xs"
-            />
-          </div>
+          <SearchInput
+            value={query}
+            onValueChange={setQuery}
+            placeholder="搜索姓名、年级、科目…"
+            className="min-w-0 flex-1 sm:w-48 sm:flex-none"
+          />
 
           <Select
             value={statusFilter}
@@ -408,7 +407,7 @@ export function StudentManager({
                       aria-label={`删除 ${student.name}`}
                       onClick={() => setDeleteTarget(student)}
                     >
-                      <Trash2 className="h-4 w-4 text-[#a94b42]" />
+                      <Trash2 className="h-4 w-4 text-danger" />
                     </Button>
                   </div>
                 </div>
@@ -507,39 +506,22 @@ export function StudentManager({
         </DialogContent>
       </Dialog>
 
-      <Dialog
+      <ConfirmDialog
         open={Boolean(deleteTarget)}
         onOpenChange={(next) => {
           if (!next) setDeleteTarget(null);
         }}
-      >
-        <DialogContent
-          title="删除学生"
-          description={
-            deleteTarget
-              ? `确定删除「${deleteTarget.name}」吗？历史复盘不会受影响。`
-              : undefined
-          }
-        >
-          <div className="mt-5 flex justify-end gap-2">
-            <Button
-              variant="secondary"
-              onClick={() => setDeleteTarget(null)}
-            >
-              取消
-            </Button>
-            <Button
-              variant="danger"
-              loading={deleting}
-              onClick={() => {
-                void handleDelete();
-              }}
-            >
-              确认删除
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+        title="删除学生"
+        description={
+          deleteTarget
+            ? `确定删除「${deleteTarget.name}」吗？历史复盘不会受影响。`
+            : undefined
+        }
+        loading={deleting}
+        onConfirm={() => {
+          void handleDelete();
+        }}
+      />
 
       <StudentDetail
         student={detailStudent}

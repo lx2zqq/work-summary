@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  ChevronDown,
   Lightbulb,
   Loader2,
   Mic,
@@ -120,6 +121,8 @@ export function RawInputCard({
   // 没点过写作区时，快捷插入默认追加到末尾，而不是插到第 0 个字符
   const touchedRef = useRef(false);
   const [forceRecorder, setForceRecorder] = useState(false);
+  // 学生超过 8 位时，+N 可展开全部名单
+  const [showAllStudents, setShowAllStudents] = useState(false);
   const androidWeChat = useSyncExternalStore(
     subscribeUserAgent,
     getAndroidWeChatSnapshot,
@@ -253,26 +256,42 @@ export function RawInputCard({
 
         {students.length > 0 ? (
           <>
-            {students.slice(0, 8).map((student) => (
+            {(showAllStudents ? students : students.slice(0, 8)).map(
+              (student) => (
+                <button
+                  key={student.id}
+                  type="button"
+                  disabled={loading}
+                  title={`把「${student.name}」插入到光标处`}
+                  onClick={() => insertStudent(student.name)}
+                  className="inline-flex items-center gap-0.5 rounded-full border border-line bg-paper px-2.5 py-1 text-[11px] font-medium text-ink-soft transition-colors hover:border-brand/40 hover:bg-brand-soft hover:text-brand-deep disabled:opacity-50"
+                >
+                  <Plus className="h-3 w-3" />
+                  {student.name}
+                </button>
+              ),
+            )}
+            {students.length > 8 ? (
               <button
-                key={student.id}
                 type="button"
                 disabled={loading}
-                title={`把「${student.name}」插入到光标处`}
-                onClick={() => insertStudent(student.name)}
-                className="inline-flex items-center gap-0.5 rounded-full border border-line bg-paper px-2.5 py-1 text-[11px] font-medium text-ink-soft transition-colors hover:border-brand/40 hover:bg-brand-soft hover:text-brand-deep disabled:opacity-50"
+                aria-expanded={showAllStudents}
+                title={
+                  showAllStudents
+                    ? "收起学生名单"
+                    : `展开其余 ${students.length - 8} 位学生`
+                }
+                onClick={() => setShowAllStudents((current) => !current)}
+                className="inline-flex items-center gap-0.5 rounded-full border border-transparent bg-cream-deep px-2.5 py-1 text-[11px] font-medium text-ink-soft transition-colors hover:bg-brand-soft hover:text-brand-deep disabled:opacity-50"
               >
-                <Plus className="h-3 w-3" />
-                {student.name}
+                {showAllStudents ? "收起" : `+${students.length - 8}`}
+                <ChevronDown
+                  className={cn(
+                    "h-3 w-3 transition-transform",
+                    showAllStudents && "rotate-180",
+                  )}
+                />
               </button>
-            ))}
-            {students.length > 8 ? (
-              <span
-                className="rounded-full bg-cream-deep px-2.5 py-1 text-[11px] font-medium text-ink-soft"
-                title={`还有 ${students.length - 8} 位学生`}
-              >
-                +{students.length - 8}
-              </span>
             ) : null}
           </>
         ) : (
@@ -301,6 +320,17 @@ export function RawInputCard({
             touchedRef.current = true;
           }}
           onChange={(event) => onChange(event.target.value)}
+          onKeyDown={(event) => {
+            // 输入框内 Ctrl / ⌘ + Enter 直接生成
+            if (
+              event.key === "Enter" &&
+              (event.metaKey || event.ctrlKey) &&
+              !event.nativeEvent.isComposing
+            ) {
+              event.preventDefault();
+              if (!loading && value.trim()) onGenerate();
+            }
+          }}
           placeholder={
             "今天做了什么？随便写，学生、家长、业绩、琐事都可以。\n比如：林小满作业写完了，错题讲了两道；跟她妈妈微信说了这周安排。\n写不完整也没关系，生成前会先确认几个关键信息。"
           }
@@ -311,7 +341,7 @@ export function RawInputCard({
         {speech.listening ? (
           <div
             aria-live="polite"
-            className="mb-2 mt-2 flex items-start gap-2 rounded-lg bg-sky-soft px-3 py-2 text-[11px] leading-relaxed text-[#4e7f99] ring-1 ring-sky/50"
+            className="mb-2 mt-2 flex items-start gap-2 rounded-lg bg-sky-soft px-3 py-2 text-[11px] leading-relaxed text-info ring-1 ring-sky/50"
           >
             <span className="mt-1 h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-brand-deep motion-reduce:animate-none" />
             <span className="min-w-0 break-words">
@@ -323,7 +353,7 @@ export function RawInputCard({
         ) : recorder.recording ? (
           <div
             aria-live="polite"
-            className="mb-2 mt-2 flex items-start gap-2 rounded-lg bg-sky-soft px-3 py-2 text-[11px] leading-relaxed text-[#4e7f99] ring-1 ring-sky/50"
+            className="mb-2 mt-2 flex items-start gap-2 rounded-lg bg-sky-soft px-3 py-2 text-[11px] leading-relaxed text-info ring-1 ring-sky/50"
           >
             <span className="mt-1 h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-brand-deep motion-reduce:animate-none" />
             <span className="min-w-0 break-words">
@@ -334,7 +364,7 @@ export function RawInputCard({
         ) : recorder.transcribing ? (
           <div
             aria-live="polite"
-            className="mb-2 mt-2 flex items-start gap-2 rounded-lg bg-sky-soft px-3 py-2 text-[11px] leading-relaxed text-[#4e7f99] ring-1 ring-sky/50"
+            className="mb-2 mt-2 flex items-start gap-2 rounded-lg bg-sky-soft px-3 py-2 text-[11px] leading-relaxed text-info ring-1 ring-sky/50"
           >
             <Loader2 className="mt-0.5 h-3.5 w-3.5 shrink-0 animate-spin" />
             <span className="min-w-0 break-words">
@@ -346,7 +376,7 @@ export function RawInputCard({
         {voiceError ? (
           <p
             role="alert"
-            className="mb-2 mt-2 rounded-lg bg-[#fdf0ee] px-3 py-2 text-[11px] leading-relaxed text-[#a94b42] ring-1 ring-[#e9cdc8]"
+            className="mb-2 mt-2 rounded-lg bg-danger-soft px-3 py-2 text-[11px] leading-relaxed text-danger ring-1 ring-danger-line"
           >
             {voiceError}
           </p>
@@ -361,7 +391,7 @@ export function RawInputCard({
 
       <details className="mx-3 mb-3 rounded-lg border border-line/60 bg-cream-deep/40 px-3 py-2 text-sm text-ink-soft sm:mx-4">
         <summary className="flex cursor-pointer list-none items-center gap-2 text-xs font-medium text-ink-soft">
-          <Lightbulb className="h-3.5 w-3.5 text-[#8a6a2f]" />
+          <Lightbulb className="h-3.5 w-3.5 text-warning" />
           栏目提示
         </summary>
         <div className="mt-2 grid gap-2 sm:grid-cols-2">
@@ -446,7 +476,11 @@ export function RawInputCard({
             onClick={onGenerate}
             loading={loading}
             disabled={!value.trim()}
-            title={value.trim() ? undefined : "先写一点今天的流水账"}
+            title={
+              value.trim()
+                ? `${questioning ? "重新分析" : hasDraft ? "重新生成" : "生成复盘"}（Ctrl / ⌘ + Enter）`
+                : "先写一点今天的流水账"
+            }
           >
             {questioning ? "重新分析" : hasDraft ? "重新生成" : "生成复盘"}
           </Button>

@@ -91,7 +91,20 @@ export function QuestionsCard({
   }
 
   return (
-    <section className="flex flex-col rounded-2xl border border-line/70 bg-canvas p-3 sm:p-4 lg:min-h-[640px]">
+    <section
+      className="flex flex-col rounded-2xl border border-line/70 bg-canvas p-3 sm:p-4 lg:min-h-[640px]"
+      onKeyDown={(event) => {
+        // 卡片内任意位置 Ctrl / ⌘ + Enter 都能提交追问
+        if (
+          event.key === "Enter" &&
+          (event.metaKey || event.ctrlKey) &&
+          !event.nativeEvent.isComposing
+        ) {
+          event.preventDefault();
+          if (!loading) handleSubmit();
+        }
+      }}
+    >
       <header className="flex items-start justify-between gap-2 px-1 pb-3">
         <div className="flex min-w-0 items-start gap-2.5">
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-paper text-brand-deep ring-1 ring-line/60">
@@ -158,13 +171,13 @@ export function QuestionsCard({
               className="rounded-xl border border-line/70 bg-paper p-3.5"
             >
               <div className="flex gap-2 text-sm font-medium text-ink">
-                <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-butter-soft text-[11px] text-[#8a6a2f]">
+                <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-butter-soft text-[11px] text-warning">
                   {index + 1}
                 </span>
                 <span className="leading-relaxed">
                   {question.text}
                   {question.multiple ? (
-                    <span className="ml-2 inline-block whitespace-nowrap rounded-full bg-sky-soft px-2 py-0.5 align-middle text-[10px] font-medium text-[#4e7f99]">
+                    <span className="ml-2 inline-block whitespace-nowrap rounded-full bg-sky-soft px-2 py-0.5 align-middle text-[10px] font-medium text-info">
                       可多选
                     </span>
                   ) : null}
@@ -225,7 +238,12 @@ export function QuestionsCard({
           <SkipForward className="h-4 w-4" />
           跳过追问并生成
         </Button>
-        <Button size="sm" onClick={handleSubmit} loading={loading}>
+        <Button
+          size="sm"
+          onClick={handleSubmit}
+          loading={loading}
+          title="提交并继续（Ctrl / ⌘ + Enter）"
+        >
           提交并继续
           <ArrowRight className="h-4 w-4" />
         </Button>

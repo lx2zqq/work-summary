@@ -21,8 +21,8 @@ const STATUS_META: Record<
   dirty: { dot: "bg-brand", text: "有改动" },
   saving: { dot: "bg-brand animate-pulse", text: "正在暂存" },
   saved: { dot: "bg-ink-soft/50", text: "已自动暂存" },
-  archived: { dot: "bg-[#4f7d63]", text: "已归档" },
-  failed: { dot: "bg-[#a94b42]", text: "暂存失败" },
+  archived: { dot: "bg-success", text: "已归档" },
+  failed: { dot: "bg-danger", text: "暂存失败" },
 };
 
 export function WorkspaceDate({
@@ -137,7 +137,7 @@ export function WorkspaceDate({
             size="sm"
             onClick={onSave}
             disabled={!canSave || loading || status === "saving"}
-            title="保存并归档到历史"
+            title="保存并归档到历史（Ctrl / ⌘ + S）"
           >
             保存
           </Button>

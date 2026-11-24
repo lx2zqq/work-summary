@@ -25,7 +25,7 @@ export function DrawerContent({
 }) {
   return (
     <DialogPrimitive.Portal>
-      <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-ink/20 backdrop-blur-[2px]" />
+      <DialogPrimitive.Overlay className="dialog-overlay fixed inset-0 z-50 bg-ink/20 backdrop-blur-[2px]" />
       <DialogPrimitive.Content
         className={cn(
           "drawer-panel fixed inset-y-0 right-0 z-50 flex w-full max-w-md flex-col border-l border-line bg-paper shadow-[-12px_0_40px_-24px_rgba(63,56,51,0.4)] outline-none",

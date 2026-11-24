@@ -1,11 +1,12 @@
 "use client";
 
-import { Plus, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronUp, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
 import { normalizeDraft } from "@/lib/draft";
 import {
   SECTION_META,
@@ -71,6 +72,23 @@ function DraftEditorInner({
         [section]: [...previous.sections[section], ""],
       },
     }));
+  }
+
+  /** 同栏目内上移 / 下移 */
+  function shiftItem(section: SectionKey, index: number, offset: -1 | 1) {
+    setLocal((previous) => {
+      const items = previous.sections[section];
+      const target = index + offset;
+      if (target < 0 || target >= items.length) return previous;
+
+      const next = [...items];
+      [next[index], next[target]] = [next[target], next[index]];
+
+      return {
+        ...previous,
+        sections: { ...previous.sections, [section]: next },
+      };
+    });
   }
 
   function moveItem(
@@ -153,25 +171,52 @@ function DraftEditorInner({
                         rows={2}
                         className="min-h-[64px] bg-paper text-sm"
                       />
-                      <div className="mt-1.5 flex items-center justify-between gap-2">
-                        <select
-                          value=""
-                          onChange={(event) => {
-                            const target = event.target.value as SectionKey;
-                            if (target) moveItem(key, index, target);
-                          }}
-                          className="h-8 rounded-lg border border-line bg-paper px-2.5 text-xs font-medium text-ink-soft outline-none focus:border-brand"
-                          aria-label="移动到其他栏目"
-                        >
-                          <option value="">移动到…</option>
-                          {SECTION_ORDER.filter(
-                            (sectionKey) => sectionKey !== key,
-                          ).map((sectionKey) => (
-                            <option key={sectionKey} value={sectionKey}>
-                              {SECTION_META[sectionKey].title}
-                            </option>
-                          ))}
-                        </select>
+                      <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5">
+                          <div className="flex items-center gap-0.5">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              aria-label="上移"
+                              title="上移"
+                              disabled={index === 0}
+                              onClick={() => shiftItem(key, index, -1)}
+                            >
+                              <ChevronUp className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              aria-label="下移"
+                              title="下移"
+                              disabled={index === items.length - 1}
+                              onClick={() => shiftItem(key, index, 1)}
+                            >
+                              <ChevronDown className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+
+                          <Select
+                            value=""
+                            onChange={(event) => {
+                              const target = event.target
+                                .value as SectionKey;
+                              if (target) moveItem(key, index, target);
+                            }}
+                            className="h-8 w-28 pl-2.5 pr-8 text-xs font-medium text-ink-soft"
+                            aria-label="移动到其他栏目"
+                          >
+                            <option value="">移动到…</option>
+                            {SECTION_ORDER.filter(
+                              (sectionKey) => sectionKey !== key,
+                            ).map((sectionKey) => (
+                              <option key={sectionKey} value={sectionKey}>
+                                {SECTION_META[sectionKey].title}
+                              </option>
+                            ))}
+                          </Select>
+                        </div>
+
                         <Button
                           variant="danger"
                           size="sm"
@@ -189,7 +234,7 @@ function DraftEditorInner({
           })}
         </div>
 
-        <div className="mt-6 flex justify-end gap-2 border-t border-line/70 pt-4">
+        <div className="sticky bottom-0 z-10 -mx-5 -mb-5 mt-6 flex justify-end gap-2 border-t border-line/70 bg-paper px-5 pb-5 pt-4 sm:-mx-6 sm:-mb-6 sm:px-6 sm:pb-6">
           <Button variant="secondary" onClick={() => onOpenChange(false)}>
             取消
           </Button>

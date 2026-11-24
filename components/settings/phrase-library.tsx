@@ -132,7 +132,7 @@ export function PhraseLibrary({
     <section className="paper-card p-4 sm:p-5">
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-butter-soft text-[#7a5c2a]">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-butter-soft text-warning-deep">
             <BookOpen className="h-4 w-4" />
           </div>
           <h2 className="text-sm font-semibold text-ink">通用话术库</h2>
@@ -178,7 +178,7 @@ export function PhraseLibrary({
           </div>
 
           {full ? (
-            <p className="mt-2 text-[11px] text-[#a94b42]">
+            <p className="mt-2 text-[11px] text-danger">
               已经存满 {MAX_CUSTOM_PHRASES} 条，先删掉几条再加。
             </p>
           ) : null}
@@ -247,7 +247,7 @@ export function PhraseLibrary({
                       void handleDelete(phrase.id);
                     }}
                     className={cn(
-                      "mt-0.5 shrink-0 rounded-md p-1.5 text-ink-soft transition-colors hover:bg-paper hover:text-[#a94b42]",
+                      "mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-ink-soft transition-colors hover:bg-paper hover:text-danger",
                       deletingId === phrase.id && "opacity-50",
                     )}
                   >

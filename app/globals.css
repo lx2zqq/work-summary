@@ -29,6 +29,16 @@
   --color-butter-soft: #faf4e6;
   --color-mint: #c6ddcd;
   --color-mint-soft: #eff6f1;
+
+  /* 语义色：状态反馈统一从这里取，组件里不再散落十六进制 */
+  --color-danger: #a94b42;
+  --color-danger-soft: #fdf0ee;
+  --color-danger-line: #e9cdc8;
+  --color-danger-hover: #fbe4e0;
+  --color-success: #4f7d63;
+  --color-warning: #8a6a2f;
+  --color-warning-deep: #7a5c2a;
+  --color-info: #4e7f99;
 }
 
 :root {
@@ -156,6 +166,35 @@ body {
   animation: drawer-in 0.2s ease-out both;
 }
 
+@keyframes overlay-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* 居中交给 Tailwind 的 translate 属性，这里只补缩放和淡入，避免叠加位移 */
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    scale: 0.98;
+  }
+  to {
+    opacity: 1;
+    scale: 1;
+  }
+}
+
+.dialog-overlay {
+  animation: overlay-in 0.16s ease-out both;
+}
+
+.dialog-panel {
+  animation: dialog-in 0.18s ease-out both;
+}
+
 @keyframes panel-in {
   from {
     opacity: 0;
@@ -175,7 +214,9 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .loading-dot,
   .drawer-panel,
-  .panel-swap {
+  .panel-swap,
+  .dialog-overlay,
+  .dialog-panel {
     animation: none;
   }
 }
