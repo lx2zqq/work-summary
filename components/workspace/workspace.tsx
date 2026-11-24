@@ -1,6 +1,6 @@
 "use client";
 
-import { Copy, RefreshCw, Sparkles } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
   useCallback,
@@ -43,6 +43,7 @@ import {
   resolveMemoryCopyAction,
 } from "@/lib/memory";
 import { SSEDecoder } from "@/lib/sse";
+import { SAMPLE_DRAFT } from "@/lib/sample";
 import { setSelectedDate } from "@/lib/selected-date";
 import { renderReview } from "@/lib/template";
 import {
@@ -59,11 +60,11 @@ import {
   type Student,
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { DateBar } from "./date-bar";
 import { DraftCard } from "./draft-card";
 import { DraftEditor } from "./draft-editor";
 import { QuestionsCard } from "./questions-card";
 import { RawInputCard } from "./raw-input-card";
+import type { SaveStatus } from "./workspace-date";
 
 type Props = {
   initialDate: string;
@@ -194,6 +195,10 @@ export function Workspace({
   const [dirty, setDirty] = useState(
     Boolean(jobForDate?.status === "done" && jobForDate.saveFailed),
   );
+  // 归档是 UI 状态：显式点「保存」后标记，后续有改动会回到自动暂存
+  const [archived, setArchived] = useState(
+    Boolean(initialReview?.finalText.trim()),
+  );
   const [memoryExtractedAt, setMemoryExtractedAt] = useState<
     string | null
   >(initialReview?.memoryExtractedAt ?? null);
@@ -285,6 +290,7 @@ export function Workspace({
   const markDirty = useCallback(() => {
     editRevisionRef.current += 1;
     setDirty(true);
+    setArchived(false);
   }, []);
 
   const finishLocalJob = useCallback((jobId: string) => {
@@ -541,7 +547,7 @@ export function Workspace({
           const saved = await saveNow({ silent: true });
 
           if (!saved) {
-            toast.error("保存失败，暂时不能记忆");
+            toast.error("保存失败，暂时不能提取记忆");
             return;
           }
         }
@@ -559,7 +565,7 @@ export function Workspace({
         };
 
         if (!response.ok) {
-          throw new Error(data.error || "记忆整理失败");
+          throw new Error(data.error || "提取记忆失败");
         }
 
         if (data.skipped) return;
@@ -574,17 +580,17 @@ export function Workspace({
           if (count > 0) {
             toast.success(
               options.quiet
-                ? `记忆已更新 ${count} 条`
-                : `已记住 ${count} 条关键信息`,
+                ? `已更新 ${count} 条长期记忆`
+                : `已提取 ${count} 条长期记忆`,
             );
           } else if (!options.quiet) {
-            toast.info("今天没有需要新增的记忆");
+            toast.info("今天没有新的记忆需要提取");
           }
         }
       } catch (error) {
         if (dateRef.current === targetDate) {
           toast.error(
-            error instanceof Error ? error.message : "记忆整理失败",
+            error instanceof Error ? error.message : "提取记忆失败",
           );
         }
       } finally {
@@ -605,6 +611,62 @@ export function Workspace({
       updatedAt: savedAt,
     });
   }, [memoryExtractedAt, dirty, savedAt]);
+
+  const hasAnyInput = rawInput.trim().length > 0 || hasFinalContent;
+
+  // 只有有内容时才显示保存状态，空白日期不出现「尚未保存」
+  const saveStatus: SaveStatus = !hasAnyInput
+    ? "idle"
+    : saveFailed
+      ? "failed"
+      : saving
+        ? "saving"
+        : dirty
+          ? "dirty"
+          : archived
+            ? "archived"
+            : savedAt
+              ? "saved"
+              : "idle";
+
+  const sampleText = useMemo(
+    () => renderReview(SAMPLE_DRAFT, date, initialSettings),
+    [date, initialSettings],
+  );
+
+  /**
+   * 「保存」= 显式归档。
+   * 自动暂存仍会写库防丢，但只有这里会把状态标记为已归档。
+   */
+  const handleArchive = useCallback(async () => {
+    if (!hasAnyInput) {
+      toast.error("还没有可保存的内容");
+      return;
+    }
+
+    const revision = editRevisionRef.current;
+    const saved = await saveNow({ silent: true });
+
+    if (!saved) {
+      toast.error("保存失败，请稍后重试");
+      return;
+    }
+
+    // 保存期间用户又改了内容，不能再标记为已归档
+    if (editRevisionRef.current !== revision) {
+      setArchived(false);
+      toast.info("内容有更新，已自动暂存；完成后再保存归档");
+      return;
+    }
+
+    const canArchive =
+      hasDraftContent(draft) && draft.questions.length === 0;
+
+    setArchived(canArchive);
+    toast.success(
+      canArchive ? "已归档到历史" : "已暂存；补齐追问后可以归档",
+    );
+  }, [hasAnyInput, draft, saveNow]);
 
   useEffect(() => {
     if (!dirty || loading || hydratedDate !== date) return;
@@ -850,7 +912,7 @@ export function Workspace({
         );
         finishLocalJob(data.jobId);
         toast.warning(
-          data.warning || "AI 暂时不可用，已保留当前草稿，请稍后重试",
+          data.warning || "生成服务暂时不可用，已保留当前草稿，请稍后重试",
           { duration: 6500 },
         );
         return false;
@@ -900,7 +962,7 @@ export function Workspace({
         }
       }
 
-      toast.warning(data.warning || "AI 暂时不可用，已按原文生成草稿", {
+      toast.warning(data.warning || "生成服务暂时不可用，已按原文生成草稿", {
         duration: 6500,
       });
 
@@ -924,6 +986,8 @@ export function Workspace({
         return false;
       }
 
+      // 移动端切到预览，让加载态和结果立刻可见
+      setActiveTab("preview");
       setLoadingMessage("正在生成复盘正文…");
       setLoadingKind("final");
 
@@ -1020,6 +1084,9 @@ export function Workspace({
         setActiveTab("input");
         return false;
       }
+
+      // 移动端切到预览，让加载态和追问立刻可见
+      setActiveTab("preview");
 
       if (config.round >= MAX_FOLLOW_UP_ROUNDS) {
         return runFinal(config);
@@ -1229,6 +1296,7 @@ export function Workspace({
       setRound(review?.round ?? 0);
       savedAtRef.current = review?.updatedAt ?? null;
       setSavedAt(review?.updatedAt ?? null);
+      setArchived(Boolean(review?.finalText.trim()));
       setMemoryExtractedAt(review?.memoryExtractedAt ?? null);
       setUsedMemories([]);
       setRestoredAnswers({});
@@ -1253,6 +1321,7 @@ export function Workspace({
     setRound(job.round);
     setUsedMemories(result.memories);
     setRestoredAnswers({});
+    setArchived(false);
 
     if (!result.ignored) {
       setDraft(normalizeDraft(result.draft));
@@ -1462,42 +1531,53 @@ export function Workspace({
     }
 
     const okay = await copyText(finalText);
-    if (okay) {
-      toast.success("已复制，去钉钉粘贴吧");
-
-      trackClientEvent("review_copied", date, {
-        charCount: finalText.length,
-        itemCount: Object.values(draft.sections).reduce(
-          (total, items) => total + items.length,
-          0,
-        ),
-      });
-
-      // 复制视为当天收尾：第一次记忆，正文有更新则刷新；失败不影响复制
-      const memoryAction = resolveMemoryCopyAction({
-        enabled: initialSettings.enableMemory,
-        extractedAt: memoryExtractedAt,
-        stale: memoryStale,
-      });
-
-      if (memoryAction !== "none") {
-        void (async () => {
-          const saved = await saveNow({ silent: true });
-
-          if (!saved) {
-            toast.error("复盘保存失败，今天的关键信息还没记住");
-            return;
-          }
-
-          await extractMemory(false, {
-            skipSave: true,
-            quiet: memoryAction === "refresh",
-          });
-        })();
-      }
-    } else {
+    if (!okay) {
       toast.error("复制失败，请手动选中文字复制");
+      return;
     }
+
+    trackClientEvent("review_copied", date, {
+      charCount: finalText.length,
+      itemCount: Object.values(draft.sections).reduce(
+        (total, items) => total + items.length,
+        0,
+      ),
+    });
+
+    // 复制只做纯文本；记忆提取改成显式操作，不再静默调模型
+    const memoryAction = resolveMemoryCopyAction({
+      enabled: initialSettings.enableMemory,
+      extractedAt: memoryExtractedAt,
+      stale: memoryStale,
+    });
+
+    if (memoryAction === "none") {
+      toast.success("已复制，去钉钉粘贴吧");
+      return;
+    }
+
+    toast.success("已复制，去钉钉粘贴吧", {
+      description:
+        memoryAction === "first"
+          ? "顺便提取今天的长期记忆？"
+          : "正文有更新，要同步长期记忆吗？",
+      duration: 8000,
+      action: {
+        label: memoryAction === "first" ? "提取记忆" : "更新记忆",
+        onClick: () => {
+          void (async () => {
+            const saved = await saveNow({ silent: true });
+
+            if (!saved) {
+              toast.error("复盘保存失败，记忆还没提取");
+              return;
+            }
+
+            await extractMemory(false, { skipSave: true });
+          })();
+        },
+      },
+    });
   }, [
     questioning,
     draft,
@@ -1536,11 +1616,11 @@ export function Workspace({
       {recoveryJob ? (
         <section className="paper-card p-4 sm:p-5">
           <div className="flex items-start gap-3">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-butter-soft text-[#8a6a2f] ring-2 ring-butter/60">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-butter-soft text-[#8a6a2f]">
               <RefreshCw className="h-4 w-4" />
             </div>
             <div className="min-w-0">
-              <h2 className="text-sm font-extrabold text-ink">
+              <h2 className="text-sm font-semibold text-ink">
                 上次生成还没完成
               </h2>
               <p className="mt-0.5 text-xs leading-relaxed text-ink-soft">
@@ -1570,47 +1650,19 @@ export function Workspace({
         </section>
       ) : null}
 
-      <DateBar
-        date={date}
-        style={style}
-        loading={loading}
-        saving={saving}
-        dirty={dirty}
-        saveFailed={saveFailed}
-        savedAt={savedAt}
-        onDateChange={(nextDate) => {
-          void handleDateChange(nextDate);
-        }}
-        onStyleChange={handleStyleChange}
-        onSave={() => {
-          void saveNow();
-        }}
-      />
-
-      {draft.questions.length > 0 && !loading ? (
-        <QuestionsCard
-          key={`${date}-${round}-${draft.questions
-            .map((question) => `${question.id}:${question.text}`)
-            .join("|")}`}
-          questions={draft.questions}
-          round={round}
-          maxRounds={MAX_FOLLOW_UP_ROUNDS}
-          loading={loading}
-          memories={usedMemories}
-          initialAnswers={restoredAnswers}
-          onSubmit={(answers) => {
-            void handleAnswers(answers);
-          }}
-          onSkip={handleSkipQuestions}
-        />
-      ) : null}
-
-      <div className="md:hidden">
+      <div className="lg:hidden">
         <Segmented
-          options={[
-            { value: "input", label: "输入" },
-            { value: "preview", label: "预览" },
-          ]}
+          options={
+            questioning
+              ? [
+                  { value: "input" as const, label: "流水账" },
+                  { value: "preview" as const, label: "追问" },
+                ]
+              : [
+                  { value: "input" as const, label: "输入" },
+                  { value: "preview" as const, label: "预览" },
+                ]
+          }
           value={activeTab}
           onChange={setActiveTab}
           className="w-full [&>button]:flex-1"
@@ -1618,11 +1670,11 @@ export function Workspace({
         />
       </div>
 
-      <div className="grid gap-4 md:grid-cols-12 md:items-start">
+      <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
         <div
           className={cn(
-            "md:col-span-5",
-            activeTab !== "input" && "hidden md:block",
+            "space-y-4",
+            activeTab !== "input" && "hidden lg:block",
           )}
         >
           <RawInputCard
@@ -1632,43 +1684,85 @@ export function Workspace({
             hasDraft={hasFinalContent}
             questioning={questioning}
             loading={loading}
+            style={style}
+            date={date}
+            today={todayISO()}
+            saveStatus={saveStatus}
+            switchingDate={loadingKind === "date"}
+            canSave={hasAnyInput}
             onChange={(value) => {
               setRawInput(value);
               markDirty();
             }}
+            onStyleChange={handleStyleChange}
             onGenerate={handleGenerate}
+            onDateChange={(nextDate) => {
+              void handleDateChange(nextDate);
+            }}
+            onSave={() => {
+              void handleArchive();
+            }}
           />
         </div>
 
         <div
           className={cn(
-            "md:col-span-7",
-            activeTab !== "preview" && "hidden md:block",
+            "lg:sticky lg:top-20",
+            activeTab !== "preview" && "hidden lg:block",
           )}
         >
-          <DraftCard
-            finalText={finalText}
-            hasContent={hasFinalContent}
-            waitingForAnswers={questioning}
-            loading={loading}
-            loadingMessage={loadingMessage}
-            notes={draft.notes}
-            memories={usedMemories}
-            memoryEnabled={initialSettings.enableMemory}
-            memoryExtractedAt={memoryExtractedAt}
-            memoryStale={memoryStale}
-            extractingMemory={extractingMemory}
-            onCopy={() => {
-              void handleCopy();
-            }}
-            onEdit={() => setEditorOpen(true)}
-            onRegenerate={handleGenerate}
-            onExtractMemory={() => {
-              void extractMemory(true);
-            }}
-            streaming={streamingSections}
-            streamingPartial={streamingPartial}
-          />
+          <div
+            key={
+              questioning && !loading
+                ? "questions"
+                : loading
+                  ? "draft-loading"
+                  : "draft"
+            }
+            className="panel-swap"
+          >
+            {questioning && !loading ? (
+              <QuestionsCard
+                key={`${date}-${round}-${draft.questions
+                  .map((question) => `${question.id}:${question.text}`)
+                  .join("|")}`}
+                questions={draft.questions}
+                round={round}
+                maxRounds={MAX_FOLLOW_UP_ROUNDS}
+                loading={loading}
+                memories={usedMemories}
+                initialAnswers={restoredAnswers}
+                onSubmit={(answers) => {
+                  void handleAnswers(answers);
+                }}
+                onSkip={handleSkipQuestions}
+              />
+            ) : (
+              <DraftCard
+                finalText={finalText}
+                hasContent={hasFinalContent}
+                loading={loading}
+                loadingMessage={loadingMessage}
+                notes={draft.notes}
+                memories={usedMemories}
+                memoryEnabled={initialSettings.enableMemory}
+                memoryExtractedAt={memoryExtractedAt}
+                memoryStale={memoryStale}
+                extractingMemory={extractingMemory}
+                sampleText={sampleText}
+                onCopy={() => {
+                  void handleCopy();
+                }}
+                onEdit={() => setEditorOpen(true)}
+                onRegenerate={handleGenerate}
+                onExtractMemory={() => {
+                  void extractMemory(true);
+                }}
+                streaming={streamingSections}
+                streamingPartial={streamingPartial}
+              />
+            )}
+          </div>
         </div>
       </div>
 
@@ -1679,34 +1773,6 @@ export function Workspace({
         settings={initialSettings}
         onSave={handleEditorSave}
       />
-
-      {!questioning ? (
-        <div className="fixed inset-x-0 bottom-[calc(4.25rem+env(safe-area-inset-bottom))] z-20 border-t-2 border-line/70 bg-cream/95 p-3 backdrop-blur-md md:hidden">
-          {activeTab === "input" ? (
-            <Button
-              className="w-full"
-              size="lg"
-              loading={loading}
-              onClick={handleGenerate}
-            >
-              {!loading ? <Sparkles className="h-4 w-4" /> : null}
-              {hasFinalContent ? "重新生成" : "生成复盘"}
-            </Button>
-          ) : (
-            <Button
-              className="w-full"
-              size="lg"
-              onClick={() => {
-                void handleCopy();
-              }}
-              disabled={!hasFinalContent || loading}
-            >
-              <Copy className="h-4 w-4" />
-              复制到钉钉
-            </Button>
-          )}
-        </div>
-      ) : null}
     </div>
   );
 }

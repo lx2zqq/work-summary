@@ -119,7 +119,7 @@ function DraftEditorInner({
               <div key={key}>
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="text-sm font-extrabold text-ink">
+                    <h3 className="text-sm font-semibold text-ink">
                       {SECTION_META[key].title}
                     </h3>
                     <span className="text-[11px] text-ink-soft/70">
@@ -143,7 +143,7 @@ function DraftEditorInner({
                   {items.map((item, index) => (
                     <div
                       key={`${key}-${index}`}
-                      className="rounded-2xl border-2 border-line/60 bg-cream/60 p-2"
+                      className="rounded-xl border border-line/70 bg-cream/60 p-2"
                     >
                       <Textarea
                         value={item}
@@ -160,7 +160,7 @@ function DraftEditorInner({
                             const target = event.target.value as SectionKey;
                             if (target) moveItem(key, index, target);
                           }}
-                          className="h-8 rounded-full border-2 border-line bg-paper px-2.5 text-xs font-semibold text-ink-soft outline-none focus:border-brand-deep"
+                          className="h-8 rounded-lg border border-line bg-paper px-2.5 text-xs font-medium text-ink-soft outline-none focus:border-brand"
                           aria-label="移动到其他栏目"
                         >
                           <option value="">移动到…</option>
@@ -189,7 +189,7 @@ function DraftEditorInner({
           })}
         </div>
 
-        <div className="mt-6 flex justify-end gap-2 border-t-2 border-line/60 pt-4">
+        <div className="mt-6 flex justify-end gap-2 border-t border-line/70 pt-4">
           <Button variant="secondary" onClick={() => onOpenChange(false)}>
             取消
           </Button>

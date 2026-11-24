@@ -1,10 +1,8 @@
 "use client";
 
-import { Copy, Sparkles } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useDemo } from "@/components/demo/demo-provider";
-import { Button } from "@/components/ui/button";
 import { Segmented } from "@/components/ui/segmented";
 import { DraftCard } from "@/components/workspace/draft-card";
 import { DraftEditor } from "@/components/workspace/draft-editor";
@@ -17,6 +15,7 @@ import {
   DEMO_QUESTIONS,
   DEMO_THINKING_MS,
 } from "@/lib/demo-data";
+import { SAMPLE_DRAFT } from "@/lib/sample";
 import { renderReview } from "@/lib/template";
 import {
   MAX_FOLLOW_UP_ROUNDS,
@@ -83,20 +82,20 @@ export function DemoWorkspace() {
 
   function handleGenerate() {
     if (loading) return;
+    setActiveTab("preview");
     runStep("正在检查有没有漏掉的信息…", () => {
       setWorkspace({
         draft: { ...emptyDraft(), questions: DEMO_QUESTIONS },
         stage: "questions",
       });
-      setActiveTab("input");
     });
   }
 
   function handleFinishQuestions() {
+    setActiveTab("preview");
     runStep("正在整理复盘…", () => {
       const next = presetDraft(style);
       setWorkspace({ draft: next, stage: "draft" });
-      setActiveTab("preview");
       addDemoReview({
         date: today,
         style,
@@ -117,6 +116,8 @@ export function DemoWorkspace() {
     stage === "draft" && hasDraftContent(draft)
       ? renderReview(draft, today, settings)
       : "";
+
+  const sampleText = renderReview(SAMPLE_DRAFT, today, settings);
 
   // 演示里的记忆是完整的 Memory，展示组件只要精简字段
   const promptMemories: MemoryPromptItem[] = memories.map((memory) => ({
@@ -140,40 +141,23 @@ export function DemoWorkspace() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm leading-relaxed text-ink-soft">
-          试试把流水账改成你自己的版本，再点生成。
-        </p>
-        <Segmented
-          options={[
-            { value: "concise", label: "简洁版" },
-            { value: "detailed", label: "详细版" },
-          ]}
-          value={style}
-          onChange={handleStyleChange}
-          ariaLabel="文风"
-        />
-      </div>
+      <p className="text-sm leading-relaxed text-ink-soft">
+        试试把流水账改成你自己的版本，再点生成。
+      </p>
 
-      {draft.questions.length > 0 && !loading ? (
-        <QuestionsCard
-          questions={draft.questions}
-          round={0}
-          maxRounds={MAX_FOLLOW_UP_ROUNDS}
-          loading={loading}
-          memories={promptMemories}
-          onSubmit={handleFinishQuestions}
-          onSkip={handleFinishQuestions}
-          demoMode
-        />
-      ) : null}
-
-      <div className="md:hidden">
+      <div className="lg:hidden">
         <Segmented
-          options={[
-            { value: "input", label: "输入" },
-            { value: "preview", label: "预览" },
-          ]}
+          options={
+            questioning
+              ? [
+                  { value: "input" as const, label: "流水账" },
+                  { value: "preview" as const, label: "追问" },
+                ]
+              : [
+                  { value: "input" as const, label: "输入" },
+                  { value: "preview" as const, label: "预览" },
+                ]
+          }
           value={activeTab}
           onChange={setActiveTab}
           className="w-full [&>button]:flex-1"
@@ -181,11 +165,11 @@ export function DemoWorkspace() {
         />
       </div>
 
-      <div className="grid gap-4 md:grid-cols-12 md:items-start">
+      <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
         <div
           className={cn(
-            "md:col-span-5",
-            activeTab !== "input" && "hidden md:block",
+            "space-y-4",
+            activeTab !== "input" && "hidden lg:block",
           )}
         >
           <RawInputCard
@@ -194,40 +178,74 @@ export function DemoWorkspace() {
             hasDraft={hasContent}
             questioning={questioning}
             loading={loading}
+            style={style}
+            date={today}
+            today={today}
+            saveStatus="idle"
+            switchingDate={false}
+            canSave={false}
             onChange={(value) => setWorkspace({ rawInput: value })}
+            onStyleChange={handleStyleChange}
             onGenerate={handleGenerate}
+            onDateChange={() => {}}
+            onSave={() => {}}
             demoMode
+            dateReadOnly
           />
         </div>
 
         <div
           className={cn(
-            "md:col-span-7",
-            activeTab !== "preview" && "hidden md:block",
+            "lg:sticky lg:top-20",
+            activeTab !== "preview" && "hidden lg:block",
           )}
         >
-          <DraftCard
-            finalText={finalText}
-            hasContent={hasContent}
-            waitingForAnswers={questioning}
-            loading={loading}
-            loadingMessage={loadingMessage}
-            notes={draft.notes}
-            memories={stage === "idle" ? [] : promptMemories}
-            memoryEnabled={settings.enableMemory}
-            memoryExtractedAt={null}
-            memoryStale={false}
-            extractingMemory={false}
-            onCopy={() => {
-              void handleCopy();
-            }}
-            onEdit={() => setEditorOpen(true)}
-            onRegenerate={handleGenerate}
-            onExtractMemory={() => {
-              toast.info("演示模式不会调用模型，登录后可以体验完整功能");
-            }}
-            demoMode
-          />
+          <div
+            key={
+              questioning && !loading
+                ? "questions"
+                : loading
+                  ? "draft-loading"
+                  : "draft"
+            }
+            className="panel-swap"
+          >
+            {questioning && !loading ? (
+              <QuestionsCard
+                questions={draft.questions}
+                round={0}
+                maxRounds={MAX_FOLLOW_UP_ROUNDS}
+                loading={loading}
+                memories={promptMemories}
+                onSubmit={handleFinishQuestions}
+                onSkip={handleFinishQuestions}
+                demoMode
+              />
+            ) : (
+              <DraftCard
+                finalText={finalText}
+                hasContent={hasContent}
+                loading={loading}
+                loadingMessage={loadingMessage}
+                notes={draft.notes}
+                memories={stage === "idle" ? [] : promptMemories}
+                memoryEnabled={settings.enableMemory}
+                memoryExtractedAt={null}
+                memoryStale={false}
+                extractingMemory={false}
+                sampleText={sampleText}
+                onCopy={() => {
+                  void handleCopy();
+                }}
+                onEdit={() => setEditorOpen(true)}
+                onRegenerate={handleGenerate}
+                onExtractMemory={() => {
+                  toast.info("演示模式不会调用模型，登录后可以体验完整功能");
+                }}
+                demoMode
+              />
+            )}
+          </div>
         </div>
       </div>
 
@@ -240,32 +258,6 @@ export function DemoWorkspace() {
           setWorkspace({ draft: next, stage: "draft" });
         }}
       />
-
-      <div className="fixed inset-x-0 bottom-0 z-20 border-t-2 border-line/70 bg-cream/95 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur-md md:hidden">
-        {activeTab === "input" ? (
-          <Button
-            className="w-full"
-            size="lg"
-            loading={loading}
-            onClick={handleGenerate}
-          >
-            {!loading ? <Sparkles className="h-4 w-4" /> : null}
-            {hasContent ? "重新生成" : "生成复盘"}
-          </Button>
-        ) : (
-          <Button
-            className="w-full"
-            size="lg"
-            onClick={() => {
-              void handleCopy();
-            }}
-            disabled={!finalText || loading}
-          >
-            <Copy className="h-4 w-4" />
-            复制到钉钉
-          </Button>
-        )}
-      </div>
     </div>
   );
 }

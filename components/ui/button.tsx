@@ -6,26 +6,26 @@ type Variant = "primary" | "secondary" | "outline" | "ghost" | "danger";
 type Size = "sm" | "md" | "lg" | "icon";
 
 const base =
-  "inline-flex items-center justify-center gap-2 rounded-full border-2 font-bold transition-all duration-150 outline-none focus-visible:ring-4 focus-visible:ring-sky/60 focus-visible:ring-offset-2 focus-visible:ring-offset-cream disabled:pointer-events-none disabled:opacity-50";
+  "inline-flex items-center justify-center gap-1.5 rounded-lg border font-medium transition-colors duration-150 outline-none focus-visible:ring-2 focus-visible:ring-brand/30 focus-visible:ring-offset-2 focus-visible:ring-offset-cream disabled:pointer-events-none disabled:opacity-50";
 
 const variants: Record<Variant, string> = {
   primary:
-    "border-cocoa bg-brand text-cocoa shadow-[0_3px_0_#5b463c] hover:-translate-y-0.5 hover:bg-[#f7b7c8] hover:shadow-[0_4px_0_#5b463c] active:translate-y-0.5 active:shadow-none",
+    "border-transparent bg-ink-strong text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.12),0_1px_2px_rgba(35,31,29,0.18)] hover:bg-ink-hover active:bg-ink-hover",
   secondary:
-    "border-line bg-paper text-ink shadow-[0_3px_0_#eadccd] hover:-translate-y-0.5 hover:bg-cream active:translate-y-0.5 active:shadow-none",
+    "border-line bg-paper text-ink hover:bg-cream-deep active:bg-cream-deep",
   outline:
-    "border-brand/50 bg-brand-soft/60 text-brand-deep hover:bg-brand-soft",
+    "border-brand/30 bg-transparent text-brand-deep hover:bg-brand-soft",
   ghost:
-    "border-transparent text-ink-soft hover:bg-brand-soft/60 hover:text-ink",
+    "border-transparent bg-transparent text-ink-soft hover:bg-cream-deep hover:text-ink",
   danger:
-    "border-[#e4b1b1] bg-[#fde8e8] text-[#b35454] shadow-[0_3px_0_#e4b1b1] hover:-translate-y-0.5 hover:bg-[#fbdcdc] active:translate-y-0.5 active:shadow-none",
+    "border-[#e9cdc8] bg-[#fdf0ee] text-[#a94b42] hover:bg-[#fbe4e0]",
 };
 
 const sizes: Record<Size, string> = {
-  sm: "h-9 px-3.5 text-xs",
-  md: "h-11 px-5 text-sm",
-  lg: "h-12 px-6 text-[15px]",
-  icon: "h-10 w-10 p-0",
+  sm: "h-8 px-3 text-xs",
+  md: "h-10 px-4 text-sm",
+  lg: "h-11 px-5 text-sm",
+  icon: "h-9 w-9 p-0",
 };
 
 export type ButtonProps = React.ComponentProps<"button"> & {
@@ -33,6 +33,19 @@ export type ButtonProps = React.ComponentProps<"button"> & {
   size?: Size;
   loading?: boolean;
 };
+
+/** 让 Link 复用按钮样式，避免列表里手写第二套按钮 */
+export function buttonClass({
+  variant = "primary",
+  size = "md",
+  className,
+}: {
+  variant?: Variant;
+  size?: Size;
+  className?: string;
+} = {}) {
+  return cn(base, variants[variant], sizes[size], className);
+}
 
 export function Button({
   className,
@@ -47,7 +60,7 @@ export function Button({
   return (
     <button
       type={type}
-      className={cn(base, variants[variant], sizes[size], className)}
+      className={buttonClass({ variant, size, className })}
       disabled={disabled || loading}
       {...props}
     >

@@ -8,8 +8,8 @@ export default function manifest(): MetadataRoute.Manifest {
       "把今天的流水账，整理成可以直接发到钉钉工作群的学管部工作复盘。",
     start_url: "/",
     display: "standalone",
-    background_color: "#fff8ee",
-    theme_color: "#f3a9bd",
+    background_color: "#faf8f4",
+    theme_color: "#c2684f",
     lang: "zh-CN",
     icons: [
       {

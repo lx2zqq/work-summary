@@ -23,7 +23,7 @@ export function Segmented<T extends string>({
   return (
     <div
       className={cn(
-        "inline-flex items-center rounded-full border-2 border-line bg-cream-deep p-1",
+        "inline-flex items-center rounded-lg border border-line bg-cream-deep/70 p-0.5",
         className,
       )}
       role="group"
@@ -38,9 +38,9 @@ export function Segmented<T extends string>({
             aria-pressed={active}
             onClick={() => onChange(option.value)}
             className={cn(
-              "rounded-full px-3.5 py-1.5 text-sm font-bold transition-all",
+              "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
               active
-                ? "bg-paper text-ink shadow-[0_2px_0_#e8d9ca] ring-1 ring-line"
+                ? "bg-paper text-ink shadow-sm"
                 : "text-ink-soft hover:text-ink",
             )}
           >

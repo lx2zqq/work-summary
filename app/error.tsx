@@ -41,8 +41,8 @@ export default function ErrorPage({
   return (
     <div className="app-bg flex min-h-[70dvh] items-center justify-center px-4">
       <div className="paper-card w-full max-w-md p-6 text-center">
-        <UsagiMascot className="mascot-float mx-auto h-24 w-24" mood="sad" />
-        <h1 className="mt-3 text-lg font-extrabold text-ink">
+        <UsagiMascot className="mx-auto h-20 w-20" mood="sad" />
+        <h1 className="mt-3 text-base font-semibold text-ink">
           页面出了点问题
         </h1>
         <p className="mt-2 text-sm leading-relaxed text-ink-soft">
@@ -50,8 +50,8 @@ export default function ErrorPage({
         </p>
 
         {error.message ? (
-          <details className="mt-3 rounded-2xl bg-cream-deep/60 px-3 py-2 text-left">
-            <summary className="cursor-pointer list-none text-xs font-bold text-ink-soft">
+          <details className="mt-3 rounded-lg bg-cream-deep/60 px-3 py-2 text-left">
+            <summary className="cursor-pointer list-none text-xs font-medium text-ink-soft">
               查看详细错误
             </summary>
             <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words text-[10px] leading-relaxed text-ink-soft">

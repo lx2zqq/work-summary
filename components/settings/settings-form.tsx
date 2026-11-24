@@ -1,23 +1,21 @@
 "use client";
 
-import { Bot, LogOut, Settings2, Sparkles } from "lucide-react";
+import { Bot, FileText, LogOut, Settings2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
+import { DataBackup } from "@/components/settings/data-backup";
+import { PhraseLibrary } from "@/components/settings/phrase-library";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonClass } from "@/components/ui/button";
 import { Segmented } from "@/components/ui/segmented";
 import { Switch } from "@/components/ui/switch";
-import { PhraseLibrary } from "@/components/settings/phrase-library";
 import { todayISO } from "@/lib/date";
 import { resetGenerationStore } from "@/lib/generation-store";
+import { SAMPLE_DRAFT } from "@/lib/sample";
 import { renderReview } from "@/lib/template";
-import type {
-  AppSettings,
-  ReviewDraft,
-  ReviewStyle,
-} from "@/lib/types";
+import type { AppSettings, ReviewStyle } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 /** 演示模式用内存实现；生产不传，走接口 */
@@ -39,22 +37,6 @@ type ToggleKey =
   | "showKunnan"
   | "showFixedPhrase"
   | "enableMemory";
-
-const SAMPLE_DRAFT: ReviewDraft = {
-  sections: {
-    xueqing: ["林小满：完成今日校内作业，错题已讲解。"],
-    jiaoxiao: ["林小满妈妈（微信）：沟通今日作业完成情况。"],
-    yeji: [],
-    richang: [
-      "今天主要跟进了林小满的作业和错题，整体完成情况正常，后续继续关注订正质量，及时和家长同步进展。",
-    ],
-    xiaocheng: ["林小满的数学错题已录入小橙AI系统。"],
-    kunnan: [],
-    jiaoyan: ["参加学管部教研，讨论新生跟进节奏。"],
-  },
-  questions: [],
-  notes: [],
-};
 
 const TOGGLES: Array<{
   key: ToggleKey;
@@ -80,7 +62,7 @@ const TOGGLES: Array<{
     key: "enableMemory",
     title: "长期记忆",
     description:
-      "正文有更新时，复制后会自动更新记忆；生成时参考，关闭后不提取也不参考。",
+      "从复盘正文提取长期记忆，生成时参考；关闭后不提取也不参考。",
   },
 ];
 
@@ -164,135 +146,137 @@ export function SettingsForm({
   }
 
   return (
-    <div className="space-y-4">
-      <section className="paper-card p-4 sm:p-5">
-        <div className="flex items-center gap-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-soft text-brand-deep ring-2 ring-brand/40">
-            <Settings2 className="h-4 w-4" />
+    <div className="grid gap-4 lg:grid-cols-[3fr_2fr] lg:items-start">
+      <div className="space-y-4">
+        <section className="paper-card p-4 sm:p-5">
+          <div className="flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-soft text-brand-deep">
+              <Settings2 className="h-4 w-4" />
+            </div>
+            <h2 className="text-sm font-semibold text-ink">复盘设置</h2>
           </div>
-          <h2 className="text-sm font-extrabold text-ink">复盘设置</h2>
-        </div>
 
-        <div className="mt-4 divide-y-2 divide-line/60">
-          {TOGGLES.map((item) => (
-            <div
-              key={item.key}
-              className="flex items-start justify-between gap-4 py-3.5 first:pt-0 last:pb-0"
-            >
-              <div>
-                <div className="text-sm font-bold text-ink">
-                  {item.title}
+          <div className="mt-4 divide-y divide-line/60">
+            {TOGGLES.map((item) => (
+              <div
+                key={item.key}
+                className="flex items-start justify-between gap-4 py-3.5 first:pt-0 last:pb-0"
+              >
+                <div>
+                  <div className="text-sm font-medium text-ink">
+                    {item.title}
+                  </div>
+                  <p className="mt-0.5 text-xs leading-relaxed text-ink-soft">
+                    {item.description}
+                  </p>
                 </div>
-                <p className="mt-0.5 text-xs leading-relaxed text-ink-soft">
-                  {item.description}
-                </p>
+                <Switch
+                  checked={settings[item.key]}
+                  onCheckedChange={(checked) => toggle(item.key, checked)}
+                  disabled={pendingKey !== null}
+                  aria-label={item.title}
+                />
               </div>
-              <Switch
-                checked={settings[item.key]}
-                onCheckedChange={(checked) => toggle(item.key, checked)}
-                disabled={pendingKey !== null}
-                aria-label={item.title}
+            ))}
+          </div>
+
+          <div className="mt-4 flex flex-col gap-3 border-t border-line/60 pt-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="text-sm font-medium text-ink">默认文风</div>
+            <div
+              className={cn(
+                "shrink-0",
+                pendingKey !== null && "pointer-events-none opacity-50",
+              )}
+            >
+              <Segmented
+                options={[
+                  { value: "concise", label: "简洁" },
+                  { value: "detailed", label: "详细" },
+                ]}
+                value={settings.defaultStyle}
+                onChange={changeDefaultStyle}
+                ariaLabel="默认文风"
               />
             </div>
-          ))}
-        </div>
+          </div>
 
-        <div className="mt-4 flex flex-col gap-3 border-t-2 border-line/60 pt-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="text-sm font-bold text-ink">默认文风</div>
-          <div
-            className={cn(
-              "shrink-0",
-              pendingKey !== null && "pointer-events-none opacity-50",
+          {pendingKey ? (
+            <p className="mt-3 text-right text-[11px] text-ink-soft">
+              保存中…
+            </p>
+          ) : null}
+        </section>
+
+        <PhraseLibrary
+          initialPhrases={settings.customPhrases}
+          demoMode={demoMode}
+          onPhrasesChange={(phrases) =>
+            setSettings((current) => ({ ...current, customPhrases: phrases }))
+          }
+        />
+
+        <section className="paper-card p-4 sm:p-5">
+          <div className="flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-sky-soft text-[#4e7f99]">
+              <Bot className="h-4 w-4" />
+            </div>
+            <h2 className="text-sm font-semibold text-ink">模型与账号</h2>
+          </div>
+
+          <div className="mt-4 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-cream-deep/60 px-3.5 py-3">
+              <div className="text-sm text-ink-soft">
+                模型：<span className="font-medium text-ink">{aiModel}</span>
+              </div>
+              <Badge tone={aiConfigured ? "green" : "red"}>
+                {aiConfigured ? "Key 已配置" : "Key 未配置"}
+              </Badge>
+            </div>
+
+            {demoMode ? (
+              <div className="flex items-center justify-between gap-3 rounded-xl bg-cream-deep/60 px-3.5 py-3">
+                <div className="text-sm font-medium text-ink">去真实环境</div>
+                <Link
+                  href="/login"
+                  className={buttonClass({ variant: "secondary", size: "sm" })}
+                >
+                  去登录
+                </Link>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between gap-3 rounded-xl bg-cream-deep/60 px-3.5 py-3">
+                <div className="text-sm font-medium text-ink">退出登录</div>
+                <Button
+                  variant="danger"
+                  size="sm"
+                  loading={loggingOut}
+                  onClick={handleLogout}
+                >
+                  <LogOut className="h-4 w-4" />
+                  退出
+                </Button>
+              </div>
             )}
-          >
-            <Segmented
-              options={[
-                { value: "concise", label: "简洁" },
-                { value: "detailed", label: "详细" },
-              ]}
-              value={settings.defaultStyle}
-              onChange={changeDefaultStyle}
-              ariaLabel="默认文风"
-            />
           </div>
-        </div>
+        </section>
 
-        {pendingKey ? (
-          <p className="mt-3 text-right text-[11px] text-ink-soft">
-            保存中…
-          </p>
-        ) : null}
-      </section>
+        <DataBackup demoMode={demoMode} />
+      </div>
 
-      <section className="paper-card p-4 sm:p-5">
-        <div className="flex items-center gap-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-soft text-brand-deep ring-2 ring-brand/40">
-            <Sparkles className="h-4 w-4" />
-          </div>
-          <h2 className="text-sm font-extrabold text-ink">
-            模板预览
-          </h2>
-        </div>
-
-        <pre className="review-text mt-4 max-h-[360px] overflow-y-auto rounded-2xl bg-cream/40 p-4 text-[13px] text-ink ring-2 ring-line/60">
-          {preview}
-        </pre>
-      </section>
-
-      <PhraseLibrary
-        initialPhrases={settings.customPhrases}
-        demoMode={demoMode}
-        onPhrasesChange={(phrases) =>
-          setSettings((current) => ({ ...current, customPhrases: phrases }))
-        }
-      />
-
-      <section className="paper-card p-4 sm:p-5">
-        <div className="flex items-center gap-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-sky-soft text-[#4e7f99] ring-2 ring-sky/60">
-            <Bot className="h-4 w-4" />
-          </div>
-          <h2 className="text-sm font-extrabold text-ink">
-            AI 与账号
-          </h2>
-        </div>
-
-        <div className="mt-4 space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-cream-deep/60 px-3.5 py-3">
-            <div className="text-sm text-ink-soft">
-              模型：<span className="font-medium text-ink">{aiModel}</span>
+      <div className="lg:sticky lg:top-20">
+        <section className="paper-card p-4 sm:p-5">
+          <div className="flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-soft text-brand-deep">
+              <FileText className="h-4 w-4" />
             </div>
-            <Badge tone={aiConfigured ? "green" : "red"}>
-              {aiConfigured ? "Key 已配置" : "Key 未配置"}
-            </Badge>
+            <h2 className="text-sm font-semibold text-ink">模板预览</h2>
           </div>
 
-          {demoMode ? (
-            <div className="flex items-center justify-between gap-3 rounded-2xl bg-cream-deep/60 px-3.5 py-3">
-              <div className="text-sm font-bold text-ink">去真实环境</div>
-              <Link
-                href="/login"
-                className="inline-flex h-8 items-center rounded-full border-2 border-line bg-paper px-3.5 text-xs font-bold text-ink-soft"
-              >
-                去登录
-              </Link>
-            </div>
-          ) : (
-            <div className="flex items-center justify-between gap-3 rounded-2xl bg-cream-deep/60 px-3.5 py-3">
-              <div className="text-sm font-bold text-ink">退出登录</div>
-              <Button
-                variant="danger"
-                size="sm"
-                loading={loggingOut}
-                onClick={handleLogout}
-              >
-                <LogOut className="h-4 w-4" />
-                退出
-              </Button>
-            </div>
-          )}
-        </div>
-      </section>
+          <pre className="review-text mt-4 rounded-xl bg-cream/60 p-4 text-[13px] text-ink ring-1 ring-line/70">
+            {preview}
+          </pre>
+        </section>
+      </div>
     </div>
   );
 }

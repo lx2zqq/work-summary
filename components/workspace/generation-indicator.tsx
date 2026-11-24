@@ -25,7 +25,7 @@ export function GenerationIndicator() {
     <Link
       href={`/?date=${job.date}`}
       title="回到正在生成的复盘"
-      className="flex shrink-0 items-center gap-1.5 rounded-full bg-brand-soft px-3 py-1.5 text-[11px] font-bold text-brand-deep ring-2 ring-brand/40 transition-colors hover:bg-paper"
+      className="flex shrink-0 items-center gap-1.5 rounded-lg bg-brand-soft px-3 py-1.5 text-[11px] font-medium text-brand-deep ring-1 ring-brand/25 transition-colors hover:bg-paper"
     >
       <Loader2 className="h-3.5 w-3.5 animate-spin" />
       生成中…

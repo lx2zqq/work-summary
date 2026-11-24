@@ -1,29 +1,10 @@
-import Link from "next/link";
 import {
-  Brain,
-  ClipboardList,
-  History,
-  Settings,
-  Users,
-  type LucideIcon,
-} from "lucide-react";
-import { HomeNavLink } from "@/components/home-nav-link";
-import { DoodleStar, MascotFace } from "@/components/mascots";
+  BrandHomeLink,
+  DesktopNav,
+  MobileNav,
+} from "@/components/app-nav";
+import { MascotFace } from "@/components/mascots";
 import { GenerationIndicator } from "@/components/workspace/generation-indicator";
-
-type NavItem = {
-  href: string;
-  label: string;
-  icon: LucideIcon;
-};
-
-const NAV: NavItem[] = [
-  { href: "/", label: "今日复盘", icon: ClipboardList },
-  { href: "/history", label: "历史", icon: History },
-  { href: "/memories", label: "记忆", icon: Brain },
-  { href: "/students", label: "学生", icon: Users },
-  { href: "/settings", label: "设置", icon: Settings },
-];
 
 export function AppShell({
   children,
@@ -34,107 +15,40 @@ export function AppShell({
   basePath?: string;
 }) {
   const isDemo = basePath.length > 0;
-  const hrefFor = (href: string) =>
-    href === "/" ? basePath || "/" : `${basePath}${href}`;
-  const brandClass = "group flex items-center gap-2.5";
-
-  const brand = (
-    <>
-      <span className="relative flex h-11 w-11 items-center justify-center rounded-full border-2 border-cocoa/20 bg-brand-soft shadow-[0_3px_0_#f0d4dd] transition-transform group-hover:-rotate-3">
-        <MascotFace className="h-9 w-9" />
-        <DoodleStar className="absolute -right-1 -top-1 h-3.5 w-3.5 text-butter" />
-      </span>
-      <span className="leading-tight">
-        <span className="block text-[15px] font-extrabold tracking-tight text-ink">
-          学管复盘助手
-        </span>
-        <span className="block text-[11px] text-ink-soft">
-          今天的流水账，变成规范的复盘
-        </span>
-      </span>
-    </>
-  );
 
   return (
     <div className="min-h-dvh">
-      <header className="sticky top-0 z-30 border-b-2 border-line/70 bg-cream/90 pt-[env(safe-area-inset-top)] backdrop-blur-md">
+      <header className="sticky top-0 z-30 border-b border-line/70 bg-cream/85 pt-[env(safe-area-inset-top)] backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-3 px-4 sm:px-6">
-          {isDemo ? (
-            <Link href={basePath} className={brandClass}>
-              {brand}
-            </Link>
-          ) : (
-            <HomeNavLink className={brandClass}>{brand}</HomeNavLink>
-          )}
+          <BrandHomeLink
+            basePath={basePath}
+            className="group flex items-center gap-2.5"
+          >
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-soft ring-1 ring-line transition-transform group-hover:-rotate-2">
+              <MascotFace className="h-8 w-8" />
+            </span>
+            <span className="leading-tight">
+              <span className="block text-[15px] font-semibold tracking-tight text-ink">
+                学管复盘助手
+              </span>
+              <span className="block text-[11px] text-ink-soft">
+                今天的流水账，变成规范的复盘
+              </span>
+            </span>
+          </BrandHomeLink>
 
           <div className="flex items-center gap-2">
             {isDemo ? null : <GenerationIndicator />}
-            <nav className="hidden items-center gap-1.5 md:flex">
-              {NAV.map((item) => {
-                const Icon = item.icon;
-                const className =
-                  "flex items-center gap-2 rounded-full px-4 py-2 text-sm font-bold text-ink-soft transition-all hover:bg-cream-deep hover:text-ink";
-                const content = (
-                  <>
-                    <Icon className="h-4 w-4" />
-                    {item.label}
-                  </>
-                );
-
-                return !isDemo && item.href === "/" ? (
-                  <HomeNavLink key={item.href} className={className}>
-                    {content}
-                  </HomeNavLink>
-                ) : (
-                  <Link
-                    key={item.href}
-                    href={hrefFor(item.href)}
-                    className={className}
-                  >
-                    {content}
-                  </Link>
-                );
-              })}
-            </nav>
+            <DesktopNav basePath={basePath} />
           </div>
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-6xl px-4 pb-44 pt-5 sm:px-6 sm:pt-6 md:pb-12">
+      <main className="mx-auto w-full max-w-6xl px-4 pb-28 pt-5 sm:px-6 sm:pt-6 md:pb-12">
         {children}
       </main>
 
-      <nav className="fixed inset-x-0 bottom-0 z-30 border-t-2 border-line/70 bg-paper/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md md:hidden">
-        <div className="grid grid-cols-5">
-          {NAV.map((item) => {
-            const Icon = item.icon;
-            const className =
-              "flex flex-col items-center gap-0.5 py-2 text-[11px] font-bold text-ink-soft transition-colors";
-            const content = (
-              <>
-                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-transparent transition-colors">
-                  <Icon className="h-[18px] w-[18px]" />
-                </span>
-                {item.label}
-              </>
-            );
-
-            return !isDemo && item.href === "/" ? (
-              <HomeNavLink key={item.href} className={className}>
-                {content}
-              </HomeNavLink>
-            ) : (
-              <Link
-                key={item.href}
-                href={hrefFor(item.href)}
-                className={className}
-              >
-                {content}
-              </Link>
-            );
-          })}
-        </div>
-      </nav>
+      <MobileNav basePath={basePath} />
     </div>
   );
 }

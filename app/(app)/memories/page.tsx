@@ -1,4 +1,3 @@
-import { UsagiMascot } from "@/components/mascots";
 import { PageHeading } from "@/components/page-heading";
 import { MemoryManager } from "@/components/memories/memory-manager";
 import {
@@ -20,7 +19,6 @@ export default async function MemoriesPage() {
       <PageHeading
         title="长期记忆"
         description="从每日复盘自动积累，生成时参考。"
-        mascot={<UsagiMascot className="h-9 w-9" />}
       />
       <MemoryManager
         initialMemories={memories}

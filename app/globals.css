@@ -5,29 +5,36 @@
     "Microsoft YaHei", "Noto Sans CJK SC", "Source Han Sans SC",
     -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  /* 只给数字和英文用的编辑体，中文继续走无衬线 */
+  --font-serif: var(--font-instrument-serif), "Iowan Old Style",
+    "Palatino Linotype", Georgia, serif;
 
-  --color-cream: #fff8ee;
-  --color-cream-deep: #f7ecdd;
-  --color-paper: #fffdf8;
-  --color-ink: #4a3b35;
-  --color-ink-soft: #7d6a61;
-  --color-brand: #f3a9bd;
-  --color-brand-deep: #c96b85;
-  --color-brand-soft: #fde8ef;
-  --color-line: #eadccd;
-  --color-sky: #b9def0;
-  --color-sky-soft: #eaf7fc;
-  --color-butter: #f5dda2;
-  --color-butter-soft: #fdf4da;
-  --color-mint: #cfe8d8;
-  --color-mint-soft: #eef8f2;
-  --color-cocoa: #5b463c;
+  --color-cream: #faf8f4;
+  --color-cream-deep: #f2ede6;
+  --color-paper: #ffffff;
+  --color-canvas: #f5f2ec;
+  --color-ink: #3f3833;
+  --color-ink-strong: #231f1d;
+  --color-ink-hover: #38322e;
+  --color-ink-soft: #7a6f66;
+  --color-brand: #c2684f;
+  --color-brand-deep: #a9533c;
+  --color-brand-strong: #8f4531;
+  --color-brand-soft: #f7ede8;
+  --color-line: #e8e2d9;
+  --color-cocoa: #4a3f38;
+  --color-sky: #c3d6e2;
+  --color-sky-soft: #eff5f9;
+  --color-butter: #e8d3a6;
+  --color-butter-soft: #faf4e6;
+  --color-mint: #c6ddcd;
+  --color-mint-soft: #eff6f1;
 }
 
 :root {
   color-scheme: light;
-  --background: #fff8ee;
-  --foreground: #4a3b35;
+  --background: #faf8f4;
+  --foreground: #3f3833;
 }
 
 * {
@@ -42,77 +49,51 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans);
+  font-variant-numeric: tabular-nums;
   min-height: 100dvh;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
 
 ::selection {
-  background: #f7c8d6;
-  color: #4a3b35;
+  background: #f2dcd3;
+  color: #3f3833;
 }
 
-/* 奶油纸张 + 小圆点，让页面像一本手帐 */
+/* 暖白底 + 顶部一层极淡暖光，只负责托住内容，不制造纹理 */
 .app-bg {
   background-color: var(--color-cream);
-  background-image:
-    radial-gradient(
-      circle at 1px 1px,
-      rgba(122, 92, 74, 0.08) 1px,
-      transparent 0
-    ),
-    radial-gradient(
-      ellipse 55% 38% at 50% -8%,
-      rgba(243, 169, 189, 0.22),
-      transparent 70%
-    ),
-    radial-gradient(
-      ellipse 38% 30% at 100% 0%,
-      rgba(185, 222, 240, 0.2),
-      transparent 70%
-    );
-  background-size: 22px 22px, auto, auto;
-  background-position: 0 0, 0 0, 0 0;
+  background-image: radial-gradient(
+    ellipse 70% 45% at 50% -12%,
+    rgba(194, 104, 79, 0.06),
+    transparent 72%
+  );
 }
 
 .paper-card {
   background-color: var(--color-paper);
-  border: 2px solid rgba(91, 70, 60, 0.14);
-  border-radius: 26px;
+  border: 1px solid var(--color-line);
+  border-radius: 16px;
   box-shadow:
-    0 4px 0 rgba(91, 70, 60, 0.06),
-    0 18px 36px -30px rgba(91, 70, 60, 0.5);
+    0 1px 2px rgba(63, 56, 51, 0.04),
+    0 8px 20px -16px rgba(63, 56, 51, 0.16);
 }
 
-.paper-card-inset {
-  background-color: var(--color-cream);
-  border: 2px solid rgba(91, 70, 60, 0.1);
-  border-radius: 20px;
+/* 预览区里的成品便签纸 */
+.paper-sheet {
+  background-color: var(--color-paper);
+  border: 1px solid rgba(63, 56, 51, 0.08);
+  border-radius: 12px;
+  box-shadow:
+    0 1px 2px rgba(63, 56, 51, 0.04),
+    0 16px 32px -28px rgba(63, 56, 51, 0.32);
 }
 
-.washi-tape {
-  position: absolute;
-  top: -10px;
-  left: 50%;
-  z-index: 2;
-  width: 76px;
-  height: 22px;
-  transform: translateX(-50%) rotate(-2deg);
-  border-radius: 3px;
-  background: repeating-linear-gradient(
-    45deg,
-    #f8c9d7 0 7px,
-    #fde8ef 7px 14px
-  );
-  box-shadow: 0 2px 3px rgba(91, 70, 60, 0.08);
-  opacity: 0.95;
-  pointer-events: none;
-}
-
+/* 输入框里保留一点纸感，但淡到几乎只剩分行的节奏 */
 .notebook-lines {
   background-image: radial-gradient(
     circle at 1px 1px,
-    rgba(122, 92, 74, 0.1) 1px,
+    rgba(122, 92, 74, 0.04) 1px,
     transparent 0
   );
   background-size: 20px 20px;
@@ -160,57 +141,41 @@ body {
   animation-delay: 0.4s;
 }
 
-@keyframes mascot-float {
-  0%,
-  100% {
-    transform: translateY(0) rotate(-1deg);
-  }
-  50% {
-    transform: translateY(-5px) rotate(1deg);
-  }
-}
-
-.mascot-float {
-  animation: mascot-float 5s ease-in-out infinite;
-}
-
-@keyframes mascot-blink {
-  0%,
-  92%,
-  100% {
-    transform: scaleY(1);
-  }
-  95% {
-    transform: scaleY(0.12);
-  }
-}
-
-.mascot-blink {
-  animation: mascot-blink 4.8s ease-in-out infinite;
-  transform-box: fill-box;
-  transform-origin: center;
-}
-
-@keyframes pop-in {
+@keyframes drawer-in {
   from {
     opacity: 0;
-    transform: translateY(6px) scale(0.985);
+    transform: translateX(20px);
   }
   to {
     opacity: 1;
-    transform: translateY(0) scale(1);
+    transform: translateX(0);
   }
 }
 
-.page-enter {
-  animation: pop-in 0.35s ease-out both;
+.drawer-panel {
+  animation: drawer-in 0.2s ease-out both;
+}
+
+@keyframes panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 追问面板 ↔ 成品预览的原位切换 */
+.panel-swap {
+  animation: panel-in 0.24s ease-out both;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .mascot-float,
-  .mascot-blink,
   .loading-dot,
-  .page-enter {
+  .drawer-panel,
+  .panel-swap {
     animation: none;
   }
 }

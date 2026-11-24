@@ -4,15 +4,13 @@ import {
   Brain,
   Check,
   Copy,
+  FileText,
   Pencil,
   RefreshCw,
 } from "lucide-react";
 import Link from "next/link";
-import {
-  ChiikawaMascot,
-  DoodleStar,
-  UsagiMascot,
-} from "@/components/mascots";
+import { useState } from "react";
+import { ChiikawaMascot } from "@/components/mascots";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -22,7 +20,7 @@ import type {
 } from "@/lib/ai/stream-parser";
 import { numberPrefix } from "@/lib/template";
 import { SECTION_META, type MemoryPromptItem } from "@/lib/types";
-import { cn } from "@/lib/utils";
+import { formatSavedAt } from "@/lib/utils";
 
 /** 流式生成时的实时预览：完整条目 + 正在写的那一句 */
 function StreamingPreview({
@@ -48,7 +46,7 @@ function StreamingPreview({
     <div data-streaming="true" className="space-y-3.5">
       {merged.map(({ key, items }) => (
         <section key={key}>
-          <p className="text-sm font-extrabold text-ink">
+          <p className="text-sm font-medium text-ink">
             🍊【{SECTION_META[key].title}】
           </p>
           <ul className="mt-1 space-y-0.5">
@@ -70,7 +68,7 @@ function StreamingPreview({
                   {typing ? (
                     <span
                       aria-hidden
-                      className="ml-0.5 inline-block h-3.5 w-[2px] animate-pulse rounded-full bg-brand-deep align-middle"
+                      className="ml-0.5 inline-block h-3.5 w-[2px] animate-pulse rounded-full bg-brand align-middle"
                     />
                   ) : null}
                 </li>
@@ -80,7 +78,7 @@ function StreamingPreview({
         </section>
       ))}
 
-      <div className="flex items-center gap-2 pt-1 text-xs font-bold text-ink-soft">
+      <div className="flex items-center gap-2 pt-1 text-xs font-medium text-ink-soft">
         <Spinner className="h-3.5 w-3.5" />
         正在生成…
       </div>
@@ -88,10 +86,54 @@ function StreamingPreview({
   );
 }
 
+/** 没有正文时的干净空状态，可以切换查看模板示例 */
+function EmptyPreview({ sampleText }: { sampleText: string }) {
+  const [showSample, setShowSample] = useState(false);
+
+  if (showSample) {
+    return (
+      <div className="paper-sheet flex flex-1 flex-col p-4 sm:p-5">
+        <div className="mb-3 flex items-center justify-between">
+          <span className="text-[11px] font-medium text-ink-soft">
+            模板示例
+          </span>
+          <button
+            type="button"
+            onClick={() => setShowSample(false)}
+            className="text-[11px] font-medium text-brand-deep underline-offset-2 hover:underline"
+          >
+            收起
+          </button>
+        </div>
+        <pre className="review-text text-ink">{sampleText}</pre>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-1 flex-col items-center justify-center px-6 py-12 text-center">
+      <ChiikawaMascot className="h-16 w-16" />
+      <p className="mt-3 text-sm font-medium text-ink">
+        写点什么，成品会出现在这里
+      </p>
+      <p className="mt-1 max-w-[260px] text-xs leading-relaxed text-ink-soft">
+        流水账也可以，生成前会先确认关键信息。
+      </p>
+      <Button
+        variant="ghost"
+        size="sm"
+        className="mt-3"
+        onClick={() => setShowSample(true)}
+      >
+        查看模板示例
+      </Button>
+    </div>
+  );
+}
+
 type Props = {
   finalText: string;
   hasContent: boolean;
-  waitingForAnswers: boolean;
   loading: boolean;
   loadingMessage: string;
   notes: string[];
@@ -100,6 +142,8 @@ type Props = {
   memoryExtractedAt: string | null;
   memoryStale: boolean;
   extractingMemory: boolean;
+  /** 空状态里「查看模板示例」用的渲染结果 */
+  sampleText: string;
   onCopy: () => void;
   onEdit: () => void;
   onRegenerate: () => void;
@@ -115,7 +159,6 @@ type Props = {
 export function DraftCard({
   finalText,
   hasContent,
-  waitingForAnswers,
   loading,
   loadingMessage,
   notes,
@@ -124,6 +167,7 @@ export function DraftCard({
   memoryExtractedAt,
   memoryStale,
   extractingMemory,
+  sampleText,
   onCopy,
   onEdit,
   onRegenerate,
@@ -132,22 +176,26 @@ export function DraftCard({
   streaming = [],
   streamingPartial = null,
 }: Props) {
-  return (
-    <section className="paper-card relative flex min-h-[540px] flex-col">
-      <span className="washi-tape" />
+  const showStreaming =
+    loading && (streaming.length > 0 || Boolean(streamingPartial));
 
-      <div className="flex items-center justify-between gap-2 border-b-2 border-line/60 px-4 py-3 sm:px-5">
+  const memoryTitle = memoryExtractedAt
+    ? memoryStale
+      ? "正文有更新，建议重新提取"
+      : `上次提取：${formatSavedAt(memoryExtractedAt)}`
+    : "从今天正文提取长期记忆";
+
+  return (
+    <section className="flex flex-col rounded-2xl border border-line/70 bg-canvas p-3 sm:p-4 lg:min-h-[640px]">
+      <header className="flex items-start justify-between gap-2 px-1 pb-3">
         <div className="flex items-center gap-2.5">
-          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-soft ring-2 ring-brand/40">
-            <ChiikawaMascot className="h-8 w-8" />
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-paper text-brand-deep ring-1 ring-line/60">
+            <FileText className="h-4 w-4" />
           </div>
           <div>
-            <h2 className="flex items-center gap-1.5 text-sm font-extrabold text-ink">
-              复盘预览
-              <DoodleStar className="h-3 w-3 text-butter" />
-            </h2>
-            {memories.length > 0 && !waitingForAnswers ? (
-              <p className="mt-0.5 flex items-center gap-1 text-[10px] text-ink-soft/80">
+            <h2 className="text-sm font-semibold text-ink">复盘预览</h2>
+            {memories.length > 0 ? (
+              <p className="mt-0.5 flex items-center gap-1 text-[10px] text-ink-soft">
                 <Brain className="h-3 w-3" />
                 记忆 {memories.length} 条
                 <Link
@@ -160,133 +208,97 @@ export function DraftCard({
             ) : null}
           </div>
         </div>
-        {waitingForAnswers ? (
-          <Badge tone="amber">待补全</Badge>
-        ) : hasContent ? (
-          <div className="flex shrink-0 items-center gap-1.5">
+
+        <div className="flex shrink-0 items-center gap-2">
+          {loading ? <Spinner className="h-3.5 w-3.5" /> : null}
+          {hasContent ? (
             <Badge tone="green">
               <Check className="mr-1 h-3 w-3" />
               可发送
             </Badge>
-          </div>
-        ) : (
-          <Badge tone="stone">待生成</Badge>
-        )}
-      </div>
-
-      <div className="relative flex-1 p-4 sm:p-5">
-        {notes.length > 0 ? (
-          <div className="mb-3 space-y-1.5">
-            {notes.map((note, index) => (
-              <div
-                key={`${note}-${index}`}
-                className="rounded-2xl bg-butter-soft px-3 py-2 text-xs leading-relaxed text-[#7a5c2a] ring-2 ring-butter/50"
-              >
-                {note}
-              </div>
-            ))}
-          </div>
-        ) : null}
-
-        {waitingForAnswers ? (
-          <div className="flex min-h-[360px] flex-col items-center justify-center rounded-2xl border-2 border-dashed border-brand/40 bg-brand-soft/40 p-6 text-center">
-            <UsagiMascot className="mascot-float h-28 w-28" mood="sad" />
-            <p className="mt-2 text-sm font-extrabold text-ink">
-              先回答上面的追问
-            </p>
-          </div>
-        ) : (
-          <>
-            <pre
-              className={cn(
-                "review-text select-text rounded-2xl border-l-4 border-brand/40 bg-cream/40 p-4 text-ink",
-                !hasContent && "opacity-40",
-              )}
-            >
-              {finalText}
-            </pre>
-
-            {!hasContent ? (
-              <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-6">
-                <div className="rounded-[26px] border-2 border-dashed border-brand/40 bg-paper/95 px-5 py-5 text-center shadow-[0_4px_0_#f0d4dd] backdrop-blur-sm">
-                  <ChiikawaMascot className="mx-auto h-16 w-16" />
-                  <p className="mt-2 text-sm font-extrabold text-ink">
-                    生成后会显示在这里
-                  </p>
-                </div>
-              </div>
-            ) : null}
-          </>
-        )}
-
-        {loading ? (
-          streaming.length > 0 || streamingPartial ? (
-            <div className="absolute inset-0 z-10 overflow-y-auto rounded-[26px] bg-paper/95 p-4">
-              <StreamingPreview
-                sections={streaming}
-                partial={streamingPartial}
-              />
-            </div>
           ) : (
-            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 rounded-[26px] bg-paper/85 backdrop-blur-[1px]">
-              <Spinner className="h-6 w-6" />
-              <p className="text-sm font-bold text-ink">{loadingMessage}</p>
-              <div className="flex gap-1.5">
-                <span className="loading-dot h-1.5 w-1.5 rounded-full bg-brand" />
-                <span className="loading-dot h-1.5 w-1.5 rounded-full bg-brand" />
-                <span className="loading-dot h-1.5 w-1.5 rounded-full bg-brand" />
-              </div>
+            <Badge tone="stone">待生成</Badge>
+          )}
+        </div>
+      </header>
+
+      {notes.length > 0 ? (
+        <div className="mb-2 space-y-1.5 px-1">
+          {notes.map((note, index) => (
+            <div
+              key={`${note}-${index}`}
+              className="rounded-lg bg-butter-soft px-3 py-2 text-xs leading-relaxed text-[#7a5c2a] ring-1 ring-butter/50"
+            >
+              {note}
             </div>
-          )
-        ) : null}
+          ))}
+        </div>
+      ) : null}
+
+      <div className="flex flex-1 flex-col">
+        {showStreaming ? (
+          <div className="paper-sheet flex-1 p-4 sm:p-5">
+            <StreamingPreview
+              sections={streaming}
+              partial={streamingPartial}
+            />
+          </div>
+        ) : hasContent ? (
+          <div className="paper-sheet flex-1 p-4 sm:p-5">
+            <pre className="review-text text-ink">{finalText}</pre>
+          </div>
+        ) : loading ? (
+          <div className="paper-sheet flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
+            <Spinner className="h-5 w-5" />
+            <p className="text-sm font-medium text-ink">{loadingMessage}</p>
+          </div>
+        ) : (
+          <EmptyPreview sampleText={sampleText} />
+        )}
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-2 border-t-2 border-line/60 px-4 py-3 sm:px-5">
-        <div className="flex flex-wrap items-center gap-1">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onEdit}
-            disabled={!hasContent || loading || waitingForAnswers}
-          >
-            <Pencil className="h-4 w-4" />
-            编辑内容
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onRegenerate}
-            disabled={!hasContent || loading || waitingForAnswers}
-          >
-            <RefreshCw className="h-4 w-4" />
-            重新生成
-          </Button>
-          {memoryEnabled ? (
+      {hasContent ? (
+        <footer className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-line/60 px-1 pt-3">
+          <div className="flex flex-wrap items-center gap-1">
             <Button
               variant="ghost"
               size="sm"
-              onClick={onExtractMemory}
-              loading={extractingMemory}
-              disabled={!hasContent || loading || waitingForAnswers}
+              onClick={onEdit}
+              disabled={loading}
             >
-              <Brain className="h-4 w-4" />
-              {memoryExtractedAt
-                ? memoryStale
-                  ? "更新记忆"
-                  : "重新记忆"
-                : "记住今天"}
+              <Pencil className="h-4 w-4" />
+              编辑内容
             </Button>
-          ) : null}
-        </div>
-        <Button
-          size="sm"
-          onClick={onCopy}
-          disabled={!hasContent || loading || waitingForAnswers}
-        >
-          <Copy className="h-4 w-4" />
-          复制
-        </Button>
-      </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onRegenerate}
+              disabled={loading}
+            >
+              <RefreshCw className="h-4 w-4" />
+              重新生成
+            </Button>
+            {memoryEnabled ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onExtractMemory}
+                loading={extractingMemory}
+                disabled={loading}
+                title={memoryTitle}
+              >
+                <Brain className="h-4 w-4" />
+                提取记忆
+              </Button>
+            ) : null}
+          </div>
+
+          <Button size="sm" onClick={onCopy} disabled={loading}>
+            <Copy className="h-4 w-4" />
+            复制
+          </Button>
+        </footer>
+      ) : null}
     </section>
   );
 }

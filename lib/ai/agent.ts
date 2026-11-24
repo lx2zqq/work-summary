@@ -245,7 +245,7 @@ export async function runAgent(
 
     if (remaining < 1_000) {
       throw new AiError(
-        "AI 处理超时，已保留当前草稿，请稍后重试",
+        "处理超时，已保留当前草稿，请稍后重试",
         "timeout",
       );
     }
@@ -343,13 +343,13 @@ export async function runAgent(
 
       if (isTimeoutError(error)) {
         throw new AiError(
-          "AI 处理超时，已保留当前草稿，请稍后重试",
+          "处理超时，已保留当前草稿，请稍后重试",
           "timeout",
         );
       }
 
       const detail = error instanceof Error ? error.message : "未知错误";
-      throw new AiError(`AI 调用失败：${detail}`, "request");
+      throw new AiError(`模型调用失败：${detail}`, "request");
     }
 
     rounds += 1;
@@ -358,7 +358,7 @@ export async function runAgent(
 
     if (isLastCall || toolCalls.length === 0) {
       if (!content) {
-        throw new AiError("AI 没有生成有效内容，请稍后重试", "output");
+        throw new AiError("这次没有生成有效内容，请稍后重试", "output");
       }
 
       return {
@@ -398,5 +398,5 @@ export async function runAgent(
     }
   }
 
-  throw new AiError("AI 调用轮次过多，请稍后重试", "output");
+  throw new AiError("生成步骤过多，请稍后重试", "output");
 }

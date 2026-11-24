@@ -1,4 +1,3 @@
-import { UsagiMascot } from "@/components/mascots";
 import { PageHeading } from "@/components/page-heading";
 import { SettingsForm } from "@/components/settings/settings-form";
 import {
@@ -13,11 +12,8 @@ export default async function SettingsPage() {
   const settings = await getSettings();
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4">
-      <PageHeading
-        title="设置"
-        mascot={<UsagiMascot className="h-9 w-9" />}
-      />
+    <div className="mx-auto max-w-5xl space-y-4">
+      <PageHeading title="设置" />
       <SettingsForm
         initialSettings={settings}
         aiModel={getAiModelName()}

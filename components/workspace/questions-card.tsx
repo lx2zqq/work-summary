@@ -1,10 +1,10 @@
 "use client";
 
-import { Brain, SkipForward, Sparkles } from "lucide-react";
+import { ArrowRight, Brain, MessageSquare, SkipForward } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
-import { HachiwareMascot } from "@/components/mascots";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -91,74 +91,80 @@ export function QuestionsCard({
   }
 
   return (
-    <section className="rounded-[26px] border-2 border-brand/40 bg-brand-soft/50 p-4 shadow-[0_4px_0_#f0d4dd] sm:p-5">
-      <div className="flex items-start gap-3">
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-paper ring-2 ring-brand/40">
-          <HachiwareMascot className="h-10 w-10" mood="sad" />
-        </div>
-        <div>
-          <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-sm font-extrabold text-ink">
-              AI 想确认 {questions.length} 件事
-            </h2>
-            <span className="rounded-full bg-paper px-2 py-0.5 text-[10px] font-bold text-brand-deep ring-1 ring-brand/30">
-              第 {round + 1} / {maxRounds} 轮
-            </span>
+    <section className="flex flex-col rounded-2xl border border-line/70 bg-canvas p-3 sm:p-4 lg:min-h-[640px]">
+      <header className="flex items-start justify-between gap-2 px-1 pb-3">
+        <div className="flex min-w-0 items-start gap-2.5">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-paper text-brand-deep ring-1 ring-line/60">
+            <MessageSquare className="h-4 w-4" />
           </div>
-          <p className="mt-1 text-xs leading-relaxed text-ink-soft">
-            选项和补充可以同时填。
-          </p>
-          {memories.length > 0 ? (
-            <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[10px] text-ink-soft">
-              <Brain className="h-3 w-3 text-brand-deep" />
-              {memories.slice(0, 3).map((memory) => (
-                <span
-                  key={memory.id}
-                  title={memory.content}
-                  className="rounded-full bg-paper px-2 py-0.5 font-semibold text-ink-soft ring-1 ring-line/60"
-                >
-                  {memory.scope === "student"
-                    ? memory.studentName || "未关联学生"
-                    : "通用"}
-                  ·{memory.category}
-                </span>
-              ))}
-              {memories.length > 3 ? (
-                <span
-                  className="rounded-full bg-paper px-2 py-0.5 font-semibold text-ink-soft ring-1 ring-line/60"
-                  title={`还有 ${memories.length - 3} 条记忆`}
-                >
-                  +{memories.length - 3}
-                </span>
-              ) : null}
-              <Link
-                href={demoMode ? "/login" : "/memories"}
-                className="underline"
-              >
-                查看
-              </Link>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-sm font-semibold text-ink">
+                需要再确认 {questions.length} 件事
+              </h2>
+              <span className="rounded-full bg-paper px-2 py-0.5 text-[10px] font-medium text-brand-deep ring-1 ring-brand/30">
+                第 {round + 1} / {maxRounds} 轮
+              </span>
             </div>
-          ) : null}
+            <p className="mt-1 text-xs leading-relaxed text-ink-soft">
+              选项和补充可以同时填，提交后生成成品。
+            </p>
+            {memories.length > 0 ? (
+              <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[10px] text-ink-soft">
+                <Brain className="h-3 w-3 text-brand-deep" />
+                {memories.slice(0, 3).map((memory) => (
+                  <span
+                    key={memory.id}
+                    title={memory.content}
+                    className="rounded-full bg-paper px-2 py-0.5 font-medium text-ink-soft ring-1 ring-line/60"
+                  >
+                    {memory.scope === "student"
+                      ? memory.studentName || "未关联学生"
+                      : "通用"}
+                    ·{memory.category}
+                  </span>
+                ))}
+                {memories.length > 3 ? (
+                  <span
+                    className="rounded-full bg-paper px-2 py-0.5 font-medium text-ink-soft ring-1 ring-line/60"
+                    title={`还有 ${memories.length - 3} 条记忆`}
+                  >
+                    +{memories.length - 3}
+                  </span>
+                ) : null}
+                <Link
+                  href={demoMode ? "/login" : "/memories"}
+                  className="underline"
+                >
+                  查看
+                </Link>
+              </div>
+            ) : null}
+          </div>
         </div>
-      </div>
 
-      <div className="mt-4 space-y-3.5">
+        <Badge tone="amber" className="shrink-0">
+          待补全
+        </Badge>
+      </header>
+
+      <div className="flex-1 space-y-3.5 px-0.5">
         {questions.map((question, index) => {
           const state = getAnswer(question.id);
 
           return (
             <div
               key={question.id}
-              className="rounded-2xl border-2 border-line/70 bg-paper p-3.5 shadow-[0_2px_0_#f0e4d6]"
+              className="rounded-xl border border-line/70 bg-paper p-3.5"
             >
-              <div className="flex gap-2 text-sm font-bold text-ink">
+              <div className="flex gap-2 text-sm font-medium text-ink">
                 <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-butter-soft text-[11px] text-[#8a6a2f]">
                   {index + 1}
                 </span>
                 <span className="leading-relaxed">
                   {question.text}
                   {question.multiple ? (
-                    <span className="ml-2 inline-block whitespace-nowrap rounded-full bg-sky-soft px-2 py-0.5 align-middle text-[10px] font-bold text-[#4e7f99]">
+                    <span className="ml-2 inline-block whitespace-nowrap rounded-full bg-sky-soft px-2 py-0.5 align-middle text-[10px] font-medium text-[#4e7f99]">
                       可多选
                     </span>
                   ) : null}
@@ -177,10 +183,10 @@ export function QuestionsCard({
                         aria-pressed={selected}
                         onClick={() => toggleOption(question, option)}
                         className={cn(
-                          "rounded-full border-2 px-3 py-1.5 text-xs font-bold transition-all",
+                          "rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors",
                           selected
-                            ? "border-brand-deep bg-brand text-cocoa shadow-[0_2px_0_#c96b85]"
-                            : "border-line bg-paper text-ink-soft hover:border-brand hover:text-ink",
+                            ? "border-brand-deep bg-brand-deep text-white"
+                            : "border-line bg-paper text-ink-soft hover:bg-cream-deep hover:text-ink",
                         )}
                       >
                         {option}
@@ -209,7 +215,7 @@ export function QuestionsCard({
         })}
       </div>
 
-      <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+      <div className="mt-3 flex flex-col-reverse gap-2 border-t border-line/60 px-1 pt-3 sm:flex-row sm:justify-end">
         <Button
           variant="ghost"
           size="sm"
@@ -220,8 +226,8 @@ export function QuestionsCard({
           跳过追问并生成
         </Button>
         <Button size="sm" onClick={handleSubmit} loading={loading}>
-          <Sparkles className="h-4 w-4" />
           提交并继续
+          <ArrowRight className="h-4 w-4" />
         </Button>
       </div>
     </section>

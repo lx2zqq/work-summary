@@ -33,7 +33,7 @@ export function DialogContent({
         )}
         {...props}
       >
-        <DialogPrimitive.Title className="pr-8 text-lg font-extrabold tracking-tight text-ink">
+        <DialogPrimitive.Title className="pr-8 text-base font-semibold tracking-tight text-ink">
           {title}
         </DialogPrimitive.Title>
         {description ? (
@@ -42,7 +42,7 @@ export function DialogContent({
           </DialogPrimitive.Description>
         ) : null}
         {children}
-        <DialogPrimitive.Close className="absolute right-3.5 top-3.5 rounded-full p-1.5 text-ink-soft transition hover:bg-brand-soft hover:text-ink">
+        <DialogPrimitive.Close className="absolute right-3.5 top-3.5 rounded-lg p-1.5 text-ink-soft transition-colors hover:bg-cream-deep hover:text-ink">
           <X className="h-4 w-4" />
           <span className="sr-only">关闭</span>
         </DialogPrimitive.Close>

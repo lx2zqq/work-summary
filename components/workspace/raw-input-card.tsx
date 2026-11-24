@@ -4,20 +4,26 @@ import {
   Lightbulb,
   Loader2,
   Mic,
-  Sparkles,
+  Plus,
   Square,
   Users,
 } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useState, useSyncExternalStore } from "react";
+import { useCallback, useRef, useState, useSyncExternalStore } from "react";
 import { toast } from "sonner";
-import { ChiikawaMascot } from "@/components/mascots";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/input";
+import { Segmented } from "@/components/ui/segmented";
 import { useRecordingInput } from "@/hooks/use-recording-input";
 import { useVoiceInput } from "@/hooks/use-voice-input";
-import { CORE_SECTIONS, SECTION_META, type Student } from "@/lib/types";
+import {
+  CORE_SECTIONS,
+  SECTION_META,
+  type ReviewStyle,
+  type Student,
+} from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { WorkspaceDate, type SaveStatus } from "./workspace-date";
 
 const RAW_INPUT_MAX_LENGTH = 6000;
 
@@ -71,10 +77,20 @@ type Props = {
   hasDraft: boolean;
   questioning: boolean;
   loading: boolean;
+  style: ReviewStyle;
+  date: string;
+  today: string;
+  saveStatus: SaveStatus;
+  switchingDate: boolean;
+  canSave: boolean;
   onChange: (value: string) => void;
+  onStyleChange: (style: ReviewStyle) => void;
   onGenerate: () => void;
-  /** 演示模式：隐藏语音（会调转写接口），链接改登录页 */
+  onDateChange: (date: string) => void;
+  onSave: () => void;
+  /** 演示模式：隐藏语音和日期切换，链接改登录页 */
   demoMode?: boolean;
+  dateReadOnly?: boolean;
 };
 
 export function RawInputCard({
@@ -83,10 +99,23 @@ export function RawInputCard({
   hasDraft,
   questioning,
   loading,
+  style,
+  date,
+  today,
+  saveStatus,
+  switchingDate,
+  canSave,
   onChange,
+  onStyleChange,
   onGenerate,
+  onDateChange,
+  onSave,
   demoMode = false,
+  dateReadOnly = false,
 }: Props) {
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // 没点过写作区时，快捷插入默认追加到末尾，而不是插到第 0 个字符
+  const touchedRef = useRef(false);
   const [forceRecorder, setForceRecorder] = useState(false);
   const androidWeChat = useSyncExternalStore(
     subscribeUserAgent,
@@ -153,6 +182,34 @@ export function RawInputCard({
     speech.toggle();
   }
 
+  function insertStudent(name: string) {
+    if (loading) return;
+
+    const snippet = `${name}：`;
+    const element = textareaRef.current;
+
+    if (!element) {
+      onChange(`${value}${snippet}`.slice(0, RAW_INPUT_MAX_LENGTH));
+      return;
+    }
+
+    const start = touchedRef.current
+      ? element.selectionStart ?? value.length
+      : value.length;
+    const end = touchedRef.current ? element.selectionEnd ?? start : value.length;
+    const next = `${value.slice(0, start)}${snippet}${value.slice(end)}`.slice(
+      0,
+      RAW_INPUT_MAX_LENGTH,
+    );
+
+    onChange(next);
+    requestAnimationFrame(() => {
+      element.focus();
+      const caret = Math.min(start + snippet.length, next.length);
+      element.setSelectionRange(caret, caret);
+    });
+  }
+
   const voiceLabel = recorder.transcribing
     ? "正在转写…"
     : recorder.recording
@@ -172,181 +229,145 @@ export function RawInputCard({
           : "开始语音输入";
 
   return (
-    <section className="paper-card p-4 sm:p-5">
-      <div className="flex items-start gap-3">
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-sky-soft ring-2 ring-sky/60">
-          <ChiikawaMascot className="h-10 w-10" />
-        </div>
-        <div>
-          <h2 className="text-base font-extrabold tracking-tight text-ink">
-            今天都做了什么？
-          </h2>
-        </div>
-      </div>
-
-      {students.length > 0 ? (
-        <div className="mt-3 flex flex-wrap items-center gap-1.5 text-[11px] text-ink-soft">
-          <Users className="h-3.5 w-3.5" />
-          {students.slice(0, 8).map((student) => (
-            <span
-              key={student.id}
-              className="rounded-full bg-cream-deep px-2.5 py-0.5 font-semibold text-ink-soft"
-            >
-              {student.name}
-            </span>
-          ))}
-          {students.length > 8 ? (
-            <span
-              className="rounded-full bg-cream-deep px-2.5 py-0.5 font-semibold text-ink-soft"
-              title={`还有 ${students.length - 8} 位学生`}
-            >
-              +{students.length - 8}
-            </span>
-          ) : null}
-        </div>
-      ) : (
-        <div className="mt-3 flex items-center gap-1.5 text-[11px] text-ink-soft">
-          <Users className="h-3.5 w-3.5" />
-          <span>还没有学生名单</span>
-          <Link
-            href={demoMode ? "/login" : "/students"}
-            className="font-bold text-brand-deep underline underline-offset-2"
-          >
-            去添加
-          </Link>
-        </div>
-      )}
-
-      {demoMode ? null : (
-      <div className="mt-3 flex justify-end">
-        <button
-          type="button"
-          onClick={handleVoiceToggle}
-          disabled={voiceButtonDisabled}
-          aria-pressed={activeVoice}
-          aria-label={voiceTitle}
-          title={voiceTitle}
-          className={cn(
-            "inline-flex h-9 shrink-0 items-center gap-2 rounded-full border-2 px-3.5 text-xs font-bold transition-all",
-            activeVoice
-              ? "border-brand-deep bg-brand text-cocoa shadow-[0_2px_0_#c96b85]"
-              : recorder.transcribing
-                ? "border-brand/50 bg-brand-soft text-brand-deep"
-                : "border-line bg-paper text-ink-soft shadow-[0_2px_0_#eadccd] hover:border-brand hover:text-ink",
-            voiceButtonDisabled && "cursor-not-allowed opacity-50",
-          )}
-        >
-          {recorder.transcribing ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : activeVoice ? (
-            <Square className="h-3.5 w-3.5 fill-current" />
-          ) : (
-            <Mic className="h-4 w-4" />
-          )}
-          {voiceLabel}
-          {activeVoice ? (
-            <span className="relative flex h-2 w-2">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-brand-deep opacity-60 motion-reduce:animate-none" />
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-brand-deep" />
-            </span>
-          ) : null}
-        </button>
-      </div>
-      )}
-
-      <Textarea
-        aria-label="工作流水账"
-        value={value}
-        disabled={loading}
-        onChange={(event) => onChange(event.target.value)}
-        placeholder={
-          "今天做了什么？随便写，学生、家长、业绩、琐事都可以。\n比如：林小满作业写完了，错题讲了两道；跟她妈妈微信说了这周安排。\n写不完整也没关系，AI 会追问。"
-        }
-        className="notebook-lines mt-2 min-h-[220px] resize-y bg-paper text-[15px] leading-8"
-        maxLength={RAW_INPUT_MAX_LENGTH}
+    <section className="paper-card flex flex-col overflow-hidden lg:min-h-[640px]">
+      <WorkspaceDate
+        date={date}
+        today={today}
+        status={saveStatus}
+        switching={switchingDate}
+        canSave={canSave}
+        loading={loading}
+        readOnly={dateReadOnly}
+        onDateChange={onDateChange}
+        onSave={onSave}
       />
 
-      {speech.listening ? (
-        <div
-          aria-live="polite"
-          className="mt-2 flex items-start gap-2 rounded-2xl bg-sky-soft px-3 py-2 text-[11px] leading-relaxed text-[#4e7f99] ring-1 ring-sky/50"
-        >
-          <span className="mt-1 h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-brand-deep motion-reduce:animate-none" />
-          <span className="min-w-0 break-words">
-            {speech.interim
-              ? `正在识别：${speech.interim}`
-              : "正在听，请开始说话…"}
-          </span>
-        </div>
-      ) : recorder.recording ? (
-        <div
-          aria-live="polite"
-          className="mt-2 flex items-start gap-2 rounded-2xl bg-sky-soft px-3 py-2 text-[11px] leading-relaxed text-[#4e7f99] ring-1 ring-sky/50"
-        >
-          <span className="mt-1 h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-brand-deep motion-reduce:animate-none" />
-          <span className="min-w-0 break-words">
-            正在录音 {formatSeconds(recorder.seconds)}，点“停止并转写”后自动变成文字
-          </span>
-        </div>
-      ) : recorder.transcribing ? (
-        <div
-          aria-live="polite"
-          className="mt-2 flex items-start gap-2 rounded-2xl bg-sky-soft px-3 py-2 text-[11px] leading-relaxed text-[#4e7f99] ring-1 ring-sky/50"
-        >
-          <Loader2 className="mt-0.5 h-3.5 w-3.5 shrink-0 animate-spin" />
-          <span className="min-w-0 break-words">
-            正在把录音转成文字，请稍候…
-          </span>
-        </div>
-      ) : null}
-
-      {voiceError ? (
-        <p
-          role="alert"
-          className="mt-2 rounded-2xl bg-[#fde8e8] px-3 py-2 text-[11px] leading-relaxed text-[#b35454] ring-1 ring-[#e4b1b1]"
-        >
-          {voiceError}
-        </p>
-      ) : null}
-
-      {hydrated && !voiceSupported ? (
-        <p className="mt-2 rounded-2xl bg-cream-deep px-3 py-2 text-[11px] leading-relaxed text-ink-soft ring-1 ring-line/60">
-          当前浏览器不支持语音输入，请直接打字。
-        </p>
-      ) : null}
-
-      <div className="mt-2 flex justify-end text-[11px] text-ink-soft">
-        <span className="shrink-0">
-          {value.length} / {RAW_INPUT_MAX_LENGTH}
+      <div className="flex flex-wrap items-center gap-1.5 border-b border-line/60 px-3 py-2.5 sm:px-4">
+        <span className="mr-1 flex items-center gap-1 text-[11px] text-ink-soft">
+          <Users className="h-3.5 w-3.5" />
+          快捷插入
         </span>
+
+        {students.length > 0 ? (
+          <>
+            {students.slice(0, 8).map((student) => (
+              <button
+                key={student.id}
+                type="button"
+                disabled={loading}
+                title={`把「${student.name}」插入到光标处`}
+                onClick={() => insertStudent(student.name)}
+                className="inline-flex items-center gap-0.5 rounded-full border border-line bg-paper px-2.5 py-1 text-[11px] font-medium text-ink-soft transition-colors hover:border-brand/40 hover:bg-brand-soft hover:text-brand-deep disabled:opacity-50"
+              >
+                <Plus className="h-3 w-3" />
+                {student.name}
+              </button>
+            ))}
+            {students.length > 8 ? (
+              <span
+                className="rounded-full bg-cream-deep px-2.5 py-1 text-[11px] font-medium text-ink-soft"
+                title={`还有 ${students.length - 8} 位学生`}
+              >
+                +{students.length - 8}
+              </span>
+            ) : null}
+          </>
+        ) : (
+          <span className="text-[11px] text-ink-soft">
+            还没有学生名单
+            <Link
+              href={demoMode ? "/login" : "/students"}
+              className="ml-1 font-medium text-brand-deep underline underline-offset-2"
+            >
+              去添加
+            </Link>
+          </span>
+        )}
       </div>
 
-      {!hasDraft ? (
-        <div className="mt-4 hidden md:flex md:justify-end">
-          <Button
-            onClick={onGenerate}
-            loading={loading}
-            size="lg"
-            className="min-w-[150px]"
-          >
-            {!loading ? <Sparkles className="h-4 w-4" /> : null}
-            {questioning ? "重新分析" : "生成复盘"}
-          </Button>
-        </div>
-      ) : null}
+      <div className="flex flex-1 flex-col px-3 py-2 sm:px-4">
+        <Textarea
+          ref={textareaRef}
+          aria-label="工作流水账"
+          value={value}
+          disabled={loading}
+          onFocus={() => {
+            touchedRef.current = true;
+          }}
+          onClick={() => {
+            touchedRef.current = true;
+          }}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder={
+            "今天做了什么？随便写，学生、家长、业绩、琐事都可以。\n比如：林小满作业写完了，错题讲了两道；跟她妈妈微信说了这周安排。\n写不完整也没关系，生成前会先确认几个关键信息。"
+          }
+          className="notebook-lines min-h-[280px] flex-1 resize-y rounded-none border-0 bg-transparent px-0 py-0 text-[15px] leading-8 shadow-none focus:ring-0"
+          maxLength={RAW_INPUT_MAX_LENGTH}
+        />
 
-      <details className="mt-4 rounded-2xl border-2 border-line/60 bg-cream-deep/50 px-3.5 py-3 text-sm text-ink-soft">
-        <summary className="flex cursor-pointer list-none items-center gap-2 text-xs font-bold text-ink-soft">
-          <Lightbulb className="h-4 w-4 text-[#c79a45]" />
+        {speech.listening ? (
+          <div
+            aria-live="polite"
+            className="mb-2 mt-2 flex items-start gap-2 rounded-lg bg-sky-soft px-3 py-2 text-[11px] leading-relaxed text-[#4e7f99] ring-1 ring-sky/50"
+          >
+            <span className="mt-1 h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-brand-deep motion-reduce:animate-none" />
+            <span className="min-w-0 break-words">
+              {speech.interim
+                ? `正在识别：${speech.interim}`
+                : "正在听，请开始说话…"}
+            </span>
+          </div>
+        ) : recorder.recording ? (
+          <div
+            aria-live="polite"
+            className="mb-2 mt-2 flex items-start gap-2 rounded-lg bg-sky-soft px-3 py-2 text-[11px] leading-relaxed text-[#4e7f99] ring-1 ring-sky/50"
+          >
+            <span className="mt-1 h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-brand-deep motion-reduce:animate-none" />
+            <span className="min-w-0 break-words">
+              正在录音 {formatSeconds(recorder.seconds)}
+              ，点“停止并转写”后自动变成文字
+            </span>
+          </div>
+        ) : recorder.transcribing ? (
+          <div
+            aria-live="polite"
+            className="mb-2 mt-2 flex items-start gap-2 rounded-lg bg-sky-soft px-3 py-2 text-[11px] leading-relaxed text-[#4e7f99] ring-1 ring-sky/50"
+          >
+            <Loader2 className="mt-0.5 h-3.5 w-3.5 shrink-0 animate-spin" />
+            <span className="min-w-0 break-words">
+              正在把录音转成文字，请稍候…
+            </span>
+          </div>
+        ) : null}
+
+        {voiceError ? (
+          <p
+            role="alert"
+            className="mb-2 mt-2 rounded-lg bg-[#fdf0ee] px-3 py-2 text-[11px] leading-relaxed text-[#a94b42] ring-1 ring-[#e9cdc8]"
+          >
+            {voiceError}
+          </p>
+        ) : null}
+
+        {hydrated && !voiceSupported ? (
+          <p className="mb-2 mt-2 rounded-lg bg-cream-deep px-3 py-2 text-[11px] leading-relaxed text-ink-soft ring-1 ring-line/60">
+            当前浏览器不支持语音输入，请直接打字。
+          </p>
+        ) : null}
+      </div>
+
+      <details className="mx-3 mb-3 rounded-lg border border-line/60 bg-cream-deep/40 px-3 py-2 text-sm text-ink-soft sm:mx-4">
+        <summary className="flex cursor-pointer list-none items-center gap-2 text-xs font-medium text-ink-soft">
+          <Lightbulb className="h-3.5 w-3.5 text-[#8a6a2f]" />
           栏目提示
         </summary>
-        <div className="mt-3 grid gap-2.5 sm:grid-cols-2">
+        <div className="mt-2 grid gap-2 sm:grid-cols-2">
           {CORE_SECTIONS.map((key) => (
             <div
               key={key}
-              className="rounded-2xl bg-paper px-3 py-2 ring-1 ring-line/60"
+              className="rounded-lg bg-paper px-3 py-2 ring-1 ring-line/60"
             >
-              <div className="text-xs font-bold text-ink">
+              <div className="text-xs font-medium text-ink">
                 {SECTION_META[key].title}
               </div>
               <div className="mt-0.5 text-[11px] leading-relaxed text-ink-soft">
@@ -356,6 +377,77 @@ export function RawInputCard({
           ))}
         </div>
       </details>
+
+      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line/70 px-3 py-3 sm:px-4">
+        <div className="flex items-center gap-2">
+          {demoMode ? null : (
+            <button
+              type="button"
+              onClick={handleVoiceToggle}
+              disabled={voiceButtonDisabled}
+              aria-pressed={activeVoice}
+              aria-label={voiceTitle}
+              title={voiceTitle}
+              className={cn(
+                "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-medium transition-colors",
+                activeVoice
+                  ? "border-transparent bg-brand-deep text-white"
+                  : recorder.transcribing
+                    ? "border-brand/30 bg-brand-soft text-brand-deep"
+                    : "border-line bg-paper text-ink-soft hover:bg-cream-deep hover:text-ink",
+                voiceButtonDisabled && "cursor-not-allowed opacity-50",
+              )}
+            >
+              {recorder.transcribing ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : activeVoice ? (
+                <Square className="h-3.5 w-3.5 fill-current" />
+              ) : (
+                <Mic className="h-4 w-4" />
+              )}
+              {voiceLabel}
+              {activeVoice ? (
+                <span className="relative flex h-2 w-2">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-60 motion-reduce:animate-none" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-white" />
+                </span>
+              ) : null}
+            </button>
+          )}
+
+          <span className="text-[11px] text-ink-soft">
+            {value.length} / {RAW_INPUT_MAX_LENGTH}
+          </span>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <div
+            className={cn(
+              "transition-opacity",
+              loading && "pointer-events-none opacity-50",
+            )}
+          >
+            <Segmented
+              options={[
+                { value: "concise", label: "简洁" },
+                { value: "detailed", label: "详细" },
+              ]}
+              value={style}
+              onChange={onStyleChange}
+              ariaLabel="文风"
+            />
+          </div>
+
+          <Button
+            onClick={onGenerate}
+            loading={loading}
+            disabled={!value.trim()}
+            title={value.trim() ? undefined : "先写一点今天的流水账"}
+          >
+            {questioning ? "重新分析" : hasDraft ? "重新生成" : "生成复盘"}
+          </Button>
+        </div>
+      </div>
     </section>
   );
 }

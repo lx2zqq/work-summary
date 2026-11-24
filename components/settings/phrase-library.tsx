@@ -1,6 +1,6 @@
 "use client";
 
-import { Sparkles, Trash2 } from "lucide-react";
+import { BookOpen, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -132,10 +132,10 @@ export function PhraseLibrary({
     <section className="paper-card p-4 sm:p-5">
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-butter-soft text-[#7a5c2a] ring-2 ring-butter/60">
-            <Sparkles className="h-4 w-4" />
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-butter-soft text-[#7a5c2a]">
+            <BookOpen className="h-4 w-4" />
           </div>
-          <h2 className="text-sm font-extrabold text-ink">通用话术库</h2>
+          <h2 className="text-sm font-semibold text-ink">通用话术库</h2>
         </div>
         <Badge tone={full ? "amber" : "stone"}>
           {phrases.length} / {MAX_CUSTOM_PHRASES}
@@ -147,7 +147,7 @@ export function PhraseLibrary({
       </p>
 
       {demoMode ? (
-        <p className="mt-3 rounded-2xl bg-cream-deep/60 px-3.5 py-2.5 text-xs text-ink-soft">
+        <p className="mt-3 rounded-lg bg-cream-deep/60 px-3.5 py-2.5 text-xs text-ink-soft">
           演示模式不支持添加话术，登录后可以使用。
         </p>
       ) : (
@@ -173,19 +173,18 @@ export function PhraseLibrary({
               loading={polishing}
               disabled={!text.trim() || full}
             >
-              {polishing ? null : <Sparkles className="h-3.5 w-3.5" />}
               润色并预览
             </Button>
           </div>
 
           {full ? (
-            <p className="mt-2 text-[11px] text-[#b35454]">
+            <p className="mt-2 text-[11px] text-[#a94b42]">
               已经存满 {MAX_CUSTOM_PHRASES} 条，先删掉几条再加。
             </p>
           ) : null}
 
           {preview ? (
-            <div className="mt-3 rounded-2xl bg-cream-deep/60 p-3.5">
+            <div className="mt-3 rounded-xl bg-cream-deep/60 p-3.5">
               <p className="text-sm leading-relaxed text-ink">
                 {preview.phrase}
               </p>
@@ -223,14 +222,14 @@ export function PhraseLibrary({
 
           <ul className="mt-3 space-y-2">
             {phrases.length === 0 ? (
-              <li className="rounded-2xl bg-cream-deep/40 px-3.5 py-2.5 text-xs text-ink-soft">
+              <li className="rounded-lg bg-cream-deep/40 px-3.5 py-2.5 text-xs text-ink-soft">
                 还没有添加过自定义话术。
               </li>
             ) : (
               phrases.map((phrase) => (
                 <li
                   key={phrase.id}
-                  className="flex items-start justify-between gap-3 rounded-2xl bg-cream-deep/40 px-3.5 py-2.5"
+                  className="flex items-start justify-between gap-3 rounded-lg bg-cream-deep/40 px-3.5 py-2.5"
                 >
                   <div className="min-w-0">
                     <p className="text-xs leading-relaxed text-ink">
@@ -248,7 +247,7 @@ export function PhraseLibrary({
                       void handleDelete(phrase.id);
                     }}
                     className={cn(
-                      "mt-0.5 shrink-0 rounded-full p-1.5 text-ink-soft transition-colors hover:bg-paper hover:text-[#b35454]",
+                      "mt-0.5 shrink-0 rounded-md p-1.5 text-ink-soft transition-colors hover:bg-paper hover:text-[#a94b42]",
                       deletingId === phrase.id && "opacity-50",
                     )}
                   >

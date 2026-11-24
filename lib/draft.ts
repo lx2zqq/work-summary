@@ -154,6 +154,6 @@ export function fallbackDraft(rawInput: string): ReviewDraft {
   return {
     sections,
     questions: [],
-    notes: ["AI 暂时没有连上，已按原文生成草稿，请手动调整。"],
+    notes: ["生成服务暂时没有连上，已按原文生成草稿，请手动调整。"],
   };
 }

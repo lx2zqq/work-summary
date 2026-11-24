@@ -177,7 +177,7 @@ async function callOnce(input: {
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : "未知错误";
-    throw new AiError(`AI 调用失败：${message}`, "request");
+    throw new AiError(`模型调用失败：${message}`, "request");
   }
 
   const content = completion.choices[0]?.message?.content?.trim() ?? "";
@@ -303,7 +303,7 @@ export async function generateDraftWithUsage(
   // 第一次格式不对时，把错误告诉模型再试一次；重试不再带工具，避免继续消耗预算
   const remaining = TOTAL_BUDGET_MS - (Date.now() - startedAt);
   if (remaining < MIN_RETRY_BUDGET_MS) {
-    throw new AiError(first.error || "AI 返回内容格式不对", "output");
+    throw new AiError(first.error || "返回内容格式不对", "output");
   }
 
   usage.retried = true;
@@ -339,7 +339,7 @@ export async function generateDraftWithUsage(
   }
 
   throw new AiError(
-    "AI 返回的内容格式不对，已自动重试一次，请稍后再试",
+    "返回内容格式不对，已自动重试一次，请稍后再试",
     "output",
   );
 }
@@ -376,7 +376,7 @@ export function finalizeDraft(
 
     if (!countsMatch) {
       throw new AiError(
-        "AI 改文风结果不完整，已保留原稿，请稍后重试",
+        "改文风结果不完整，已保留原稿，请稍后重试",
         "output",
       );
     }
@@ -391,7 +391,7 @@ export function finalizeDraft(
   // 最终稿返回空内容时不要覆盖已有正文，交给路由走兜底并提示用户
   if (countDraftItems(normalized) === 0) {
     throw new AiError(
-      "AI 没有生成有效正文，已保留当前草稿，请稍后重试",
+      "这次没有生成有效正文，已保留当前草稿，请稍后重试",
       "output",
     );
   }
@@ -412,7 +412,13 @@ export function finalizeDraft(
 }
 
 export function getAiErrorMessage(error: unknown): string {
-  if (error instanceof AiError) return error.message;
+  if (error instanceof AiError) {
+    // 原始请求详情只写日志，页面上给一句中性提示
+    if (error.kind === "request" && error.message.startsWith("模型调用失败")) {
+      return "生成服务暂时出了点问题，请稍后重试";
+    }
+    return error.message;
+  }
   if (error instanceof Error) return error.message;
-  return "AI 暂时不可用";
+  return "生成服务暂时不可用";
 }

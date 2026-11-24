@@ -1,21 +1,31 @@
 "use client";
 
+import { useMemo } from "react";
 import { useDemo } from "@/components/demo/demo-provider";
 import { HistoryList } from "@/components/history/history-list";
-import { ChiikawaMascot } from "@/components/mascots";
-import { PageHeading } from "@/components/page-heading";
 
 export default function DemoHistoryPage() {
-  const { reviews } = useDemo();
+  const { reviews, students, today } = useDemo();
+
+  const stats = useMemo(() => {
+    const month = today.slice(0, 7);
+
+    return {
+      total: reviews.length,
+      monthDays: new Set(
+        reviews
+          .filter((item) => item.reviewDate.startsWith(month))
+          .map((item) => item.reviewDate),
+      ).size,
+    };
+  }, [reviews, today]);
 
   return (
-    <div className="space-y-4">
-      <PageHeading
-        title="历史复盘"
-        description="演示数据，复制按钮可以正常使用。"
-        mascot={<ChiikawaMascot className="h-9 w-9" />}
-      />
-      <HistoryList items={reviews} demoMode />
-    </div>
+    <HistoryList
+      items={reviews}
+      students={students}
+      stats={stats}
+      demoMode
+    />
   );
 }

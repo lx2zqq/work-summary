@@ -1,7 +1,6 @@
 "use client";
 
 import { useDemo } from "@/components/demo/demo-provider";
-import { UsagiMascot } from "@/components/mascots";
 import { MemoryManager } from "@/components/memories/memory-manager";
 import { PageHeading } from "@/components/page-heading";
 
@@ -13,7 +12,6 @@ export default function DemoMemoriesPage() {
       <PageHeading
         title="长期记忆"
         description="演示数据，可以增删改，刷新后恢复。"
-        mascot={<UsagiMascot className="h-9 w-9" />}
       />
       <MemoryManager
         initialMemories={memories}
