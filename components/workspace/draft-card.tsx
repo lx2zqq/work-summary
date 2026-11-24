@@ -79,7 +79,7 @@ function StreamingPreview({
   );
 }
 
-/** 没有正文时的干净空状态，可以切换查看模板示例 */
+/** 没有正文时的干净空状态，可以切换查看示例 */
 function EmptyPreview({ sampleText }: { sampleText: string }) {
   const [showSample, setShowSample] = useState(false);
 
@@ -107,10 +107,7 @@ function EmptyPreview({ sampleText }: { sampleText: string }) {
     <div className="flex flex-1 flex-col items-center justify-center px-6 py-12 text-center">
       <ChiikawaMascot className="h-16 w-16" />
       <p className="mt-3 text-sm font-medium text-ink">
-        写点什么，成品会出现在这里
-      </p>
-      <p className="mt-1 max-w-[260px] text-xs leading-relaxed text-ink-soft">
-        流水账也可以，生成前会先确认关键信息。
+        左侧输入后，在此生成复盘
       </p>
       <Button
         variant="ghost"
@@ -118,7 +115,7 @@ function EmptyPreview({ sampleText }: { sampleText: string }) {
         className="mt-3"
         onClick={() => setShowSample(true)}
       >
-        查看模板示例
+        查看示例
       </Button>
     </div>
   );
@@ -135,7 +132,7 @@ type Props = {
   memoryExtractedAt: string | null;
   memoryStale: boolean;
   extractingMemory: boolean;
-  /** 空状态里「查看模板示例」用的渲染结果 */
+  /** 空状态里「查看示例」用的渲染结果 */
   sampleText: string;
   /** 返回 false 表示复制失败，按钮不显示「已复制」 */
   onCopy: () => void | boolean | Promise<void | boolean>;

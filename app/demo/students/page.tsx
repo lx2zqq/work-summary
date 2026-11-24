@@ -9,10 +9,7 @@ export default function DemoStudentsPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeading
-        title="学生名单"
-        description="演示数据，可以增删改，刷新后恢复。"
-      />
+      <PageHeading title="学生名单" />
       <StudentManager
         initialStudents={students}
         memories={memories}

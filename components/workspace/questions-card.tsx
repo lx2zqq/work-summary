@@ -119,9 +119,6 @@ export function QuestionsCard({
                 第 {round + 1} / {maxRounds} 轮
               </span>
             </div>
-            <p className="mt-1 text-xs leading-relaxed text-ink-soft">
-              选项和补充可以同时填，提交后生成成品。
-            </p>
             {memories.length > 0 ? (
               <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[10px] text-ink-soft">
                 <Brain className="h-3 w-3 text-brand-deep" />

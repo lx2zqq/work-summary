@@ -16,10 +16,7 @@ export default function DemoSettingsPage() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-4">
-      <PageHeading
-        title="设置"
-        description="演示数据，改动会立即影响今日复盘的渲染。"
-      />
+      <PageHeading title="设置" />
       <SettingsForm
         initialSettings={settings}
         aiModel={DEMO_AI_MODEL}

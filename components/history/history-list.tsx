@@ -1,6 +1,12 @@
 "use client";
 
-import { ArrowUpRight, Copy, Trash2 } from "lucide-react";
+import {
+  ArrowUpRight,
+  ChevronDown,
+  ChevronUp,
+  Copy,
+  Trash2,
+} from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -12,7 +18,7 @@ import { MonthText } from "@/components/ui/date-text";
 import { SearchInput } from "@/components/ui/search-input";
 import { Select } from "@/components/ui/select";
 import { copyText } from "@/lib/clipboard";
-import { formatDateCN, todayISO, weekdayCN } from "@/lib/date";
+import { formatDateCN, weekdayCN } from "@/lib/date";
 import {
   dayOfMonth,
   matchStudents,
@@ -64,9 +70,12 @@ export function HistoryList({
   demoMode?: boolean;
 }) {
   const [list, setList] = useState(items);
-  const [localStats, setLocalStats] = useState(stats);
+  const [total, setTotal] = useState(stats.total);
   const [query, setQuery] = useState("");
   const [studentId, setStudentId] = useState("");
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(
+    () => new Set(),
+  );
   const [deleteTarget, setDeleteTarget] = useState<ReviewListItem | null>(
     null,
   );
@@ -104,6 +113,22 @@ export function HistoryList({
     setStudentId("");
   }
 
+  function toggleExpanded(id: string) {
+    setExpandedIds((previous) => {
+      const next = new Set(previous);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  async function copyReview(item: ReviewListItem) {
+    const okay = await copyText(item.finalText);
+
+    if (okay) toast.success("已复制");
+    else toast.error("复制失败，请打开后手动复制");
+  }
+
   async function handleDelete() {
     if (!deleteTarget) return;
 
@@ -124,18 +149,12 @@ export function HistoryList({
       setList((previous) =>
         previous.filter((item) => item.id !== deleteTarget.id),
       );
-      setLocalStats((previous) => {
-        // reviewDate 唯一，删掉当月的一条就等于少了一个复盘日
-        const deletedMonth = deleteTarget.reviewDate.slice(0, 7);
-        const currentMonth = todayISO().slice(0, 7);
-
-        return {
-          total: Math.max(0, previous.total - 1),
-          monthDays:
-            deletedMonth === currentMonth
-              ? Math.max(0, previous.monthDays - 1)
-              : previous.monthDays,
-        };
+      setTotal((previous) => Math.max(0, previous - 1));
+      setExpandedIds((previous) => {
+        if (!previous.has(deleteTarget.id)) return previous;
+        const next = new Set(previous);
+        next.delete(deleteTarget.id);
+        return next;
       });
       setDeleteTarget(null);
       toast.success("已删除这篇复盘");
@@ -163,22 +182,12 @@ export function HistoryList({
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div className="flex flex-wrap items-end gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-baseline gap-2">
           <h1 className="text-xl font-semibold tracking-tight text-ink sm:text-2xl">
             历史复盘
           </h1>
-          <span className="mb-0.5 inline-flex items-center rounded-full bg-cream-deep px-2.5 py-1 text-[11px] text-ink-soft">
-            共{" "}
-            <span className="mx-0.5 font-serif text-[1.25em] leading-none text-ink">
-              {localStats.total}
-            </span>{" "}
-            篇复盘 · 本月{" "}
-            <span className="mx-0.5 font-serif text-[1.25em] leading-none text-ink">
-              {localStats.monthDays}
-            </span>{" "}
-            天
-          </span>
+          <span className="text-xs text-ink-soft">共 {total} 篇</span>
         </div>
 
         <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
@@ -246,6 +255,9 @@ export function HistoryList({
                     students,
                   );
                   const isLast = index === monthItems.length - 1;
+                  const canExpand =
+                    item.questions === 0 && Boolean(item.finalText.trim());
+                  const expanded = expandedIds.has(item.id);
                   const summary =
                     item.questions > 0
                       ? demoMode
@@ -253,9 +265,52 @@ export function HistoryList({
                         : `还有 ${item.questions} 个追问未完成，点开继续。`
                       : reviewSummary(item.finalText, 2) ||
                         "（这篇还没有内容）";
-                  const canCopy =
-                    item.questions === 0 && Boolean(item.finalText.trim());
-                  const hasActions = canCopy || !demoMode;
+
+                  const body = (
+                    <>
+                      {item.questions > 0 ? (
+                        <Badge tone="amber">待补全</Badge>
+                      ) : null}
+
+                      <span
+                        className={cn(
+                          "flex items-start gap-1.5",
+                          item.questions > 0 && "mt-1.5",
+                        )}
+                      >
+                        <span className="line-clamp-2 min-w-0 flex-1 text-sm leading-relaxed text-ink">
+                          {highlightKeyword(summary, query)}
+                        </span>
+                        {canExpand ? (
+                          <ChevronDown
+                            aria-hidden
+                            className={cn(
+                              "mt-0.5 h-4 w-4 shrink-0 text-ink-soft/60 transition-transform",
+                              expanded && "rotate-180",
+                            )}
+                          />
+                        ) : null}
+                      </span>
+
+                      {mentioned.length > 0 ? (
+                        <span className="mt-2 flex flex-wrap gap-1.5">
+                          {mentioned.slice(0, 6).map((student) => (
+                            <span
+                              key={student.id}
+                              className="rounded-full bg-cream-deep/80 px-2 py-0.5 text-[10px] text-ink-soft"
+                            >
+                              {student.name}
+                            </span>
+                          ))}
+                          {mentioned.length > 6 ? (
+                            <span className="rounded-full bg-cream-deep/80 px-2 py-0.5 text-[10px] text-ink-soft">
+                              +{mentioned.length - 6}
+                            </span>
+                          ) : null}
+                        </span>
+                      ) : null}
+                    </>
+                  );
 
                   return (
                     <div key={item.id} className="flex gap-3">
@@ -271,96 +326,115 @@ export function HistoryList({
                         ) : null}
                       </div>
 
-                      <article
-                        className={cn(
-                          "paper-card relative min-w-0 flex-1 p-4 transition-colors hover:border-brand/30",
-                          hasActions &&
-                            (demoMode ? "pr-14" : "pr-[7.25rem]"),
-                        )}
-                      >
-                        {demoMode ? null : (
-                          <Link
-                            href={`/?date=${item.reviewDate}`}
-                            aria-label={`打开 ${formatDateCN(item.reviewDate)} 的复盘`}
-                            className="absolute inset-0 z-10 rounded-2xl"
-                          />
-                        )}
-
-                        <div className="pointer-events-none relative">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <Badge tone="stone">
-                              {item.style === "concise" ? "简洁" : "详细"}
-                            </Badge>
-                            {item.questions > 0 ? (
-                              <Badge tone="amber">待补全</Badge>
-                            ) : null}
-                          </div>
-
-                          <p className="mt-1.5 line-clamp-2 text-[13px] leading-relaxed text-ink-soft">
-                            {highlightKeyword(summary, query)}
-                          </p>
-
-                          {mentioned.length > 0 ? (
-                            <div className="mt-2 flex flex-wrap gap-1.5">
-                              {mentioned.slice(0, 6).map((student) => (
-                                <span
-                                  key={student.id}
-                                  className="rounded-full bg-cream-deep/80 px-2 py-0.5 text-[10px] text-ink-soft"
-                                >
-                                  {student.name}
-                                </span>
-                              ))}
-                              {mentioned.length > 6 ? (
-                                <span className="rounded-full bg-cream-deep/80 px-2 py-0.5 text-[10px] text-ink-soft">
-                                  +{mentioned.length - 6}
-                                </span>
-                              ) : null}
-                            </div>
-                          ) : null}
-                        </div>
-
-                        <div className="absolute right-3 top-3 z-20 flex items-center gap-0.5">
-                          {canCopy ? (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              title="复制这篇复盘"
-                              aria-label={`复制 ${formatDateCN(item.reviewDate)} 的复盘`}
-                              onClick={async () => {
-                                const okay = await copyText(item.finalText);
-                                if (okay) toast.success("已复制");
-                                else toast.error("复制失败，请打开后手动复制");
-                              }}
+                      <article className="paper-card min-w-0 flex-1 p-4 transition-colors hover:border-brand/30">
+                        <div className="flex items-start justify-between gap-2">
+                          {canExpand ? (
+                            <button
+                              type="button"
+                              aria-expanded={expanded}
+                              aria-controls={`review-body-${item.id}`}
+                              onClick={() => toggleExpanded(item.id)}
+                              className="min-w-0 flex-1 cursor-pointer rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
                             >
-                              <Copy className="h-4 w-4" />
-                            </Button>
-                          ) : null}
+                              {body}
+                            </button>
+                          ) : demoMode ? (
+                            <div className="min-w-0 flex-1">{body}</div>
+                          ) : (
+                            <Link
+                              href={`/?date=${item.reviewDate}`}
+                              aria-label={`打开 ${formatDateCN(item.reviewDate)} 的复盘`}
+                              className="min-w-0 flex-1 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
+                            >
+                              {body}
+                            </Link>
+                          )}
 
-                          {demoMode ? null : (
-                            <>
-                              <Link
-                                href={`/?date=${item.reviewDate}`}
-                                title="打开这篇复盘"
-                                aria-label={`打开 ${formatDateCN(item.reviewDate)} 的复盘`}
-                                className={buttonClass({
-                                  variant: "ghost",
-                                  size: "icon",
-                                })}
-                              >
-                                <ArrowUpRight className="h-4 w-4" />
-                              </Link>
+                          <div className="flex shrink-0 items-center gap-0.5">
+                            {canExpand ? (
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                title="删除这篇复盘"
-                                aria-label={`删除 ${formatDateCN(item.reviewDate)} 的复盘`}
-                                onClick={() => setDeleteTarget(item)}
+                                title="复制这篇复盘"
+                                aria-label={`复制 ${formatDateCN(item.reviewDate)} 的复盘`}
+                                onClick={() => {
+                                  void copyReview(item);
+                                }}
                               >
-                                <Trash2 className="h-4 w-4 text-danger" />
+                                <Copy className="h-4 w-4" />
                               </Button>
-                            </>
-                          )}
+                            ) : null}
+
+                            {demoMode ? null : (
+                              <>
+                                <Link
+                                  href={`/?date=${item.reviewDate}`}
+                                  title="打开这篇复盘"
+                                  aria-label={`打开 ${formatDateCN(item.reviewDate)} 的复盘`}
+                                  className={buttonClass({
+                                    variant: "ghost",
+                                    size: "icon",
+                                  })}
+                                >
+                                  <ArrowUpRight className="h-4 w-4" />
+                                </Link>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  title="删除这篇复盘"
+                                  aria-label={`删除 ${formatDateCN(item.reviewDate)} 的复盘`}
+                                  onClick={() => setDeleteTarget(item)}
+                                >
+                                  <Trash2 className="h-4 w-4 text-danger" />
+                                </Button>
+                              </>
+                            )}
+                          </div>
                         </div>
+
+                        {expanded ? (
+                          <div
+                            id={`review-body-${item.id}`}
+                            className="mt-2.5 rounded-xl bg-cream/60 p-3.5"
+                          >
+                            <pre className="review-text text-sm leading-relaxed text-ink">
+                              {highlightKeyword(item.finalText, query)}
+                            </pre>
+
+                            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-line/60 pt-2.5">
+                              <button
+                                type="button"
+                                onClick={() => toggleExpanded(item.id)}
+                                className="inline-flex items-center gap-1 text-xs font-medium text-ink-soft transition-colors hover:text-ink"
+                              >
+                                <ChevronUp className="h-3.5 w-3.5" />
+                                收起
+                              </button>
+
+                              <div className="flex items-center gap-3">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    void copyReview(item);
+                                  }}
+                                  className="inline-flex items-center gap-1 text-xs font-medium text-ink-soft transition-colors hover:text-ink"
+                                >
+                                  <Copy className="h-3.5 w-3.5" />
+                                  复制全文
+                                </button>
+                                {demoMode ? null : (
+                                  <Link
+                                    href={`/?date=${item.reviewDate}`}
+                                    className="inline-flex items-center gap-1 text-xs font-medium text-brand-deep transition-colors hover:underline"
+                                  >
+                                    去编辑
+                                    <ArrowUpRight className="h-3.5 w-3.5" />
+                                  </Link>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ) : null}
                       </article>
                     </div>
                   );

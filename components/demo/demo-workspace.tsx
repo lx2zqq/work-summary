@@ -148,10 +148,6 @@ export function DemoWorkspace() {
 
   return (
     <div className="space-y-4">
-      <p className="text-sm leading-relaxed text-ink-soft">
-        试试把流水账改成你自己的版本，再点生成。
-      </p>
-
       <div className="lg:hidden">
         <Segmented
           options={
@@ -245,7 +241,7 @@ export function DemoWorkspace() {
                 onCopy={handleCopy}
                 onEdit={() => setEditorOpen(true)}
                 onExtractMemory={() => {
-                  toast.info("演示模式不会调用模型，登录后可以体验完整功能");
+                  toast.info("登录后可用记忆提取");
                 }}
                 demoMode
               />

@@ -15,10 +15,7 @@ export default async function StudentsPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeading
-        title="学生名单"
-        description="生成复盘时，仅纳入今日提及的学生。"
-      />
+      <PageHeading title="学生名单" />
       <StudentManager
         initialStudents={students}
         memories={memories}

@@ -46,23 +46,22 @@ const TOGGLES: Array<{
   {
     key: "showJiaoyan",
     title: "教研相关",
-    description: "有教研内容时显示。",
+    description: "仅在有教研内容时显示",
   },
   {
     key: "showKunnan",
     title: "工作困难",
-    description: "当天没内容时自动补一句“目前没有困难”。",
+    description: "无内容时自动补“目前没有困难”",
   },
   {
     key: "showFixedPhrase",
     title: "通用复盘话术",
-    description: "每天在【日常工作复盘】后自动补 3 条，按当天主题轮换。",
+    description: "日常复盘后自动附加 3 条轮换话术",
   },
   {
     key: "enableMemory",
     title: "长期记忆",
-    description:
-      "从复盘正文提取长期记忆，生成时参考；关闭后不提取也不参考。",
+    description: "自动提取并在生成时参考",
   },
 ];
 
@@ -91,7 +90,7 @@ export function SettingsForm({
     try {
       if (store) {
         setSettings(await store.update(patch));
-        toast.success("设置已保存（演示，刷新后恢复默认）");
+        toast.success("已保存（仅当前演示生效）");
         return;
       }
 

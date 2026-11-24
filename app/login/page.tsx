@@ -30,7 +30,7 @@ export default async function LoginPage({
             学管复盘助手
           </h1>
           <p className="mt-1.5 text-sm leading-relaxed text-ink-soft">
-            把今天的流水账，整理成可以直接发钉钉的复盘。
+            每日工作复盘整理工具
           </p>
         </div>
 
@@ -43,7 +43,7 @@ export default async function LoginPage({
             href="/demo"
             className="inline-flex items-center gap-1 text-sm text-ink-soft transition-colors hover:text-brand-deep hover:underline hover:underline-offset-4"
           >
-            先看看效果，不用密码
+            进入演示模式
             <span aria-hidden>→</span>
           </Link>
         </div>

@@ -142,20 +142,16 @@ export function PhraseLibrary({
         </Badge>
       </div>
 
-      <p className="mt-2 text-xs leading-relaxed text-ink-soft">
-        把你觉得好的话术贴进来，系统会润色成 45~65 字，并检查是否和现有话术重复。
-      </p>
-
       {demoMode ? (
         <p className="mt-3 rounded-lg bg-cream-deep/60 px-3.5 py-2.5 text-xs text-ink-soft">
-          演示模式不支持添加话术，登录后可以使用。
+          登录后可添加自定义话术
         </p>
       ) : (
         <>
           <Textarea
             value={text}
             onChange={(event) => setText(event.target.value)}
-            placeholder="比如：每天把该跟进的事列清楚，按优先级推进，做到事事有回音。"
+            placeholder="输入常用话术，自动润色并查重…"
             className="mt-3 min-h-[90px] bg-paper text-sm"
             maxLength={300}
             disabled={polishing}

@@ -16,10 +16,7 @@ export default async function MemoriesPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeading
-        title="长期记忆"
-        description="从每日复盘自动积累，生成时参考。"
-      />
+      <PageHeading title="长期记忆" />
       <MemoryManager
         initialMemories={memories}
         students={students}

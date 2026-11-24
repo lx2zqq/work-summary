@@ -27,13 +27,8 @@ export function AppShell({
             <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-soft ring-1 ring-line transition-transform group-hover:-rotate-2">
               <MascotFace className="h-8 w-8" />
             </span>
-            <span className="leading-tight">
-              <span className="block text-[15px] font-semibold tracking-tight text-ink">
-                学管复盘助手
-              </span>
-              <span className="block text-[11px] text-ink-soft">
-                今天的流水账，变成规范的复盘
-              </span>
+            <span className="text-[15px] font-semibold tracking-tight text-ink">
+              学管复盘助手
             </span>
           </BrandHomeLink>
 

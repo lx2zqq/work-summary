@@ -331,9 +331,7 @@ export function RawInputCard({
               if (!loading && value.trim()) onGenerate();
             }
           }}
-          placeholder={
-            "今天做了什么？随便写，学生、家长、业绩、琐事都可以。\n比如：林小满作业写完了，错题讲了两道；跟她妈妈微信说了这周安排。\n写不完整也没关系，生成前会先确认几个关键信息。"
-          }
+          placeholder="记录今天的工作内容…"
           className="notebook-lines min-h-[280px] flex-1 resize-y rounded-none border-0 bg-transparent px-0 py-0 text-[15px] leading-8 shadow-none focus:ring-0"
           maxLength={RAW_INPUT_MAX_LENGTH}
         />

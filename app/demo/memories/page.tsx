@@ -9,10 +9,7 @@ export default function DemoMemoriesPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeading
-        title="长期记忆"
-        description="演示数据，可以增删改，刷新后恢复。"
-      />
+      <PageHeading title="长期记忆" />
       <MemoryManager
         initialMemories={memories}
         students={students}
