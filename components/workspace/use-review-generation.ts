@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { RefObject } from "react";
 import { toast } from "sonner";
-import type { PartialText, SectionStreamEntry } from "@/lib/ai/stream-parser";
 import { answersFromConversation, type QuestionAnswer } from "@/lib/answers";
 import { mergeFollowUpDraft, normalizeDraft } from "@/lib/draft";
 import {
@@ -20,7 +19,6 @@ import {
   updateGenerationResult,
   type GenerationJob,
 } from "@/lib/generation-store";
-import { SSEDecoder } from "@/lib/sse";
 import {
   MAX_FOLLOW_UP_ROUNDS,
   MAX_QUESTIONS_PER_ROUND,
@@ -32,7 +30,6 @@ import {
   type ReviewStyle,
 } from "@/lib/types";
 import {
-  mergeSectionEntry,
   QUESTION_LOADING_MESSAGES,
   type CallConfig,
   type CallResult,
@@ -79,7 +76,7 @@ type Params = {
 };
 
 /**
- * 生成层：SSE 流式请求、追问 / 成稿 / 换文风、
+ * 生成层：追问 / 成稿 / 换文风、
  * generation-store 同步与刷新后的中断恢复。
  */
 export function useReviewGeneration({
@@ -110,11 +107,6 @@ export function useReviewGeneration({
   pageUnloadingRef,
   onLoadReview,
 }: Params) {
-  const [streamingSections, setStreamingSections] = useState<
-    SectionStreamEntry[]
-  >([]);
-  const [streamingPartial, setStreamingPartial] =
-    useState<PartialText | null>(null);
   const [recoveryJob, setRecoveryJob] = useState<GenerationJob | null>(null);
   const [checkingRecovery, setCheckingRecovery] = useState(false);
   const draftQuestionsRef = useRef(draft.questions);
@@ -266,95 +258,6 @@ export function useReviewGeneration({
     };
   }, [applyGenerationJob]);
 
-  /** 读取 SSE 流，边收边更新预览，最后返回结构化草稿 */
-  const readStreamResponse = useCallback(
-    async (
-      response: Response,
-      jobId: string,
-      maxQuestions: number,
-    ): Promise<CallResult> => {
-      const reader = response.body?.getReader();
-      if (!reader) throw new Error("当前浏览器不支持流式读取");
-
-      const decoder = new TextDecoder();
-      const sse = new SSEDecoder();
-      let result: CallResult | null = null;
-      let streamError = "";
-
-      setStreamingSections([]);
-      setStreamingPartial(null);
-
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          for (const event of sse.push(
-            decoder.decode(value, { stream: true }),
-          )) {
-            if (event.event === "status") {
-              const payload = event.data as { message?: string };
-              if (payload.message) setLoadingMessage(payload.message);
-              continue;
-            }
-
-            if (event.event === "section") {
-              const entry = event.data as SectionStreamEntry;
-              setStreamingSections((previous) =>
-                mergeSectionEntry(previous, entry),
-              );
-              setStreamingPartial(null);
-              continue;
-            }
-
-            if (event.event === "partial") {
-              setStreamingPartial(event.data as PartialText);
-              continue;
-            }
-
-            if (event.event === "done") {
-              const payload = event.data as {
-                draft?: unknown;
-                fallback?: boolean;
-                warning?: string;
-                memories?: unknown;
-              };
-
-              result = {
-                jobId,
-                draft: normalizeDraft(
-                  payload.draft as Parameters<typeof normalizeDraft>[0],
-                  { maxQuestions },
-                ),
-                fallback: Boolean(payload.fallback),
-                warning: payload.warning,
-                memories: Array.isArray(payload.memories)
-                  ? (payload.memories as MemoryPromptItem[])
-                  : [],
-              };
-              continue;
-            }
-
-            if (event.event === "error") {
-              const payload = event.data as { message?: string };
-              streamError = payload.message || "生成失败";
-            }
-          }
-        }
-      } finally {
-        setStreamingSections([]);
-        setStreamingPartial(null);
-      }
-
-      if (!result) {
-        throw new Error(streamError || "流式生成没有返回结果");
-      }
-
-      return result;
-    },
-    [setLoadingMessage],
-  );
-
   const callGenerate = useCallback(
     async (config: CallConfig): Promise<CallResult> => {
       const inputText = (config.rawInput ?? rawInput).trim();
@@ -381,7 +284,6 @@ export function useReviewGeneration({
       });
       activeJobIdRef.current = job.id;
 
-      const wantsStream = config.mode === "final";
       const maxQuestions =
         config.mode === "questions" ? MAX_QUESTIONS_PER_ROUND : 0;
       const payload = {
@@ -398,47 +300,10 @@ export function useReviewGeneration({
         const response = await fetch("/api/generate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            ...payload,
-            stream: wantsStream || undefined,
-          }),
+          body: JSON.stringify(payload),
         });
 
-        const contentType = response.headers.get("Content-Type") ?? "";
-        const canStream =
-          wantsStream &&
-          response.ok &&
-          Boolean(response.body) &&
-          contentType.includes("text/event-stream");
-
-        if (canStream && response.body) {
-          try {
-            return await readStreamResponse(
-              response,
-              job.id,
-              maxQuestions,
-            );
-          } catch (streamFailure) {
-            console.warn(
-              "[stream] 流式失败，回退非流式：",
-              streamFailure instanceof Error
-                ? streamFailure.message
-                : streamFailure,
-            );
-          }
-        }
-
-        // 非流式请求，或者流式失败后的兜底重发
-        const retry =
-          canStream && response.body
-            ? await fetch("/api/generate", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(payload),
-              })
-            : response;
-
-        const data = (await retry.json().catch(() => ({}))) as {
+        const data = (await response.json().catch(() => ({}))) as {
           error?: string;
           draft?: unknown;
           fallback?: boolean;
@@ -446,7 +311,7 @@ export function useReviewGeneration({
           memories?: unknown;
         };
 
-        if (!retry.ok) {
+        if (!response.ok) {
           throw new Error(data.error || "生成失败");
         }
 
@@ -482,7 +347,6 @@ export function useReviewGeneration({
       rawInput,
       date,
       draft,
-      readStreamResponse,
       activeJobIdRef,
       mountedRef,
       pageUnloadingRef,
@@ -1001,8 +865,6 @@ export function useReviewGeneration({
   ]);
 
   return {
-    streamingSections,
-    streamingPartial,
     recoveryJob,
     checkingRecovery,
     runFinal,

@@ -7,15 +7,8 @@ import {
   resolveToolsMode,
 } from "@/lib/ai/deepseek";
 import { isAbortError } from "@/lib/ai/errors";
-import type { EventProperties } from "@/lib/analytics/events";
 import { trackEvent } from "@/lib/analytics/events";
 import type { PromptContext } from "@/lib/ai/prompt";
-import {
-  diffSections,
-  parseStreamState,
-  type SectionStreamEntry,
-} from "@/lib/ai/stream-parser";
-import { encodeSSE } from "@/lib/sse";
 import type { ToolDeps } from "@/lib/ai/tools";
 import {
   firstIssue,
@@ -153,160 +146,6 @@ function buildToolDeps(settings: PromptContext["settings"]): ToolDeps {
   };
 }
 
-/**
- * 流式生成：边生成边把已完成的条目推给前端。
- * 只在 final 模式启用，追问和改文风的输出太短，流式没有意义。
- */
-function streamGenerate(input: {
-  context: PromptContext;
-  input: GenerateRequest;
-  startedAt: number;
-  baseProperties: EventProperties;
-  requestSignal: AbortSignal;
-  loadFallbackContext?: ContextBundle["loadFallbackContext"];
-}): Response {
-  const {
-    context,
-    input: request,
-    startedAt,
-    baseProperties,
-    requestSignal,
-    loadFallbackContext,
-  } = input;
-  const encoder = new TextEncoder();
-  const abortController = new AbortController();
-  let closed = false;
-
-  // 客户端断开或读取端取消时，立刻中止模型请求，避免白烧 token
-  const handleAbort = () => {
-    closed = true;
-    abortController.abort();
-  };
-
-  requestSignal.addEventListener("abort", handleAbort, { once: true });
-  if (requestSignal.aborted) handleAbort();
-
-  const stream = new ReadableStream<Uint8Array>({
-    // 不要在 start 里 await 整段生成：框架会在 start 的 Promise
-    // 长时间不 resolve 时提前关掉 controller，后续 enqueue 直接抛错
-    start(controller) {
-      const send = (event: string, data: unknown) => {
-        if (closed) return;
-
-        try {
-          controller.enqueue(encoder.encode(encodeSSE(event, data)));
-        } catch {
-          // 写入失败说明连接已经断开，顺手停掉模型请求
-          handleAbort();
-        }
-      };
-
-      void (async () => {
-      try {
-        send("status", { message: "正在查询资料…" });
-
-        let buffer = "";
-        // 保存的是「最新完整状态」，diff 才有正确的比对基准
-        let latest: SectionStreamEntry[] = [];
-        let lastPartial = "";
-        let lastPartialAt = 0;
-
-        const result = await generateDraftWithUsage(context, {
-          toolDeps: buildToolDeps(context.settings),
-          loadFallbackContext,
-          signal: abortController.signal,
-          onContent: (chunk) => {
-            buffer += chunk;
-            const state = parseStreamState(buffer);
-
-            const diff = diffSections(latest, state.sections);
-            latest = state.sections;
-
-            for (const entry of diff) send("section", entry);
-
-            // 正在写的那一句单独推，前端才有逐字效果；40ms 节流避免刷屏
-            if (state.partial && state.partial.text !== lastPartial) {
-              const now = Date.now();
-              if (now - lastPartialAt >= 40) {
-                lastPartial = state.partial.text;
-                lastPartialAt = now;
-                send("partial", state.partial);
-              }
-            }
-          },
-        });
-
-        await trackEvent({
-          event: "generate_finished",
-          reviewDate: request.date,
-          properties: {
-            ...baseProperties,
-            durationMs: Date.now() - startedAt,
-            promptTokens: result.usage.promptTokens,
-            completionTokens: result.usage.completionTokens,
-            retried: result.usage.retried,
-            fallback: false,
-            questionCount: result.draft.questions.length,
-            itemCount: countDraftItems(result.draft),
-            charCount: countDraftChars(result.draft),
-            toolCallCount: result.toolCallNames.length,
-            toolRounds: result.toolRounds,
-            degraded: result.degraded,
-            usedMemoryCount: result.memories.length,
-          },
-        });
-
-        send("done", {
-          draft: result.draft,
-          memories: result.memories,
-          fallback: false,
-        });
-      } catch (error) {
-        // 客户端主动断开：不记失败埋点，也不写错误事件，静默关闭
-        if (isAbortError(error, abortController.signal)) {
-          console.info("[generate:stream] 客户端已断开，已中止生成");
-          return;
-        }
-
-        console.error("[generate:stream]", error);
-
-        await trackEvent({
-          event: "generate_failed",
-          reviewDate: request.date,
-          properties: {
-            ...baseProperties,
-            durationMs: Date.now() - startedAt,
-            errorKind: error instanceof AiError ? error.kind : "request",
-          },
-        });
-
-        send("error", { message: getAiErrorMessage(error) });
-      } finally {
-        closed = true;
-        requestSignal.removeEventListener("abort", handleAbort);
-        try {
-          controller.close();
-        } catch {
-          // 已经关闭时忽略
-        }
-      }
-      })();
-    },
-    // 下游取消读取（例如前端 abort 或页面关闭）时同样中止生成
-    cancel() {
-      handleAbort();
-    },
-  });
-
-  return new Response(stream, {
-    headers: {
-      "Content-Type": "text/event-stream; charset=utf-8",
-      "Cache-Control": "no-cache, no-transform",
-      "X-Accel-Buffering": "no",
-    },
-  });
-}
-
 export async function POST(request: Request) {
   const unauthorized = await requireApiSession();
   if (unauthorized) return unauthorized;
@@ -380,17 +219,6 @@ export async function POST(request: Request) {
       warning:
         "服务端还没有配置 REVIEW_DEEPSEEK_API_KEY，已按原文生成草稿；配置后会自动使用 AI 整理。",
       memories: context.memories,
-    });
-  }
-
-  if (input.stream && input.mode === "final") {
-    return streamGenerate({
-      context,
-      input,
-      startedAt,
-      baseProperties,
-      requestSignal: request.signal,
-      loadFallbackContext,
     });
   }
 

@@ -136,8 +136,6 @@ export type GenerateOptions = {
   toolDeps?: ToolDeps;
   /** 测试用：注入 OpenAI client，生产环境不传 */
   client?: OpenAI;
-  /** 正文增量回调；不传则全程非流式 */
-  onContent?: (chunk: string) => void;
   /** 客户端断开时中止模型请求与后续重试 */
   signal?: AbortSignal;
   /**
@@ -252,7 +250,6 @@ export async function generateDraftWithUsage(
         deps: options.toolDeps,
         budgetMs: AGENT_BUDGET_MS,
         signal: options.signal,
-        onContent: options.onContent,
       });
 
       content = result.content;

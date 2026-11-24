@@ -74,8 +74,6 @@ export const generateRequestSchema = z.object({
   mode: z.enum(["questions", "final", "restyle"]).default("final"),
   round: z.number().int().min(0).max(MAX_FOLLOW_UP_ROUNDS).default(0),
   currentDraft: draftSchema.optional(),
-  /** 只对 final 模式生效：用 SSE 边生成边返回 */
-  stream: z.boolean().optional(),
 }).refine(
   (value) => value.mode !== "restyle" || Boolean(value.currentDraft),
   {

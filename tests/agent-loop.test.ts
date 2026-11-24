@@ -300,39 +300,6 @@ describe("runAgent", () => {
     expect(calls).toHaveLength(1);
   });
 
-  it("流式被中止后不走非流式重发", async () => {
-    const controller = new AbortController();
-    let calls = 0;
-
-    const client = {
-      chat: {
-        completions: {
-          create: async () => {
-            calls += 1;
-            return (async function* () {
-              controller.abort();
-              const error = new Error("aborted");
-              error.name = "APIUserAbortError";
-              throw error;
-            })();
-          },
-        },
-      },
-    } as unknown as OpenAI;
-
-    await expect(
-      runAgent({
-        client,
-        model: "test-model",
-        messages: [{ role: "user", content: "今天做了什么" }],
-        deps: makeDeps(),
-        signal: controller.signal,
-        onContent: () => {},
-      }),
-    ).rejects.toMatchObject({ name: "APIUserAbortError" });
-
-    expect(calls).toBe(1);
-  });
 });
 
 describe("isToolsUnsupportedError", () => {

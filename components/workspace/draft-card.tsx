@@ -7,77 +7,8 @@ import { ChiikawaMascot } from "@/components/mascots";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
-import type {
-  PartialText,
-  SectionStreamEntry,
-} from "@/lib/ai/stream-parser";
-import { numberPrefix } from "@/lib/template";
-import { SECTION_META, type MemoryPromptItem } from "@/lib/types";
+import type { MemoryPromptItem } from "@/lib/types";
 import { formatSavedAt } from "@/lib/utils";
-
-/** 流式生成时的实时预览：完整条目 + 正在写的那一句 */
-function StreamingPreview({
-  sections,
-  partial,
-}: {
-  sections: SectionStreamEntry[];
-  partial: PartialText | null;
-}) {
-  const merged = sections.map((entry) => ({
-    key: entry.key,
-    items: [...entry.items],
-  }));
-
-  if (partial) {
-    const index = merged.findIndex((entry) => entry.key === partial.key);
-
-    if (index >= 0) merged[index].items.push(partial.text);
-    else merged.push({ key: partial.key, items: [partial.text] });
-  }
-
-  return (
-    <div data-streaming="true" className="space-y-3.5">
-      {merged.map(({ key, items }) => (
-        <section key={key}>
-          <p className="text-sm font-medium text-ink">
-            🍊【{SECTION_META[key].title}】
-          </p>
-          <ul className="mt-1 space-y-0.5">
-            {items.map((item, index) => {
-              const typing = Boolean(
-                partial &&
-                  partial.key === key &&
-                  index === items.length - 1 &&
-                  item === partial.text,
-              );
-
-              return (
-                <li
-                  key={`${key}-${index}`}
-                  className="review-text text-sm leading-relaxed text-ink"
-                >
-                  {numberPrefix(index)}
-                  {item}
-                  {typing ? (
-                    <span
-                      aria-hidden
-                      className="ml-0.5 inline-block h-3.5 w-[2px] animate-pulse rounded-full bg-brand align-middle"
-                    />
-                  ) : null}
-                </li>
-              );
-            })}
-          </ul>
-        </section>
-      ))}
-
-      <div className="flex items-center gap-2 pt-1 text-xs font-medium text-ink-soft">
-        <Spinner className="h-3.5 w-3.5" />
-        正在生成…
-      </div>
-    </div>
-  );
-}
 
 /** 没有正文时的干净空状态，可以切换查看示例 */
 function EmptyPreview({ sampleText }: { sampleText: string }) {
@@ -125,8 +56,6 @@ type Props = {
   finalText: string;
   hasContent: boolean;
   loading: boolean;
-  /** 正在生成追问：优先展示等待态，不显示上一次的正文 */
-  waitingForQuestions?: boolean;
   loadingMessage: string;
   notes: string[];
   memories: MemoryPromptItem[];
@@ -142,17 +71,12 @@ type Props = {
   onExtractMemory: () => void;
   /** 演示模式：记忆链接改为登录页 */
   demoMode?: boolean;
-  /** 流式生成中已经收到的完整条目 */
-  streaming?: SectionStreamEntry[];
-  /** 正在逐字生成的那一句 */
-  streamingPartial?: PartialText | null;
 };
 
 export function DraftCard({
   finalText,
   hasContent,
   loading,
-  waitingForQuestions = false,
   loadingMessage,
   notes,
   memories,
@@ -165,15 +89,9 @@ export function DraftCard({
   onEdit,
   onExtractMemory,
   demoMode = false,
-  streaming = [],
-  streamingPartial = null,
 }: Props) {
-  const effectiveHasContent = hasContent && !waitingForQuestions;
-  const showStreaming =
-    loading &&
-    !waitingForQuestions &&
-    (streaming.length > 0 || Boolean(streamingPartial));
-  const showWaiting = loading && !showStreaming && !effectiveHasContent;
+  // 生成期间统一显示等待态，避免先露出旧复盘再被新结果替换
+  const displayContent = hasContent && !loading;
   const charCount = finalText.replace(/\s/g, "").length;
   const [copied, setCopied] = useState(false);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -208,7 +126,7 @@ export function DraftCard({
           </div>
           <div>
             <h2 className="text-sm font-semibold text-ink">复盘预览</h2>
-            {!waitingForQuestions && memories.length > 0 ? (
+            {displayContent && memories.length > 0 ? (
               <p className="mt-0.5 flex items-center gap-1 text-[10px] text-ink-soft">
                 <Brain className="h-3 w-3" />
                 记忆 {memories.length} 条
@@ -225,12 +143,12 @@ export function DraftCard({
 
         <div className="flex shrink-0 items-center gap-2">
           {loading ? <Spinner className="h-3.5 w-3.5" /> : null}
-          {effectiveHasContent ? (
+          {displayContent ? (
             <span className="text-[11px] tabular-nums text-ink-soft">
               共 {charCount} 字
             </span>
           ) : null}
-          {effectiveHasContent ? (
+          {displayContent ? (
             <Badge tone="green">
               <Check className="mr-1 h-3 w-3" />
               可发送
@@ -241,7 +159,7 @@ export function DraftCard({
         </div>
       </header>
 
-      {!waitingForQuestions && notes.length > 0 ? (
+      {displayContent && notes.length > 0 ? (
         <div className="mb-2 space-y-1.5 px-1">
           {notes.map((note, index) => (
             <div
@@ -255,19 +173,12 @@ export function DraftCard({
       ) : null}
 
       <div className="flex flex-1 flex-col">
-        {showStreaming ? (
-          <div className="paper-sheet flex-1 p-4 sm:p-5">
-            <StreamingPreview
-              sections={streaming}
-              partial={streamingPartial}
-            />
-          </div>
-        ) : showWaiting ? (
+        {loading ? (
           <div className="paper-sheet flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
             <Spinner className="h-5 w-5" />
             <p className="text-sm font-medium text-ink">{loadingMessage}</p>
           </div>
-        ) : effectiveHasContent ? (
+        ) : displayContent ? (
           <div className="paper-sheet flex-1 p-4 sm:p-5">
             <pre className="review-text text-ink">{finalText}</pre>
           </div>
@@ -276,7 +187,7 @@ export function DraftCard({
         )}
       </div>
 
-      {effectiveHasContent ? (
+      {displayContent ? (
         <footer className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-line/60 px-1 pt-3">
           <div className="flex flex-wrap items-center gap-1">
             <Button

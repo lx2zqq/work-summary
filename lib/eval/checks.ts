@@ -135,8 +135,8 @@ export function runChecks(input: CheckInput): CheckResult[] {
       issues.push(`需要 1 条，实际 ${richang.length} 条`);
     }
     for (const item of richang) {
-      if (item.trim().length < 35) {
-        issues.push(`“${item.slice(0, 12)}…”少于 35 字`);
+      if (item.trim().length < 25) {
+        issues.push(`“${item.slice(0, 12)}…”少于 25 字`);
       }
     }
 

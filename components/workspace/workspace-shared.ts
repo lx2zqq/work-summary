@@ -1,4 +1,3 @@
-import type { SectionStreamEntry } from "@/lib/ai/stream-parser";
 import type {
   MemoryPromptItem,
   QAPair,
@@ -42,24 +41,6 @@ export type CallResult = {
   warning?: string;
   memories: MemoryPromptItem[];
 };
-
-/** 把流式推送的增量条目并到已有结果里 */
-export function mergeSectionEntry(
-  previous: SectionStreamEntry[],
-  entry: SectionStreamEntry,
-): SectionStreamEntry[] {
-  const index = previous.findIndex((item) => item.key === entry.key);
-
-  if (index < 0) return [...previous, entry];
-
-  const next = [...previous];
-  next[index] = {
-    key: entry.key,
-    items: [...next[index].items, ...entry.items],
-  };
-
-  return next;
-}
 
 export const QUESTION_LOADING_MESSAGES = [
   "正在检查有没有漏掉的信息…",

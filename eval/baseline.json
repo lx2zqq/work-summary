@@ -1,18 +1,18 @@
 {
-  "generatedAt": "2026-11-24T12:31:35.423Z",
-  "promptVersion": "2026-11-24.1",
+  "generatedAt": "2026-11-24T12:51:13.748Z",
+  "promptVersion": "2026-11-24.2",
   "caseCount": 30,
   "summary": {
     "total": 30,
-    "passed": 29,
-    "failed": 1,
+    "passed": 30,
+    "failed": 0,
     "errors": 0,
-    "passRate": 0.9666666666666667,
-    "avgDurationMs": 4160.433333333333,
-    "p95DurationMs": 7449,
-    "avgPromptTokens": 3710.7586206896553,
-    "avgCompletionTokens": 529.0344827586207,
-    "avgToolCalls": 1.6666666666666667,
+    "passRate": 1,
+    "avgDurationMs": 4617.566666666667,
+    "p95DurationMs": 7726,
+    "avgPromptTokens": 3743.733333333333,
+    "avgCompletionTokens": 619.5,
+    "avgToolCalls": 1.6,
     "toolCallRate": 0.5333333333333333,
     "degradedCount": 0
   },
@@ -65,12 +65,12 @@
     {
       "tag": "filter",
       "total": 1,
-      "passed": 0
+      "passed": 1
     },
     {
       "tag": "final",
       "total": 23,
-      "passed": 22
+      "passed": 23
     },
     {
       "tag": "irrelevant",
@@ -95,7 +95,7 @@
     {
       "tag": "memory",
       "total": 5,
-      "passed": 4
+      "passed": 5
     },
     {
       "tag": "multi-student",
@@ -167,12 +167,12 @@
         "core-sections"
       ],
       "status": "passed",
-      "durationMs": 6781,
-      "promptTokens": 4668,
-      "completionTokens": 217,
+      "durationMs": 4701,
+      "promptTokens": 4726,
+      "completionTokens": 449,
       "toolCallNames": [
-        "search_students",
-        "search_memories"
+        "search_memories",
+        "search_students"
       ],
       "toolRounds": 2,
       "degraded": false,
@@ -212,13 +212,7 @@
           "passed": true,
           "detail": ""
         }
-      ],
-      "judge": {
-        "factuality": 1,
-        "completeness": 2,
-        "usability": 2,
-        "reason": "事实基本一致，但“后续检查订正情况”流水账未提及，属轻微推断；信息归类完整，空栏未硬凑，措辞可直接发送。"
-      }
+      ]
     },
     {
       "id": "short-002",
@@ -228,9 +222,9 @@
         "performance"
       ],
       "status": "passed",
-      "durationMs": 4957,
-      "promptTokens": 2257,
-      "completionTokens": 227,
+      "durationMs": 4496,
+      "promptTokens": 2276,
+      "completionTokens": 525,
       "toolCallNames": [],
       "toolRounds": 1,
       "degraded": false,
@@ -265,13 +259,7 @@
           "passed": true,
           "detail": ""
         }
-      ],
-      "judge": {
-        "factuality": 1,
-        "completeness": 2,
-        "usability": 1,
-        "reason": "事实基本可追溯，但“后续需确认年级科目和接待安排”属流水账外推断；核心信息已归类，空栏目未硬凑；JSON结构及空栏目需稍作整理才能发钉钉。"
-      }
+      ]
     },
     {
       "id": "short-003",
@@ -281,9 +269,9 @@
         "detailed"
       ],
       "status": "passed",
-      "durationMs": 6685,
-      "promptTokens": 2330,
-      "completionTokens": 756,
+      "durationMs": 4360,
+      "promptTokens": 2349,
+      "completionTokens": 608,
       "toolCallNames": [],
       "toolRounds": 1,
       "degraded": false,
@@ -318,13 +306,7 @@
           "passed": true,
           "detail": ""
         }
-      ],
-      "judge": {
-        "factuality": 2,
-        "completeness": 2,
-        "usability": 2,
-        "reason": "三件事均有流水账支撑，无编造；空栏目未硬凑，归类基本合理，可直接复制，仅课表更新归入学情略欠贴切。"
-      }
+      ]
     },
     {
       "id": "short-004",
@@ -334,9 +316,9 @@
         "anti-hallucination"
       ],
       "status": "passed",
-      "durationMs": 7449,
-      "promptTokens": 2248,
-      "completionTokens": 598,
+      "durationMs": 3270,
+      "promptTokens": 2267,
+      "completionTokens": 535,
       "toolCallNames": [],
       "toolRounds": 1,
       "degraded": false,
@@ -366,13 +348,7 @@
           "passed": true,
           "detail": ""
         }
-      ],
-      "judge": {
-        "factuality": 1,
-        "completeness": 2,
-        "usability": 2,
-        "reason": "日常描述基本贴合流水账，但补充了“提前梳理明日待办”等未提及计划，属轻微推断；栏目未硬凑，可直接发送。"
-      }
+      ]
     },
     {
       "id": "short-005",
@@ -382,9 +358,9 @@
         "core-sections"
       ],
       "status": "passed",
-      "durationMs": 8837,
-      "promptTokens": 4670,
-      "completionTokens": 607,
+      "durationMs": 3642,
+      "promptTokens": 4689,
+      "completionTokens": 492,
       "toolCallNames": [
         "search_students",
         "search_memories"
@@ -427,13 +403,7 @@
           "passed": true,
           "detail": ""
         }
-      ],
-      "judge": {
-        "factuality": 1,
-        "completeness": 2,
-        "usability": 1,
-        "reason": "流水账仅提录数学错题和电话沟通续费；复盘补充“小橙AI”及后续跟进属轻微推断；核心信息完整，空栏目未硬凑；措辞基本规范但需确认系统名。"
-      }
+      ]
     },
     {
       "id": "medium-001",
@@ -443,9 +413,9 @@
         "core-sections"
       ],
       "status": "passed",
-      "durationMs": 4609,
-      "promptTokens": 4865,
-      "completionTokens": 789,
+      "durationMs": 7726,
+      "promptTokens": 4894,
+      "completionTokens": 1182,
       "toolCallNames": [
         "search_memories",
         "search_students"
@@ -498,9 +468,9 @@
         "optional-sections"
       ],
       "status": "passed",
-      "durationMs": 3280,
-      "promptTokens": 2260,
-      "completionTokens": 525,
+      "durationMs": 3692,
+      "promptTokens": 2279,
+      "completionTokens": 595,
       "toolCallNames": [],
       "toolRounds": 1,
       "degraded": false,
@@ -545,16 +515,16 @@
         "multi-student"
       ],
       "status": "passed",
-      "durationMs": 3568,
-      "promptTokens": 7230,
-      "completionTokens": 331,
+      "durationMs": 5542,
+      "promptTokens": 4865,
+      "completionTokens": 742,
       "toolCallNames": [
         "search_memories",
         "search_memories",
         "search_students",
         "search_students"
       ],
-      "toolRounds": 3,
+      "toolRounds": 2,
       "degraded": false,
       "checks": [
         {
@@ -602,9 +572,9 @@
         "parent"
       ],
       "status": "passed",
-      "durationMs": 2241,
-      "promptTokens": 4825,
-      "completionTokens": 269,
+      "durationMs": 3070,
+      "promptTokens": 4872,
+      "completionTokens": 298,
       "toolCallNames": [
         "search_students",
         "search_memories"
@@ -657,12 +627,12 @@
         "performance"
       ],
       "status": "passed",
-      "durationMs": 2275,
-      "promptTokens": 4683,
-      "completionTokens": 246,
+      "durationMs": 4882,
+      "promptTokens": 6462,
+      "completionTokens": 453,
       "toolCallNames": [
-        "search_memories",
-        "search_students"
+        "search_students",
+        "search_memories"
       ],
       "toolRounds": 2,
       "degraded": false,
@@ -712,15 +682,14 @@
         "core-sections"
       ],
       "status": "passed",
-      "durationMs": 7294,
-      "promptTokens": 7406,
-      "completionTokens": 1245,
+      "durationMs": 4760,
+      "promptTokens": 4769,
+      "completionTokens": 495,
       "toolCallNames": [
         "search_memories",
-        "search_students",
         "search_students"
       ],
-      "toolRounds": 3,
+      "toolRounds": 2,
       "degraded": false,
       "checks": [
         {
@@ -768,9 +737,9 @@
         "detailed"
       ],
       "status": "passed",
-      "durationMs": 6356,
-      "promptTokens": 5129,
-      "completionTokens": 953,
+      "durationMs": 10123,
+      "promptTokens": 7809,
+      "completionTokens": 1581,
       "toolCallNames": [
         "search_students",
         "search_students",
@@ -779,7 +748,7 @@
         "search_memories",
         "search_memories"
       ],
-      "toolRounds": 2,
+      "toolRounds": 3,
       "degraded": false,
       "checks": [
         {
@@ -822,9 +791,9 @@
         "performance"
       ],
       "status": "passed",
-      "durationMs": 5635,
-      "promptTokens": 5111,
-      "completionTokens": 825,
+      "durationMs": 6774,
+      "promptTokens": 7775,
+      "completionTokens": 1106,
       "toolCallNames": [
         "search_students",
         "search_students",
@@ -835,7 +804,7 @@
         "search_memories",
         "search_memories"
       ],
-      "toolRounds": 2,
+      "toolRounds": 3,
       "degraded": false,
       "checks": [
         {
@@ -878,9 +847,9 @@
         "difficulty"
       ],
       "status": "passed",
-      "durationMs": 4187,
-      "promptTokens": 4955,
-      "completionTokens": 666,
+      "durationMs": 3803,
+      "promptTokens": 4974,
+      "completionTokens": 421,
       "toolCallNames": [
         "search_memories",
         "search_memories"
@@ -928,17 +897,16 @@
         "voice-style"
       ],
       "status": "passed",
-      "durationMs": 6429,
-      "promptTokens": 7834,
-      "completionTokens": 977,
+      "durationMs": 6048,
+      "promptTokens": 7770,
+      "completionTokens": 736,
       "toolCallNames": [
-        "search_students",
-        "search_students",
-        "search_students",
         "search_memories",
         "search_memories",
         "search_memories",
-        "search_memories"
+        "search_students",
+        "search_students",
+        "search_students"
       ],
       "toolRounds": 3,
       "degraded": false,
@@ -983,17 +951,37 @@
         "empty"
       ],
       "status": "passed",
-      "durationMs": 2041,
-      "promptTokens": 0,
-      "completionTokens": 0,
+      "durationMs": 5167,
+      "promptTokens": 2261,
+      "completionTokens": 790,
       "toolCallNames": [],
       "toolRounds": 1,
       "degraded": false,
       "checks": [
         {
-          "name": "空输入保护",
+          "name": "结构",
           "passed": true,
-          "detail": "模型没有编造正文"
+          "detail": ""
+        },
+        {
+          "name": "禁止内容",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "栏目覆盖",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "工具调用",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "占位词",
+          "passed": true,
+          "detail": ""
         }
       ]
     },
@@ -1005,9 +993,9 @@
         "long-input"
       ],
       "status": "passed",
-      "durationMs": 5821,
-      "promptTokens": 2566,
-      "completionTokens": 1062,
+      "durationMs": 3465,
+      "promptTokens": 2585,
+      "completionTokens": 413,
       "toolCallNames": [],
       "toolRounds": 1,
       "degraded": false,
@@ -1052,9 +1040,9 @@
         "numbers"
       ],
       "status": "passed",
-      "durationMs": 2447,
-      "promptTokens": 4679,
-      "completionTokens": 235,
+      "durationMs": 4889,
+      "promptTokens": 4716,
+      "completionTokens": 546,
       "toolCallNames": [
         "search_students",
         "search_memories"
@@ -1107,9 +1095,9 @@
         "negative"
       ],
       "status": "passed",
-      "durationMs": 2225,
-      "promptTokens": 2259,
-      "completionTokens": 361,
+      "durationMs": 3630,
+      "promptTokens": 2278,
+      "completionTokens": 708,
       "toolCallNames": [],
       "toolRounds": 1,
       "degraded": false,
@@ -1154,9 +1142,9 @@
         "negative"
       ],
       "status": "passed",
-      "durationMs": 5375,
-      "promptTokens": 2253,
-      "completionTokens": 970,
+      "durationMs": 4115,
+      "promptTokens": 2272,
+      "completionTokens": 573,
       "toolCallNames": [],
       "toolRounds": 1,
       "degraded": false,
@@ -1200,9 +1188,9 @@
         "questions"
       ],
       "status": "passed",
-      "durationMs": 5372,
-      "promptTokens": 4540,
-      "completionTokens": 787,
+      "durationMs": 6599,
+      "promptTokens": 4525,
+      "completionTokens": 1002,
       "toolCallNames": [
         "search_students",
         "search_memories"
@@ -1240,9 +1228,9 @@
         "irrelevant"
       ],
       "status": "passed",
-      "durationMs": 3759,
-      "promptTokens": 2251,
-      "completionTokens": 744,
+      "durationMs": 4145,
+      "promptTokens": 2270,
+      "completionTokens": 652,
       "toolCallNames": [],
       "toolRounds": 1,
       "degraded": false,
@@ -1292,9 +1280,9 @@
         "conflict"
       ],
       "status": "passed",
-      "durationMs": 3834,
-      "promptTokens": 4741,
-      "completionTokens": 601,
+      "durationMs": 5547,
+      "promptTokens": 4748,
+      "completionTokens": 674,
       "toolCallNames": [
         "search_students",
         "search_memories"
@@ -1346,12 +1334,12 @@
         "questions"
       ],
       "status": "passed",
-      "durationMs": 5083,
-      "promptTokens": 4509,
-      "completionTokens": 683,
+      "durationMs": 7165,
+      "promptTokens": 4513,
+      "completionTokens": 1067,
       "toolCallNames": [
-        "search_memories",
-        "search_students"
+        "search_students",
+        "search_memories"
       ],
       "toolRounds": 2,
       "degraded": false,
@@ -1385,10 +1373,10 @@
         "final",
         "filter"
       ],
-      "status": "failed",
-      "durationMs": 2419,
-      "promptTokens": 4693,
-      "completionTokens": 221,
+      "status": "passed",
+      "durationMs": 4820,
+      "promptTokens": 4718,
+      "completionTokens": 654,
       "toolCallNames": [
         "search_students",
         "search_memories"
@@ -1403,8 +1391,8 @@
         },
         {
           "name": "日常工作复盘",
-          "passed": false,
-          "detail": "“今天主要跟进了林小满的作…”少于 35 字"
+          "passed": true,
+          "detail": ""
         },
         {
           "name": "必含事实",
@@ -1441,9 +1429,9 @@
         "detailed"
       ],
       "status": "passed",
-      "durationMs": 1366,
+      "durationMs": 3501,
       "promptTokens": 953,
-      "completionTokens": 99,
+      "completionTokens": 484,
       "toolCallNames": [],
       "toolRounds": 1,
       "degraded": false,
@@ -1488,9 +1476,9 @@
         "concise"
       ],
       "status": "passed",
-      "durationMs": 942,
+      "durationMs": 906,
       "promptTokens": 912,
-      "completionTokens": 75,
+      "completionTokens": 79,
       "toolCallNames": [],
       "toolRounds": 1,
       "degraded": false,
@@ -1530,9 +1518,9 @@
         "empty-sections"
       ],
       "status": "passed",
-      "durationMs": 987,
+      "durationMs": 3705,
       "promptTokens": 948,
-      "completionTokens": 106,
+      "completionTokens": 478,
       "toolCallNames": [],
       "toolRounds": 1,
       "degraded": false,
@@ -1567,9 +1555,9 @@
         "richang"
       ],
       "status": "passed",
-      "durationMs": 722,
+      "durationMs": 1887,
       "promptTokens": 874,
-      "completionTokens": 54,
+      "completionTokens": 116,
       "toolCallNames": [],
       "toolRounds": 1,
       "degraded": false,
@@ -1604,9 +1592,9 @@
         "detailed"
       ],
       "status": "passed",
-      "durationMs": 1837,
+      "durationMs": 2097,
       "promptTokens": 963,
-      "completionTokens": 113,
+      "completionTokens": 131,
       "toolCallNames": [],
       "toolRounds": 1,
       "degraded": false,

@@ -198,6 +198,37 @@ describe("runChecks", () => {
 
     expect(failedNames(checks)).not.toContain("追问质量");
   });
+
+  it("richang 达到 25 字即可通过", () => {
+    const richang =
+      "今天跟进了林小满的作业和错题，家长已知情，明天继续检查订正。";
+
+    expect(richang.length).toBeGreaterThanOrEqual(25);
+
+    const checks = runChecks(
+      input({
+        draft: draft({
+          xueqing: ["林小满：完成今日作业，错题已讲解。"],
+          richang: [richang],
+        }),
+      }),
+    );
+
+    expect(failedNames(checks)).not.toContain("日常工作复盘");
+  });
+
+  it("richang 少于 25 字时失败", () => {
+    const checks = runChecks(
+      input({
+        draft: draft({
+          xueqing: ["林小满：完成今日作业，错题已讲解。"],
+          richang: ["今天跟进了林小满的作业。"],
+        }),
+      }),
+    );
+
+    expect(failedNames(checks)).toContain("日常工作复盘");
+  });
 });
 
 describe("EVAL_CASES 数据集", () => {

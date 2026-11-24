@@ -242,8 +242,6 @@ export function Workspace({
   );
 
   const {
-    streamingSections,
-    streamingPartial,
     recoveryJob,
     checkingRecovery,
     runFinal,
@@ -819,7 +817,6 @@ export function Workspace({
                 finalText={finalText}
                 hasContent={hasFinalContent}
                 loading={loading}
-                waitingForQuestions={loadingKind === "questions"}
                 loadingMessage={loadingMessage}
                 notes={draft.notes}
                 memories={usedMemories}
@@ -833,8 +830,6 @@ export function Workspace({
                 onExtractMemory={() => {
                   void extractMemory(true);
                 }}
-                streaming={streamingSections}
-                streamingPartial={streamingPartial}
               />
             )}
           </div>
