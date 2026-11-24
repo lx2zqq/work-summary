@@ -139,6 +139,13 @@ export type ReviewListItem = {
   updatedAt: string;
 };
 
+/** 学生页抽屉只需要日期和正文 */
+export type ReviewSnippet = {
+  id: string;
+  reviewDate: string;
+  finalText: string;
+};
+
 export type SectionMeta = {
   title: string;
   short: string;

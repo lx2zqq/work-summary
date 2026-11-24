@@ -1,6 +1,16 @@
 import "server-only";
 
-import { and, desc, eq, gte, ilike, lt } from "drizzle-orm";
+import {
+  and,
+  count,
+  countDistinct,
+  desc,
+  eq,
+  gte,
+  ilike,
+  lt,
+} from "drizzle-orm";
+import { todayISO } from "@/lib/date";
 import { normalizeDraft } from "@/lib/draft";
 import type { StudentInput } from "@/lib/schema";
 import { renderReview } from "@/lib/template";
@@ -195,6 +205,66 @@ export async function getReviewByDate(
 
   const settings = await getSettings();
   return mapReview(rows[0], settings);
+}
+
+/** 数据备份用：完整复盘记录，包含 rawInput / draft / conversation */
+export async function listReviewsForExport(): Promise<ReviewRecord[]> {
+  const rows = await getDb()
+    .select()
+    .from(reviews)
+    .orderBy(desc(reviews.reviewDate));
+
+  const settings = await getSettings();
+
+  return rows.map((row) => mapReview(row, settings));
+}
+
+/** 历史页头部统计：总篇数和本月有复盘的天数 */
+export async function getReviewStats(): Promise<{
+  total: number;
+  monthDays: number;
+}> {
+  const monthStart = `${todayISO().slice(0, 7)}-01`;
+
+  const [totalRow] = await getDb()
+    .select({ value: count() })
+    .from(reviews);
+
+  const [monthRow] = await getDb()
+    .select({ value: countDistinct(reviews.reviewDate) })
+    .from(reviews)
+    .where(gte(reviews.reviewDate, monthStart));
+
+  return {
+    total: Number(totalRow?.value ?? 0),
+    monthDays: Number(monthRow?.value ?? 0),
+  };
+}
+
+export async function deleteReview(id: string): Promise<boolean> {
+  const [row] = await getDb()
+    .delete(reviews)
+    .where(eq(reviews.id, id))
+    .returning({ id: reviews.id });
+
+  return Boolean(row);
+}
+
+/** 学生页只要日期和正文，不需要重渲染整份草稿 */
+export async function listReviewSnippets(
+  limit = 500,
+): Promise<Array<{ id: string; reviewDate: string; finalText: string }>> {
+  const rows = await getDb()
+    .select({
+      id: reviews.id,
+      reviewDate: reviews.reviewDate,
+      finalText: reviews.finalText,
+    })
+    .from(reviews)
+    .orderBy(desc(reviews.reviewDate))
+    .limit(limit);
+
+  return rows.filter((row) => row.finalText.trim().length > 0);
 }
 
 export async function listReviews(limit = 50): Promise<ReviewListItem[]> {

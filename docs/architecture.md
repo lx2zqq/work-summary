@@ -11,7 +11,8 @@
   │
   └── Route Handlers
         ├── /api/generate      追问与最终稿
-        ├── /api/reviews       保存与读取复盘
+        ├── /api/reviews       保存、读取与删除复盘
+        ├── /api/export        数据备份（JSON / Markdown）
         ├── /api/memories      长期记忆 CRUD 与抽取
         ├── /api/students      学生管理
         ├── /api/settings      设置
