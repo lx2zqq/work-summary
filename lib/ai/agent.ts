@@ -1,7 +1,7 @@
 import type OpenAI from "openai";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import type { MemoryPromptItem } from "@/lib/types";
-import { AiError } from "./errors";
+import { AiError, createAbortError, isAbortError } from "./errors";
 import {
   buildToolParams,
   createToolCache,
@@ -21,6 +21,8 @@ export type AgentRunInput = {
   messages: ChatCompletionMessageParam[];
   deps: ToolDeps;
   budgetMs?: number;
+  /** 客户端断开时中止整个工具循环 */
+  signal?: AbortSignal;
   /** 最后一轮的正文增量回调；不传则全程非流式 */
   onContent?: (chunk: string) => void;
 };
@@ -121,6 +123,7 @@ async function streamCompletion(input: {
   messages: ChatCompletionMessageParam[];
   isLastCall: boolean;
   timeout: number;
+  signal?: AbortSignal;
   onContent: (chunk: string) => void;
 }): Promise<StreamedCall> {
   const stream = await input.client.chat.completions.create(
@@ -133,7 +136,7 @@ async function streamCompletion(input: {
       stream: true,
       stream_options: { include_usage: true },
     },
-    { timeout: input.timeout },
+    { timeout: input.timeout, signal: input.signal },
   );
 
   let content = "";
@@ -240,6 +243,9 @@ export async function runAgent(
   let rounds = 0;
 
   while (rounds < MAX_LLM_CALLS) {
+    // 客户端已断开：不再发起下一轮模型调用
+    if (input.signal?.aborted) throw createAbortError();
+
     const isLastCall = rounds === MAX_LLM_CALLS - 1;
     const remaining = deadline - Date.now();
 
@@ -270,6 +276,7 @@ export async function runAgent(
             messages,
             isLastCall,
             timeout,
+            signal: input.signal,
             onContent: input.onContent,
           });
 
@@ -282,6 +289,9 @@ export async function runAgent(
             toolCalls: streamed.toolCalls,
           });
         } catch (streamError) {
+          // 客户端主动断开时不重发，直接向上抛中止错误
+          if (isAbortError(streamError, input.signal)) throw streamError;
+
           // 流式中途失败：用同样的上下文非流式重发本轮，不给用户报错
           console.warn(
             "[agent] 流式失败，改用非流式重发：",
@@ -290,7 +300,7 @@ export async function runAgent(
 
           const completion = await input.client.chat.completions.create(
             requestParams({ model: input.model, messages, isLastCall }),
-            { timeout },
+            { timeout, signal: input.signal },
           );
 
           const message = completion.choices[0]?.message;
@@ -317,7 +327,7 @@ export async function runAgent(
             messages,
             isLastCall,
           }),
-          { timeout },
+          { timeout, signal: input.signal },
         );
 
         const message = completion.choices[0]?.message;
@@ -338,6 +348,9 @@ export async function runAgent(
         }
       }
     } catch (error) {
+      // 中止错误保持原样，不能包装成普通请求失败
+      if (isAbortError(error, input.signal)) throw error;
+
       // 第一轮失败原样抛出，交给上层判断能不能降级
       if (rounds === 0) throw error;
 
@@ -377,6 +390,8 @@ export async function runAgent(
     }
 
     for (const call of toolCalls) {
+      if (input.signal?.aborted) throw createAbortError();
+
       const name = call.function.name;
       toolCallNames.push(name);
 
@@ -385,6 +400,9 @@ export async function runAgent(
         call.function.arguments,
         input.deps,
       );
+
+      // 工具执行期间客户端可能已经断开，拿到结果也不再进入下一轮
+      if (input.signal?.aborted) throw createAbortError();
 
       for (const memory of execution.memories) {
         memoryMap.set(memory.id, memory);

@@ -4,7 +4,12 @@ import {
   polishCustomPhrase,
 } from "@/lib/ai/phrase";
 import { DAILY_PHRASES } from "@/lib/daily-phrase";
-import { firstIssue, requireApiSession } from "@/lib/api-helpers";
+import {
+  firstIssue,
+  rateLimitExceeded,
+  requireApiSession,
+} from "@/lib/api-helpers";
+import { checkAiRateLimit } from "@/lib/rate-limit";
 import { getSettings, listStudents } from "@/lib/db/queries";
 import { phrasePreviewSchema } from "@/lib/schema";
 
@@ -14,6 +19,9 @@ export const maxDuration = 60;
 export async function POST(request: Request) {
   const unauthorized = await requireApiSession();
   if (unauthorized) return unauthorized;
+
+  const limit = checkAiRateLimit(request, "phrasePreview");
+  if (!limit.allowed) return rateLimitExceeded(limit.retryAfter);
 
   const body = await request.json().catch(() => null);
   const parsed = phrasePreviewSchema.safeParse(body);

@@ -16,7 +16,7 @@ import {
   isToolsUnsupportedError,
   runAgent,
 } from "./agent";
-import { AiError } from "./errors";
+import { AiError, createAbortError, isAbortError } from "./errors";
 import { buildPromptMessages, type PromptContext } from "./prompt";
 import type { ToolDeps } from "./tools";
 
@@ -138,6 +138,15 @@ export type GenerateOptions = {
   client?: OpenAI;
   /** 正文增量回调；不传则全程非流式 */
   onContent?: (chunk: string) => void;
+  /** 客户端断开时中止模型请求与后续重试 */
+  signal?: AbortSignal;
+  /**
+   * 工具模式降级时才补查的预注入数据。
+   * 正常路径不调用，避免生成前串行查库；不传则沿用 context 自带的数据。
+   */
+  loadFallbackContext?: () => Promise<
+    Pick<PromptContext, "students" | "memories" | "recentReviews">
+  >;
 };
 
 /** 保留原有调用方式；需要 token、工具和重试信息时用 generateDraftWithUsage */
@@ -161,6 +170,7 @@ async function callOnce(input: {
   messages: ChatCompletionMessageParam[];
   temperature: number;
   timeout: number;
+  signal?: AbortSignal;
 }): Promise<CallOnceResult> {
   let completion;
 
@@ -173,9 +183,12 @@ async function callOnce(input: {
         max_tokens: 3000,
         response_format: { type: "json_object" },
       },
-      { timeout: input.timeout },
+      { timeout: input.timeout, signal: input.signal },
     );
   } catch (error) {
+    // 中止不是失败，保持原始错误名供路由识别
+    if (isAbortError(error, input.signal)) throw error;
+
     const message = error instanceof Error ? error.message : "未知错误";
     throw new AiError(`模型调用失败：${message}`, "request");
   }
@@ -210,6 +223,8 @@ export async function generateDraftWithUsage(
   const model = getAiModelName();
   const startedAt = Date.now();
 
+  if (options.signal?.aborted) throw createAbortError();
+
   const usage: AiUsage = {
     promptTokens: 0,
     completionTokens: 0,
@@ -236,6 +251,7 @@ export async function generateDraftWithUsage(
         messages,
         deps: options.toolDeps,
         budgetMs: AGENT_BUDGET_MS,
+        signal: options.signal,
         onContent: options.onContent,
       });
 
@@ -249,6 +265,9 @@ export async function generateDraftWithUsage(
       // 模型不支持 tools 时退回预注入，保证换模型后线上不中断
       if (!isToolsUnsupportedError(error)) throw error;
 
+      // 已经断开就不再触发降级调用
+      if (options.signal?.aborted) throw createAbortError();
+
       console.warn(
         "[ai] 当前模型不支持工具调用，已降级到预注入模式：",
         error instanceof Error ? error.message : error,
@@ -256,8 +275,18 @@ export async function generateDraftWithUsage(
 
       degraded = true;
       toolRounds = 1;
-      messages = toMessages({ ...context, toolsEnabled: false });
-      memories = context.memories;
+
+      // 懒加载模式下 context 里没有预注入数据，只有确定降级时才补查一次
+      const fallbackContext = options.loadFallbackContext
+        ? await options.loadFallbackContext()
+        : undefined;
+
+      messages = toMessages({
+        ...context,
+        ...fallbackContext,
+        toolsEnabled: false,
+      });
+      memories = fallbackContext?.memories ?? context.memories;
 
       const fallback = await callOnce({
         client,
@@ -268,6 +297,7 @@ export async function generateDraftWithUsage(
           25_000,
           Math.max(1_000, TOTAL_BUDGET_MS - (Date.now() - startedAt)),
         ),
+        signal: options.signal,
       });
 
       content = fallback.content;
@@ -281,6 +311,7 @@ export async function generateDraftWithUsage(
       messages,
       temperature: 0.25,
       timeout: 25_000,
+      signal: options.signal,
     });
 
     content = result.content;
@@ -299,6 +330,9 @@ export async function generateDraftWithUsage(
       memories,
     };
   }
+
+  // 客户端已断开时不再做格式纠错重试
+  if (options.signal?.aborted) throw createAbortError();
 
   // 第一次格式不对时，把错误告诉模型再试一次；重试不再带工具，避免继续消耗预算
   const remaining = TOTAL_BUDGET_MS - (Date.now() - startedAt);
@@ -321,6 +355,7 @@ export async function generateDraftWithUsage(
     ],
     temperature: 0.1,
     timeout: Math.min(25_000, remaining),
+    signal: options.signal,
   });
 
   usage.promptTokens += retry.promptTokens;

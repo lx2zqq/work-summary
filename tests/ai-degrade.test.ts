@@ -54,6 +54,35 @@ const VALID_OUTPUT = JSON.stringify({
   notes: [],
 });
 
+/** 模拟懒加载模式下补查到的预注入数据 */
+const FALLBACK_CONTEXT = {
+  students: [
+    {
+      id: "student-2",
+      name: "陈一鸣",
+      grade: "高二",
+      subjects: "英语",
+      status: "在读",
+      note: null,
+    },
+  ],
+  memories: [
+    {
+      id: "memory-2",
+      scope: "student",
+      studentName: "陈一鸣",
+      category: "报名续费",
+      content: "陈一鸣的英语课已续费。",
+      importance: 2,
+    },
+  ],
+  recentReviews: [{ date: "2026-11-17", text: "补查到的昨日复盘" }],
+} satisfies Pick<PromptContext, "students" | "memories" | "recentReviews">;
+
+function emptyContext(): PromptContext {
+  return { ...CONTEXT, students: [], memories: [], recentReviews: [] };
+}
+
 type FakeParams = {
   messages: Array<{ role: string; content: string }>;
   tools?: unknown;
@@ -150,5 +179,63 @@ describe("工具不支持时自动降级", () => {
     expect(
       calls[0]?.messages.map((message) => message.content).join("\n"),
     ).toContain("【学生名单】");
+  });
+
+  it("工具模式正常完成时不加载降级上下文", async () => {
+    const { client, calls } = fakeClient(() => completion(VALID_OUTPUT));
+    let loads = 0;
+
+    const result = await generateDraftWithUsage(emptyContext(), {
+      client,
+      toolDeps: DEPS,
+      loadFallbackContext: async () => {
+        loads += 1;
+        return FALLBACK_CONTEXT;
+      },
+    });
+
+    expect(loads).toBe(0);
+    expect(result.degraded).toBe(false);
+    expect(result.memories).toEqual([]);
+    expect(calls).toHaveLength(1);
+  });
+
+  it("降级时补查预注入数据，并把学生与记忆注入请求", async () => {
+    const warning = console.warn;
+    console.warn = () => {};
+
+    let loads = 0;
+    const { client, calls } = fakeClient((params, call) => {
+      if (call === 1) {
+        throw Object.assign(new Error("tools is not supported"), {
+          status: 400,
+        });
+      }
+      return completion(VALID_OUTPUT);
+    });
+
+    try {
+      const result = await generateDraftWithUsage(emptyContext(), {
+        client,
+        toolDeps: DEPS,
+        loadFallbackContext: async () => {
+          loads += 1;
+          return FALLBACK_CONTEXT;
+        },
+      });
+
+      expect(loads).toBe(1);
+      expect(result.degraded).toBe(true);
+      expect(result.memories).toEqual(FALLBACK_CONTEXT.memories);
+
+      const prompt = calls[1]?.messages
+        .map((message) => message.content)
+        .join("\n");
+      expect(prompt).toContain("【学生名单】");
+      expect(prompt).toContain("陈一鸣");
+      expect(prompt).toContain("陈一鸣的英语课已续费");
+    } finally {
+      console.warn = warning;
+    }
   });
 });

@@ -6,6 +6,7 @@ import {
   isAiConfigured,
   resolveToolsMode,
 } from "@/lib/ai/deepseek";
+import { isAbortError } from "@/lib/ai/errors";
 import type { EventProperties } from "@/lib/analytics/events";
 import { trackEvent } from "@/lib/analytics/events";
 import type { PromptContext } from "@/lib/ai/prompt";
@@ -16,7 +17,12 @@ import {
 } from "@/lib/ai/stream-parser";
 import { encodeSSE } from "@/lib/sse";
 import type { ToolDeps } from "@/lib/ai/tools";
-import { firstIssue, requireApiSession } from "@/lib/api-helpers";
+import {
+  firstIssue,
+  rateLimitExceeded,
+  requireApiSession,
+} from "@/lib/api-helpers";
+import { checkAiRateLimit } from "@/lib/rate-limit";
 import {
   findMemories,
   findReviews,
@@ -40,12 +46,22 @@ import {
 
 export const maxDuration = 60;
 
-async function buildContext(
+type PreInjectedContext = Pick<
+  PromptContext,
+  "students" | "memories" | "recentReviews"
+>;
+
+type ContextBundle = {
+  context: PromptContext;
+  /** 仅工具懒加载模式返回：模型不支持工具时再补查一次 */
+  loadFallbackContext?: () => Promise<PreInjectedContext>;
+};
+
+/** 串行读取，避免 Supabase 连接池在并发查询时卡住 */
+async function loadPreInjectedContext(
   input: GenerateRequest,
-  toolsEnabled: boolean,
-): Promise<PromptContext> {
-  // 串行读取，避免 Supabase 连接池在并发查询时卡住
-  const settings = await getSettings();
+  settings: PromptContext["settings"],
+): Promise<PreInjectedContext> {
   const students = await listStudents();
   const memories =
     settings.enableMemory && input.mode !== "restyle"
@@ -65,14 +81,23 @@ async function buildContext(
       ? await getRecentReviews(input.date, 2)
       : [];
 
-  return {
+  return { students, memories, recentReviews };
+}
+
+async function buildContext(
+  input: GenerateRequest,
+  toolsEnabled: boolean,
+): Promise<ContextBundle> {
+  const settings = await getSettings();
+
+  const context: PromptContext = {
     mode: input.mode,
     reviewDate: input.date,
     style: input.style,
     settings,
-    students,
-    recentReviews,
-    memories,
+    students: [],
+    recentReviews: [],
+    memories: [],
     rawInput: input.rawInput,
     answers: input.answers,
     // 上一轮的追问只是 UI 状态，不进入模型上下文，避免模型重复或误判
@@ -80,8 +105,22 @@ async function buildContext(
       ? { ...normalizeDraft(input.currentDraft), questions: [] }
       : undefined,
     round: input.round,
-    // 工具模式下这些数据不再进 prompt，但降级时可以直接复用，不用二次查询
     toolsEnabled,
+  };
+
+  // 工具模式下这些数据不再进 prompt：只在模型不支持工具时补查，省掉生成前的串行查库
+  if (toolsEnabled && input.mode !== "restyle" && isAiConfigured()) {
+    return {
+      context,
+      loadFallbackContext: () => loadPreInjectedContext(input, settings),
+    };
+  }
+
+  return {
+    context: {
+      ...context,
+      ...(await loadPreInjectedContext(input, settings)),
+    },
   };
 }
 
@@ -123,24 +162,42 @@ function streamGenerate(input: {
   input: GenerateRequest;
   startedAt: number;
   baseProperties: EventProperties;
+  requestSignal: AbortSignal;
+  loadFallbackContext?: ContextBundle["loadFallbackContext"];
 }): Response {
-  const { context, input: request, startedAt, baseProperties } = input;
+  const {
+    context,
+    input: request,
+    startedAt,
+    baseProperties,
+    requestSignal,
+    loadFallbackContext,
+  } = input;
   const encoder = new TextEncoder();
+  const abortController = new AbortController();
+  let closed = false;
+
+  // 客户端断开或读取端取消时，立刻中止模型请求，避免白烧 token
+  const handleAbort = () => {
+    closed = true;
+    abortController.abort();
+  };
+
+  requestSignal.addEventListener("abort", handleAbort, { once: true });
+  if (requestSignal.aborted) handleAbort();
 
   const stream = new ReadableStream<Uint8Array>({
     // 不要在 start 里 await 整段生成：框架会在 start 的 Promise
     // 长时间不 resolve 时提前关掉 controller，后续 enqueue 直接抛错
     start(controller) {
-      let closed = false;
-
       const send = (event: string, data: unknown) => {
         if (closed) return;
 
         try {
           controller.enqueue(encoder.encode(encodeSSE(event, data)));
         } catch {
-          // 客户端已断开，后续不再尝试写入
-          closed = true;
+          // 写入失败说明连接已经断开，顺手停掉模型请求
+          handleAbort();
         }
       };
 
@@ -156,6 +213,8 @@ function streamGenerate(input: {
 
         const result = await generateDraftWithUsage(context, {
           toolDeps: buildToolDeps(context.settings),
+          loadFallbackContext,
+          signal: abortController.signal,
           onContent: (chunk) => {
             buffer += chunk;
             const state = parseStreamState(buffer);
@@ -203,6 +262,12 @@ function streamGenerate(input: {
           fallback: false,
         });
       } catch (error) {
+        // 客户端主动断开：不记失败埋点，也不写错误事件，静默关闭
+        if (isAbortError(error, abortController.signal)) {
+          console.info("[generate:stream] 客户端已断开，已中止生成");
+          return;
+        }
+
         console.error("[generate:stream]", error);
 
         await trackEvent({
@@ -218,6 +283,7 @@ function streamGenerate(input: {
         send("error", { message: getAiErrorMessage(error) });
       } finally {
         closed = true;
+        requestSignal.removeEventListener("abort", handleAbort);
         try {
           controller.close();
         } catch {
@@ -225,6 +291,10 @@ function streamGenerate(input: {
         }
       }
       })();
+    },
+    // 下游取消读取（例如前端 abort 或页面关闭）时同样中止生成
+    cancel() {
+      handleAbort();
     },
   });
 
@@ -241,6 +311,9 @@ export async function POST(request: Request) {
   const unauthorized = await requireApiSession();
   if (unauthorized) return unauthorized;
 
+  const limit = checkAiRateLimit(request, "generate");
+  if (!limit.allowed) return rateLimitExceeded(limit.retryAfter);
+
   const body = await request.json().catch(() => null);
   const parsed = generateRequestSchema.safeParse(body);
 
@@ -253,10 +326,10 @@ export async function POST(request: Request) {
 
   const input = parsed.data;
   const toolsMode = resolveToolsMode();
-  let context: PromptContext | null = null;
+  let bundle: ContextBundle;
 
   try {
-    context = await buildContext(input, toolsMode === "auto");
+    bundle = await buildContext(input, toolsMode === "auto");
   } catch (error) {
     console.error("[generate:db]", error);
     return NextResponse.json(
@@ -264,6 +337,8 @@ export async function POST(request: Request) {
       { status: 500 },
     );
   }
+
+  const { context, loadFallbackContext } = bundle;
 
   const startedAt = Date.now();
   const baseProperties = {
@@ -314,6 +389,8 @@ export async function POST(request: Request) {
       input,
       startedAt,
       baseProperties,
+      requestSignal: request.signal,
+      loadFallbackContext,
     });
   }
 
@@ -321,6 +398,8 @@ export async function POST(request: Request) {
     const { draft, usage, toolCallNames, toolRounds, degraded, memories } =
       await generateDraftWithUsage(context, {
         toolDeps: buildToolDeps(context.settings),
+        loadFallbackContext,
+        signal: request.signal,
       });
 
     await trackEvent({
@@ -345,6 +424,12 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ draft, memories });
   } catch (error) {
+    // 客户端已断开：不记失败埋点、不打错误堆栈，直接结束
+    if (isAbortError(error, request.signal)) {
+      console.info("[generate:ai] 客户端已断开，已中止生成");
+      return NextResponse.json({ error: "请求已取消" }, { status: 499 });
+    }
+
     console.error("[generate:ai]", error);
 
     await trackEvent({

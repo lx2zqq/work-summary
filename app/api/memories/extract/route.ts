@@ -2,7 +2,12 @@ import { NextResponse } from "next/server";
 import { AiError, getAiErrorMessage } from "@/lib/ai/deepseek";
 import { extractMemories } from "@/lib/ai/memory";
 import { trackEvent } from "@/lib/analytics/events";
-import { firstIssue, requireApiSession } from "@/lib/api-helpers";
+import {
+  firstIssue,
+  rateLimitExceeded,
+  requireApiSession,
+} from "@/lib/api-helpers";
+import { checkAiRateLimit } from "@/lib/rate-limit";
 import {
   createMemory,
   getReviewByDate,
@@ -29,6 +34,9 @@ export const maxDuration = 60;
 export async function POST(request: Request) {
   const unauthorized = await requireApiSession();
   if (unauthorized) return unauthorized;
+
+  const limit = checkAiRateLimit(request, "memoryExtract");
+  if (!limit.allowed) return rateLimitExceeded(limit.retryAfter);
 
   const body = await request.json().catch(() => null);
   const parsed = extractMemoriesRequestSchema.safeParse(body);

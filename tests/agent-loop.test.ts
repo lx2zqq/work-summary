@@ -247,6 +247,92 @@ describe("runAgent", () => {
 
     expect(calls).toHaveLength(0);
   });
+
+  it("信号已中止时不发起任何模型请求", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const { client, calls } = fakeClient([]);
+
+    await expect(
+      runAgent({
+        client,
+        model: "test-model",
+        messages: [{ role: "user", content: "今天做了什么" }],
+        deps: makeDeps(),
+        signal: controller.signal,
+      }),
+    ).rejects.toMatchObject({ name: "AbortError" });
+
+    expect(calls).toHaveLength(0);
+  });
+
+  it("工具执行后中止，不再发起下一轮模型请求", async () => {
+    const controller = new AbortController();
+    const { client, calls } = fakeClient([
+      completion({
+        toolCalls: [
+          {
+            name: "search_memories",
+            args: JSON.stringify({ studentName: "林小满" }),
+          },
+        ],
+      }),
+      completion({ content: '{"sections":{}}' }),
+    ]);
+
+    const deps = makeDeps({
+      searchMemories: async () => {
+        controller.abort();
+        return [];
+      },
+    });
+
+    await expect(
+      runAgent({
+        client,
+        model: "test-model",
+        messages: [{ role: "user", content: "今天跟林小满聊了聊" }],
+        deps,
+        signal: controller.signal,
+      }),
+    ).rejects.toMatchObject({ name: "AbortError" });
+
+    expect(calls).toHaveLength(1);
+  });
+
+  it("流式被中止后不走非流式重发", async () => {
+    const controller = new AbortController();
+    let calls = 0;
+
+    const client = {
+      chat: {
+        completions: {
+          create: async () => {
+            calls += 1;
+            return (async function* () {
+              controller.abort();
+              const error = new Error("aborted");
+              error.name = "APIUserAbortError";
+              throw error;
+            })();
+          },
+        },
+      },
+    } as unknown as OpenAI;
+
+    await expect(
+      runAgent({
+        client,
+        model: "test-model",
+        messages: [{ role: "user", content: "今天做了什么" }],
+        deps: makeDeps(),
+        signal: controller.signal,
+        onContent: () => {},
+      }),
+    ).rejects.toMatchObject({ name: "APIUserAbortError" });
+
+    expect(calls).toBe(1);
+  });
 });
 
 describe("isToolsUnsupportedError", () => {

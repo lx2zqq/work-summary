@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
-import { requireApiSession } from "@/lib/api-helpers";
+import {
+  rateLimitExceeded,
+  requireApiSession,
+} from "@/lib/api-helpers";
+import { checkAiRateLimit } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -33,6 +37,9 @@ function isWavFile(file: File): boolean {
 export async function POST(request: Request) {
   const unauthorized = await requireApiSession();
   if (unauthorized) return unauthorized;
+
+  const limit = checkAiRateLimit(request, "transcribe");
+  if (!limit.allowed) return rateLimitExceeded(limit.retryAfter);
 
   const apiKey = process.env.REVIEW_ASR_API_KEY?.trim();
 
