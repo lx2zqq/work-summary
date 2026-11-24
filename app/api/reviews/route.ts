@@ -33,13 +33,22 @@ export async function GET(request: Request) {
       return NextResponse.json({ review });
     }
 
+    const before = searchParams.get("before");
+    if (before && !isValidISODate(before)) {
+      return NextResponse.json({ error: "日期格式不对" }, { status: 400 });
+    }
+
     const rawLimit = Number(searchParams.get("limit") ?? 50);
     const limit = Number.isFinite(rawLimit)
       ? Math.min(Math.max(Math.trunc(rawLimit), 1), 100)
       : 50;
 
-    const reviews = await listReviews(limit);
-    return NextResponse.json({ reviews });
+    // 多查一条用于判断是否还有更早的复盘，截断后返回
+    const rows = await listReviews(limit + 1, before ?? undefined);
+    const hasMore = rows.length > limit;
+    const reviews = hasMore ? rows.slice(0, limit) : rows;
+
+    return NextResponse.json({ reviews, hasMore });
   } catch (error) {
     console.error("[reviews:GET]", error);
     return NextResponse.json(

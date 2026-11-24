@@ -61,7 +61,7 @@ export async function POST(request: Request) {
       });
     }
 
-    const review = await getReviewByDate(date);
+    const review = await getReviewByDate(date, settings);
 
     if (!review || !review.finalText.trim()) {
       return NextResponse.json(

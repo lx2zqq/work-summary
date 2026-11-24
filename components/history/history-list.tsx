@@ -61,16 +61,21 @@ export function HistoryList({
   items,
   students,
   stats,
+  hasMore = false,
   demoMode = false,
 }: {
   items: ReviewListItem[];
   students: Student[];
   stats: ReviewStats;
+  /** 首屏之外是否还有更早的复盘 */
+  hasMore?: boolean;
   /** 演示模式：隐藏「打开」和「删除」 */
   demoMode?: boolean;
 }) {
   const [list, setList] = useState(items);
   const [total, setTotal] = useState(stats.total);
+  const [canLoadMore, setCanLoadMore] = useState(hasMore);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [query, setQuery] = useState("");
   const [studentId, setStudentId] = useState("");
   const [expandedIds, setExpandedIds] = useState<Set<string>>(
@@ -127,6 +132,42 @@ export function HistoryList({
 
     if (okay) toast.success("已复制");
     else toast.error("复制失败，请打开后手动复制");
+  }
+
+  async function loadMore() {
+    const oldest = list[list.length - 1]?.reviewDate;
+    if (!oldest || loadingMore) return;
+
+    setLoadingMore(true);
+
+    try {
+      const response = await fetch(
+        `/api/reviews?limit=50&before=${encodeURIComponent(oldest)}`,
+      );
+      const data = (await response.json().catch(() => ({}))) as {
+        error?: string;
+        reviews?: ReviewListItem[];
+        hasMore?: boolean;
+      };
+
+      if (!response.ok) {
+        throw new Error(data.error || "加载失败，请稍后重试");
+      }
+
+      const incoming = data.reviews ?? [];
+      setList((previous) => {
+        const seen = new Set(previous.map((item) => item.id));
+        return [
+          ...previous,
+          ...incoming.filter((item) => !seen.has(item.id)),
+        ];
+      });
+      setCanLoadMore(Boolean(data.hasMore));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "加载失败");
+    } finally {
+      setLoadingMore(false);
+    }
   }
 
   async function handleDelete() {
@@ -444,6 +485,21 @@ export function HistoryList({
           ))}
         </div>
       )}
+
+      {!demoMode && canLoadMore ? (
+        <div className="flex justify-center">
+          <Button
+            variant="ghost"
+            size="sm"
+            loading={loadingMore}
+            onClick={() => {
+              void loadMore();
+            }}
+          >
+            加载更早的复盘
+          </Button>
+        </div>
+      ) : null}
 
       <ConfirmDialog
         open={Boolean(deleteTarget)}

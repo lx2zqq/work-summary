@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
-import { firstIssue, requireApiSession } from "@/lib/api-helpers";
+import {
+  firstIssue,
+  isValidUuid,
+  requireApiSession,
+} from "@/lib/api-helpers";
 import { deleteStudent, updateStudent } from "@/lib/db/queries";
 import { studentInputSchema } from "@/lib/schema";
 
@@ -7,16 +11,12 @@ type RouteParams = {
   params: Promise<{ id: string }>;
 };
 
-function isValidId(id: string): boolean {
-  return /^[0-9a-f-]{36}$/i.test(id);
-}
-
 export async function PATCH(request: Request, context: RouteParams) {
   const unauthorized = await requireApiSession();
   if (unauthorized) return unauthorized;
 
   const { id } = await context.params;
-  if (!isValidId(id)) {
+  if (!isValidUuid(id)) {
     return NextResponse.json({ error: "学生 ID 不对" }, { status: 400 });
   }
 
@@ -47,7 +47,7 @@ export async function DELETE(_request: Request, context: RouteParams) {
   if (unauthorized) return unauthorized;
 
   const { id } = await context.params;
-  if (!isValidId(id)) {
+  if (!isValidUuid(id)) {
     return NextResponse.json({ error: "学生 ID 不对" }, { status: 400 });
   }
 

@@ -18,9 +18,9 @@ export default async function HomePage({
     date && isValidISODate(date) ? date : todayISO();
 
   // 串行读取，避免 Supabase 连接池在并发查询时卡住
-  const review = await getReviewByDate(reviewDate);
-  const students = await listStudents();
   const settings = await getSettings();
+  const review = await getReviewByDate(reviewDate, settings);
+  const students = await listStudents();
 
   return (
     <Workspace

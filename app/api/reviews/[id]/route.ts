@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireApiSession } from "@/lib/api-helpers";
+import { isValidUuid, requireApiSession } from "@/lib/api-helpers";
 import { deleteReview } from "@/lib/db/queries";
 
 export async function DELETE(
@@ -10,6 +10,9 @@ export async function DELETE(
   if (unauthorized) return unauthorized;
 
   const { id } = await context.params;
+  if (!isValidUuid(id)) {
+    return NextResponse.json({ error: "复盘 ID 不对" }, { status: 400 });
+  }
 
   try {
     const deleted = await deleteReview(id);

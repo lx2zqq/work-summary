@@ -3,12 +3,15 @@ import "server-only";
 import {
   and,
   count,
-  countDistinct,
   desc,
   eq,
   gte,
   ilike,
+  isNull,
   lt,
+  ne,
+  or,
+  sql,
 } from "drizzle-orm";
 import { todayISO } from "@/lib/date";
 import { normalizeDraft } from "@/lib/draft";
@@ -79,6 +82,11 @@ function mapStudent(row: typeof students.$inferSelect): Student {
   };
 }
 
+/** 转义 LIKE 通配符，避免用户输入的 % 和 _ 被当成模糊匹配 */
+function escapeLike(value: string): string {
+  return value.replace(/[\\%_]/g, "\\$&");
+}
+
 function mapReview(
   row: typeof reviews.$inferSelect,
   settings?: AppSettings,
@@ -129,14 +137,21 @@ export async function getSettings(): Promise<AppSettings> {
 export async function updateSettings(
   patch: Partial<AppSettings>,
 ): Promise<AppSettings> {
-  await getSettings();
+  const updatedAt = new Date();
 
-  await getDb()
-    .update(settingsTable)
-    .set({ ...patch, updatedAt: new Date() })
-    .where(eq(settingsTable.id, 1));
+  // 单条 upsert 完成「不存在则创建、存在则更新」，省掉前后两次查询
+  const [row] = await getDb()
+    .insert(settingsTable)
+    .values({ id: 1, ...DEFAULT_SETTINGS, ...patch, updatedAt })
+    .onConflictDoUpdate({
+      target: settingsTable.id,
+      set: { ...patch, updatedAt },
+    })
+    .returning();
 
-  return getSettings();
+  if (!row) throw new Error("保存设置失败");
+
+  return mapSettings(row);
 }
 
 export async function listStudents(): Promise<Student[]> {
@@ -167,20 +182,48 @@ export async function updateStudent(
   id: string,
   input: StudentInput,
 ): Promise<Student | null> {
-  const [row] = await getDb()
-    .update(students)
-    .set({
-      name: input.name,
-      grade: input.grade,
-      subjects: input.subjects,
-      status: input.status as StudentStatus,
-      note: input.note,
-      updatedAt: new Date(),
-    })
-    .where(eq(students.id, id))
-    .returning();
+  return getDb().transaction(async (tx) => {
+    const [existing] = await tx
+      .select({ name: students.name })
+      .from(students)
+      .where(eq(students.id, id))
+      .limit(1);
 
-  return row ? mapStudent(row) : null;
+    if (!existing) return null;
+
+    const [row] = await tx
+      .update(students)
+      .set({
+        name: input.name,
+        grade: input.grade,
+        subjects: input.subjects,
+        status: input.status as StudentStatus,
+        note: input.note,
+        updatedAt: new Date(),
+      })
+      .where(eq(students.id, id))
+      .returning();
+
+    if (!row) return null;
+
+    // 学生改名后，关联记忆里的冗余姓名也要同步，避免筛选和展示对不上
+    if (existing.name !== row.name) {
+      await tx
+        .update(memories)
+        .set({ studentName: row.name, updatedAt: new Date() })
+        .where(
+          and(
+            eq(memories.studentId, id),
+            or(
+              isNull(memories.studentName),
+              ne(memories.studentName, row.name),
+            ),
+          ),
+        );
+    }
+
+    return mapStudent(row);
+  });
 }
 
 export async function deleteStudent(id: string): Promise<boolean> {
@@ -194,6 +237,7 @@ export async function deleteStudent(id: string): Promise<boolean> {
 
 export async function getReviewByDate(
   date: string,
+  preloadedSettings?: AppSettings,
 ): Promise<ReviewRecord | null> {
   const rows = await getDb()
     .select()
@@ -203,7 +247,7 @@ export async function getReviewByDate(
 
   if (!rows[0]) return null;
 
-  const settings = await getSettings();
+  const settings = preloadedSettings ?? (await getSettings());
   return mapReview(rows[0], settings);
 }
 
@@ -219,25 +263,23 @@ export async function listReviewsForExport(): Promise<ReviewRecord[]> {
   return rows.map((row) => mapReview(row, settings));
 }
 
-/** 历史页头部统计：总篇数和本月有复盘的天数 */
+/** 历史页头部统计：总篇数和本月有复盘的天数（单次条件聚合） */
 export async function getReviewStats(): Promise<{
   total: number;
   monthDays: number;
 }> {
   const monthStart = `${todayISO().slice(0, 7)}-01`;
 
-  const [totalRow] = await getDb()
-    .select({ value: count() })
+  const [row] = await getDb()
+    .select({
+      total: count(),
+      monthDays: sql<number>`count(distinct case when ${reviews.reviewDate} >= ${monthStart} then ${reviews.reviewDate} end)`,
+    })
     .from(reviews);
 
-  const [monthRow] = await getDb()
-    .select({ value: countDistinct(reviews.reviewDate) })
-    .from(reviews)
-    .where(gte(reviews.reviewDate, monthStart));
-
   return {
-    total: Number(totalRow?.value ?? 0),
-    monthDays: Number(monthRow?.value ?? 0),
+    total: Number(row?.total ?? 0),
+    monthDays: Number(row?.monthDays ?? 0),
   };
 }
 
@@ -267,7 +309,11 @@ export async function listReviewSnippets(
   return rows.filter((row) => row.finalText.trim().length > 0);
 }
 
-export async function listReviews(limit = 50): Promise<ReviewListItem[]> {
+export async function listReviews(
+  limit = 50,
+  beforeDate?: string,
+  preloadedSettings?: AppSettings,
+): Promise<ReviewListItem[]> {
   const rows = await getDb()
     .select({
       id: reviews.id,
@@ -278,10 +324,11 @@ export async function listReviews(limit = 50): Promise<ReviewListItem[]> {
       updatedAt: reviews.updatedAt,
     })
     .from(reviews)
+    .where(beforeDate ? lt(reviews.reviewDate, beforeDate) : undefined)
     .orderBy(desc(reviews.reviewDate))
     .limit(limit);
 
-  const settings = await getSettings();
+  const settings = preloadedSettings ?? (await getSettings());
 
   return rows.map((row) => {
     const draft = row.draft ? normalizeDraft(row.draft) : emptyDraft();
@@ -447,13 +494,13 @@ export async function findStudents(input: {
   const conditions = [];
 
   if (input.query) {
-    conditions.push(ilike(students.name, `%${input.query}%`));
+    conditions.push(ilike(students.name, `%${escapeLike(input.query)}%`));
   }
   if (input.status) {
     conditions.push(eq(students.status, input.status));
   }
   if (input.grade) {
-    conditions.push(ilike(students.grade, `%${input.grade}%`));
+    conditions.push(ilike(students.grade, `%${escapeLike(input.grade)}%`));
   }
 
   const rows = await getDb()
@@ -476,10 +523,12 @@ export async function findMemories(input: {
   const conditions = [eq(memories.status, "active")];
 
   if (input.studentName) {
-    conditions.push(ilike(memories.studentName, `%${input.studentName}%`));
+    conditions.push(
+      ilike(memories.studentName, `%${escapeLike(input.studentName)}%`),
+    );
   }
   if (input.keyword) {
-    conditions.push(ilike(memories.content, `%${input.keyword}%`));
+    conditions.push(ilike(memories.content, `%${escapeLike(input.keyword)}%`));
   }
   if (input.scope) {
     conditions.push(eq(memories.scope, input.scope));
@@ -518,7 +567,7 @@ export async function findReviews(input: {
     conditions.push(gte(reviews.reviewDate, input.afterDate));
   }
   if (input.keyword) {
-    conditions.push(ilike(reviews.finalText, `%${input.keyword}%`));
+    conditions.push(ilike(reviews.finalText, `%${escapeLike(input.keyword)}%`));
   }
 
   const rows = await getDb()
