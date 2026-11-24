@@ -9,6 +9,7 @@ import {
   getAiModelName,
   type AiUsage,
 } from "./deepseek";
+import { createAbortError, isAbortError } from "./errors";
 
 const OUTPUT_SCHEMA = `{
   "memories": [
@@ -27,14 +28,23 @@ const MEMORY_RULES = `你是“学管部工作复盘”的长期记忆整理助�
 你的任务：从今天的最终复盘里，提取以后写复盘时还会用到的关键事实，写成简短、客观、可复用的记忆。
 
 【只提取长期有效的信息】
-- 学生：学习习惯、薄弱科目/知识点、性格与情绪特点、家长沟通偏好、报名/续费/课时进度、重要承诺、长期目标。
+- 只保留针对具体学生或校区的客观事实：薄弱知识点、学习习惯、家长沟通偏好、明确顾虑、报名/续费/排课状态等。
+- 学生：性格与情绪特点、课时进度、重要承诺、长期目标。
 - 通用：校区流程/规定、反复出现的问题、有效的工作方法、长期目标。
 
 【不要提取】
 - 当天的一次性动作：发通知、打印资料、临时排课、某次错题录入等，除非它形成了长期规则或结论。
+- 泛化的学管工作要求，例如“需持续关注”“需跟进落实”“需同步家长进展/课后任务/配合建议”等；除非原文写明了具体学生、学科、事项或时间。
 - 固定话术、服务理念、空泛反思。
 - 猜测、未确认的信息、临时情绪。
 - 已经在【已有记忆】里且没有变化的内容。
+
+【示例】
+复盘：林小满妈妈希望每周五微信同步一次作业完成情况，她更关注数学错题。
+返回：{"memories":[{"id":null,"scope":"student","studentName":"林小满","category":"家长沟通","content":"妈妈希望每周五微信同步作业情况，重点关注数学错题。","importance":2}]}
+
+复盘：本周继续关注学生学习状态，及时同步家长进展。
+返回：{"memories":[]}（这是泛化要求，没有具体对象，不要提取）
 
 【更新规则】
 - 先逐条对照【已有记忆】。今天的信息如果和某条已有记忆是同一件事（即使措辞不同、状态变了），必须返回该条记忆的 id 和新内容，不要新增。
@@ -116,7 +126,11 @@ export async function extractMemories(
     students: Student[];
     existing: MemoryPromptItem[];
   },
-  options?: { onUsage?: (usage: AiUsage) => void },
+  options?: {
+    onUsage?: (usage: AiUsage) => void;
+    /** 客户端断开时中止提取与重试 */
+    signal?: AbortSignal;
+  },
 ) {
   const client = createClient();
   const model = getAiModelName();
@@ -143,13 +157,16 @@ export async function extractMemories(
   let content = "";
 
   try {
-    const completion = await client.chat.completions.create({
-      model,
-      messages,
-      temperature: 0.1,
-      max_tokens: 1200,
-      response_format: { type: "json_object" },
-    });
+    const completion = await client.chat.completions.create(
+      {
+        model,
+        messages,
+        temperature: 0.1,
+        max_tokens: 1200,
+        response_format: { type: "json_object" },
+      },
+      { signal: options?.signal },
+    );
 
     content = completion.choices[0]?.message?.content?.trim() ?? "";
 
@@ -161,6 +178,8 @@ export async function extractMemories(
       );
     }
   } catch (error) {
+    if (isAbortError(error, options?.signal)) throw error;
+
     const message =
       error instanceof Error ? error.message : "未知错误";
     throw new AiError(`记忆整理失败：${message}`, "request");
@@ -171,6 +190,8 @@ export async function extractMemories(
     options?.onUsage?.(usage);
     return first.memories;
   }
+
+  if (options?.signal?.aborted) throw createAbortError();
 
   usage.retried = true;
   const retryMessages: ChatCompletionMessageParam[] = [
@@ -183,13 +204,16 @@ export async function extractMemories(
   ];
 
   try {
-    const retry = await client.chat.completions.create({
-      model,
-      messages: retryMessages,
-      temperature: 0.1,
-      max_tokens: 1200,
-      response_format: { type: "json_object" },
-    });
+    const retry = await client.chat.completions.create(
+      {
+        model,
+        messages: retryMessages,
+        temperature: 0.1,
+        max_tokens: 1200,
+        response_format: { type: "json_object" },
+      },
+      { signal: options?.signal },
+    );
     const retryContent =
       retry.choices[0]?.message?.content?.trim() ?? "";
 
@@ -210,6 +234,7 @@ export async function extractMemories(
       "output",
     );
   } catch (error) {
+    if (isAbortError(error, options?.signal)) throw error;
     if (error instanceof AiError) throw error;
     const message =
       error instanceof Error ? error.message : "未知错误";

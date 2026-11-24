@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { AiError, getAiErrorMessage } from "@/lib/ai/deepseek";
+import { isAbortError } from "@/lib/ai/errors";
 import { extractMemories } from "@/lib/ai/memory";
 import { trackEvent } from "@/lib/analytics/events";
 import {
@@ -111,6 +112,7 @@ export async function POST(request: Request) {
         onUsage: (value) => {
           usage = value;
         },
+        signal: request.signal,
       },
     );
 
@@ -234,6 +236,12 @@ export async function POST(request: Request) {
       extractedAt,
     });
   } catch (error) {
+    // 客户端主动断开：静默结束，不算失败
+    if (isAbortError(error, request.signal)) {
+      console.info("[memories:extract] 客户端已断开，已中止提取");
+      return NextResponse.json({ error: "请求已取消" }, { status: 499 });
+    }
+
     console.error("[memories:extract]", error);
 
     if (error instanceof AiError && error.kind === "config") {

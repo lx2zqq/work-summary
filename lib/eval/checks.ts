@@ -55,6 +55,9 @@ export type CheckResult = {
 
 const PLACEHOLDERS = ["待确认", "待补充", "未提供", "不明确"];
 
+/** 追问会直接展示给用户，不能出现内部实现概念 */
+const QUESTION_INTERNAL_TERMS = ["长期记忆里", "根据记忆", "系统记录"];
+
 export function countItems(draft: ReviewDraft): number {
   return Object.values(draft.sections).reduce(
     (total, items) => total + items.length,
@@ -237,6 +240,14 @@ export function runChecks(input: CheckInput): CheckResult[] {
         ...missing.map((value) => `没有追问提到“${value}”`),
       );
     }
+
+    const questions = questionText(draft);
+    const leaked = QUESTION_INTERNAL_TERMS.filter((term) =>
+      questions.includes(term),
+    );
+    issues.push(
+      ...leaked.map((term) => `问题文本泄露内部概念“${term}”`),
+    );
 
     results.push(result("追问质量", issues));
   }

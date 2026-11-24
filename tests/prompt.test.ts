@@ -272,4 +272,45 @@ describe("buildPromptMessages", () => {
     expect(user?.content).not.toContain("【今天的流水账】");
     expect(user?.content).not.toContain("【已追问及回答】");
   });
+
+  it("详细版禁止机械套用空泛尾句", () => {
+    const [system] = buildPromptMessages({
+      ...BASE,
+      mode: "final",
+      round: MAX_FOLLOW_UP_ROUNDS,
+      style: "detailed",
+    });
+
+    expect(system?.content).toContain("不要机械套用");
+    expect(system?.content).toContain("整体完成情况正常");
+    expect(system?.content).not.toContain(
+      "后续持续关注其课堂吸收情况",
+    );
+    expect(system?.content).not.toContain(
+      "对接学员林小满，跟进今日校内作业",
+    );
+  });
+
+  it("追问规则不暴露内部实现概念", () => {
+    const [system] = buildPromptMessages(BASE);
+
+    expect(system?.content).toContain("不要出现“长期记忆里”");
+    expect(system?.content).not.toContain("长期记忆里陈一鸣");
+  });
+
+  it("重复规则只声明一次且不产生连续空行", () => {
+    const [system] = buildPromptMessages({
+      ...BASE,
+      mode: "final",
+      round: MAX_FOLLOW_UP_ROUNDS,
+    });
+    const content = system?.content ?? "";
+
+    expect(content.match(/条目不要带序号/g)).toHaveLength(1);
+    expect(
+      content.match(/“待确认”“待补充”“未提供”/g),
+    ).toHaveLength(1);
+    expect(content.match(/richang 必须恰好 1 条/g)).toHaveLength(1);
+    expect(content).not.toMatch(/\n{3,}/);
+  });
 });

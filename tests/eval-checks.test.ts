@@ -146,6 +146,58 @@ describe("runChecks", () => {
     );
     expect(failedNames(checks)).toEqual([]);
   });
+
+  it("追问泄露内部概念时失败", () => {
+    const checks = runChecks(
+      input({
+        mode: "questions",
+        draft: draft(
+          {},
+          {
+            questions: [
+              {
+                id: "q1",
+                text: "长期记忆里陈一鸣的数学课已经签单，今天有跟家长同步反馈吗？",
+                options: ["已经同步", "还没同步"],
+                multiple: false,
+                target: "yeji",
+              },
+            ],
+          },
+        ),
+        expect: { minQuestions: 1, questionMustHaveOptions: true },
+      }),
+    );
+
+    const quality = checks.find((check) => check.name === "追问质量");
+    expect(quality?.passed).toBe(false);
+    expect(quality?.detail).toContain("长期记忆里");
+  });
+
+  it("自然提到学生和事项时追问检查通过", () => {
+    const checks = runChecks(
+      input({
+        mode: "questions",
+        draft: draft(
+          {},
+          {
+            questions: [
+              {
+                id: "q1",
+                text: "陈一鸣的数学课已签单，今天上课后有跟家长同步反馈吗？",
+                options: ["已经同步", "还没同步"],
+                multiple: false,
+                target: "yeji",
+              },
+            ],
+          },
+        ),
+        expect: {},
+      }),
+    );
+
+    expect(failedNames(checks)).not.toContain("追问质量");
+  });
 });
 
 describe("EVAL_CASES 数据集", () => {
