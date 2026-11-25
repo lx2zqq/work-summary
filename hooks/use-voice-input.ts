@@ -227,9 +227,10 @@ export function useVoiceInput({
         receivedResultRef.current = true;
       }
 
-      // 一次事件里可能有多个已确定的分句，用换行分开，避免粘成一句
+      // 一次事件里可能有多个已确定的分句，直接拼在一起。
+      // 浏览器会在每次停顿时返回一个 final，这里不能加换行，否则整段语音会被拆成多行。
       if (finalParts.length > 0) {
-        onAppendRef.current(finalParts.join("\n"));
+        onAppendRef.current(finalParts.join(""));
       }
 
       setInterim(interimText.trim());

@@ -58,18 +58,31 @@ function formatSeconds(total: number): string {
   return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }
 
-function appendVoiceText(current: string, transcript: string): string {
+// 中文直接拼接；两端都是英文或数字时补一个空格，避免单词粘连
+function needsSpace(previous: string, next: string): boolean {
+  return /[A-Za-z0-9]$/.test(previous) && /^[A-Za-z0-9]/.test(next);
+}
+
+/**
+ * 语音识别会按停顿分段返回，必须连续拼接，不能每段都换行；
+ * 录音转写是一次性整段结果，和已有内容之间另起一行更清楚。
+ */
+function appendVoiceText(
+  current: string,
+  transcript: string,
+  separator: "" | "\n",
+): string {
   const chunk = transcript.trim();
   if (!chunk) return current;
 
-  const separator =
-    current.length === 0 || current.endsWith("\n") ? "" : "\n";
-  const available =
-    RAW_INPUT_MAX_LENGTH - current.length - separator.length;
+  const needsNewline =
+    separator === "\n" && current.length > 0 && !current.endsWith("\n");
+  const joiner = needsNewline ? "\n" : needsSpace(current, chunk) ? " " : "";
+  const available = RAW_INPUT_MAX_LENGTH - current.length - joiner.length;
 
   if (available <= 0) return current;
 
-  return `${current}${separator}${chunk.slice(0, available)}`;
+  return `${current}${joiner}${chunk.slice(0, available)}`;
 }
 
 type Props = {
@@ -135,8 +148,8 @@ export function RawInputCard({
   );
 
   const appendTranscript = useCallback(
-    (text: string) => {
-      const next = appendVoiceText(value, text);
+    (text: string, separator: "" | "\n") => {
+      const next = appendVoiceText(value, text, separator);
 
       if (next === value) {
         toast.error("已经到 6000 字上限了");
@@ -148,6 +161,16 @@ export function RawInputCard({
     [value, onChange],
   );
 
+  // 语音识别按停顿多次返回，连续拼接；录音转写只返回一次，另起一行
+  const appendSpeechTranscript = useCallback(
+    (text: string) => appendTranscript(text, ""),
+    [appendTranscript],
+  );
+  const appendRecordingTranscript = useCallback(
+    (text: string) => appendTranscript(text, "\n"),
+    [appendTranscript],
+  );
+
   const handleSpeechUnavailable = useCallback(() => {
     setForceRecorder(true);
     toast.info(
@@ -156,10 +179,10 @@ export function RawInputCard({
   }, []);
 
   const speech = useVoiceInput({
-    onAppend: appendTranscript,
+    onAppend: appendSpeechTranscript,
     onUnavailable: handleSpeechUnavailable,
   });
-  const recorder = useRecordingInput({ onAppend: appendTranscript });
+  const recorder = useRecordingInput({ onAppend: appendRecordingTranscript });
 
   const recordingMode =
     androidWeChat || forceRecorder || !speech.supported;
