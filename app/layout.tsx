@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Instrument_Serif } from "next/font/google";
 import type { ReactNode } from "react";
 import { Toaster } from "sonner";
+import { SiteFooter } from "@/components/site-footer";
 import "./globals.css";
 
 /** 只取拉丁子集，用于日期和统计数字，不加载中文字体包 */
@@ -49,6 +50,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         className={`app-bg min-h-dvh font-sans ${instrumentSerif.variable}`}
       >
         {children}
+        <SiteFooter />
         <Toaster
           position="top-center"
           toastOptions={{
