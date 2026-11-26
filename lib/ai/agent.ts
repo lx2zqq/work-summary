@@ -185,8 +185,9 @@ export async function runAgent(
         );
       }
 
-      const detail = error instanceof Error ? error.message : "未知错误";
-      throw new AiError(`模型调用失败：${detail}`, "request");
+      // 原始 SDK 错误只写服务端日志，不拼进返回给前端的文案
+      console.error("[agent:model]", error);
+      throw new AiError("模型调用失败，请稍后重试", "request");
     }
 
     rounds += 1;

@@ -1,21 +1,17 @@
-"use client";
+import { redirect } from "next/navigation";
+import { DemoMemoriesView } from "@/components/demo/demo-memories-view";
+import { getSession } from "@/lib/auth";
 
-import { useDemo } from "@/components/demo/demo-provider";
-import { MemoryManager } from "@/components/memories/memory-manager";
-import { PageHeading } from "@/components/page-heading";
+export default async function DemoMemoriesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ preview?: string }>;
+}) {
+  const session = await getSession();
+  const { preview } = await searchParams;
 
-export default function DemoMemoriesPage() {
-  const { memories, students, settings, memoryStore } = useDemo();
+  // 已登录用户默认看正式记忆；带 preview=1 时允许查看演示
+  if (session && preview !== "1") redirect("/memories");
 
-  return (
-    <div className="space-y-4">
-      <PageHeading title="长期记忆" />
-      <MemoryManager
-        initialMemories={memories}
-        students={students}
-        memoryEnabled={settings.enableMemory}
-        store={memoryStore}
-      />
-    </div>
-  );
+  return <DemoMemoriesView />;
 }

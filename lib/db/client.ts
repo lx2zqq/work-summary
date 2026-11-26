@@ -1,7 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { PGlite } from "@electric-sql/pglite";
-import { drizzle as drizzlePglite, type PgliteDatabase } from "drizzle-orm/pglite";
+import { drizzle as drizzlePglite } from "drizzle-orm/pglite";
+import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
 import { drizzle as drizzlePostgres } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import * as schema from "./schema";
@@ -9,7 +10,8 @@ import * as schema from "./schema";
 // 这里不放 server-only：Node 脚本（统计、迁移后校验）也要复用同一套连接逻辑。
 // 页面和接口请统一从 "@/lib/db" 导入，那个入口有 server-only 保护。
 
-export type AppDatabase = PgliteDatabase<typeof schema>;
+/** 两种驱动共用的查询接口，查询层只依赖这里 */
+export type AppDatabase = PgDatabase<PgQueryResultHKT, typeof schema>;
 
 type GlobalDb = {
   __reviewDb?: AppDatabase;
@@ -56,13 +58,7 @@ function createDb(): AppDatabase {
       globalForDb.__pg = client;
     }
 
-    return drizzlePostgres(client, { schema }) as unknown as AppDatabase;
-  }
-
-  if (process.env.NODE_ENV === "production") {
-    console.warn(
-      "[db] 未配置 DATABASE_URL，正在使用本地 PGlite。Vercel 等无状态环境请配置 Supabase 连接串。",
-    );
+    return drizzlePostgres(client, { schema }) as AppDatabase;
   }
 
   const dataDir =

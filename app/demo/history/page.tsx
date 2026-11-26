@@ -1,31 +1,17 @@
-"use client";
+import { redirect } from "next/navigation";
+import { DemoHistoryView } from "@/components/demo/demo-history-view";
+import { getSession } from "@/lib/auth";
 
-import { useMemo } from "react";
-import { useDemo } from "@/components/demo/demo-provider";
-import { HistoryList } from "@/components/history/history-list";
+export default async function DemoHistoryPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ preview?: string }>;
+}) {
+  const session = await getSession();
+  const { preview } = await searchParams;
 
-export default function DemoHistoryPage() {
-  const { reviews, students, today } = useDemo();
+  // 已登录用户默认看正式历史；带 preview=1 时允许查看演示
+  if (session && preview !== "1") redirect("/history");
 
-  const stats = useMemo(() => {
-    const month = today.slice(0, 7);
-
-    return {
-      total: reviews.length,
-      monthDays: new Set(
-        reviews
-          .filter((item) => item.reviewDate.startsWith(month))
-          .map((item) => item.reviewDate),
-      ).size,
-    };
-  }, [reviews, today]);
-
-  return (
-    <HistoryList
-      items={reviews}
-      students={students}
-      stats={stats}
-      demoMode
-    />
-  );
+  return <DemoHistoryView />;
 }

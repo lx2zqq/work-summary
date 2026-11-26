@@ -47,7 +47,11 @@ export function normalizeItem(item: string): string {
 }
 
 function normalizedForCompare(value: string): string {
-  return value.replace(/[\s，。！？、；：""''（）()【】]/g, "");
+  // 先剥离序号前缀（normalizeItem），再统一中英文引号，最后去掉标点
+  return normalizeItem(value)
+    .replace(/[“”„‟]/g, '"')
+    .replace(/[‘’‚‛]/g, "'")
+    .replace(/[\s，。！？、；："'（）()【】]/g, "");
 }
 
 /** 每天追加到【日常工作复盘】的通用话术条数 */

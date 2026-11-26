@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import path from "node:path";
 import { PGlite } from "@electric-sql/pglite";
+import { eq } from "drizzle-orm";
 import { drizzle, type PgliteDatabase } from "drizzle-orm/pglite";
 import { migrate } from "drizzle-orm/pglite/migrator";
 import * as schema from "@/lib/db/schema";
@@ -9,7 +10,10 @@ import {
   createStudent,
   listMemories,
   listReviews,
+  mutateCustomPhrases,
+  saveExtractedMemories,
   saveReview,
+  updateMemory,
   updateStudent,
 } from "@/lib/db/queries";
 import { emptyDraft } from "@/lib/types";
@@ -137,5 +141,87 @@ describe("listReviews", () => {
     ]);
 
     expect(await listReviews(2, "2026-11-01")).toEqual([]);
+  });
+});
+
+describe("updateMemory", () => {
+  it("不传 status 时保留原有状态", async () => {
+    const memory = await createMemory({
+      scope: "general",
+      studentId: null,
+      studentName: null,
+      category: "工作流程",
+      content: "每周五汇总本周课时。",
+      importance: 2,
+    });
+
+    await db
+      .update(schema.memories)
+      .set({ status: "archived" })
+      .where(eq(schema.memories.id, memory.id));
+
+    const updated = await updateMemory(memory.id, {
+      scope: "general",
+      studentId: null,
+      studentName: null,
+      category: "工作流程",
+      content: "每周五汇总本周课时和作业。",
+      importance: 2,
+    });
+
+    expect(updated?.status).toBe("archived");
+    expect(updated?.content).toBe("每周五汇总本周课时和作业。");
+  });
+});
+
+describe("saveExtractedMemories", () => {
+  it("事务内写入记忆并跳过重复项", async () => {
+    const result = await saveExtractedMemories({
+      date: "2026-11-26",
+      students: [],
+      items: [
+        {
+          scope: "general",
+          studentName: null,
+          category: "工作流程",
+          content: "每周五汇总本周课时。",
+          importance: 2,
+        },
+        {
+          scope: "general",
+          studentName: null,
+          category: "工作流程",
+          content: "每周五汇总本周课时。",
+          importance: 2,
+        },
+      ],
+    });
+
+    expect(result.created).toBe(1);
+    expect(result.updated).toBe(0);
+    expect(await listMemories(20)).toHaveLength(1);
+  });
+});
+
+describe("mutateCustomPhrases", () => {
+  it("在事务内读取并写回自定义话术", async () => {
+    await db.delete(schema.settings);
+
+    const result = await mutateCustomPhrases((current) => ({
+      next: [
+        ...current,
+        {
+          id: "phrase-test",
+          theme: "general",
+          content: "每天下班前把作业情况发到家长群。",
+          createdAt: new Date().toISOString(),
+        },
+      ],
+    }));
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.phrases.map((item) => item.id)).toEqual(["phrase-test"]);
+    }
   });
 });

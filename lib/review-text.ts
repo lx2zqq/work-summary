@@ -25,9 +25,33 @@ export function reviewSummary(text: string, lines = 2): string {
     .trim();
 }
 
-/** 正文里出现过的学生，用于列表下方的浅色标签 */
+function isHanChar(value: string | undefined): boolean {
+  return Boolean(value && /[一-鿿]/.test(value));
+}
+
+/**
+ * 正文里出现过的学生，用于列表下方的浅色标签。
+ * 单字姓名容易误命中别的词（例如“王”命中“王府井”），
+ * 要求匹配位置前后都不是汉字；空姓名直接跳过。
+ */
 export function matchStudents(text: string, students: Student[]): Student[] {
-  return students.filter((student) => text.includes(student.name));
+  return students.filter((student) => {
+    const name = student.name.trim();
+    if (!name) return false;
+    if (name.length > 1) return text.includes(name);
+
+    let index = text.indexOf(name);
+
+    while (index >= 0) {
+      const before = text[index - 1];
+      const after = text[index + name.length];
+
+      if (!isHanChar(before) && !isHanChar(after)) return true;
+      index = text.indexOf(name, index + 1);
+    }
+
+    return false;
+  });
 }
 
 /** 2026-11-24 -> 24 */

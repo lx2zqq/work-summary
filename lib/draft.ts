@@ -16,6 +16,7 @@ import {
 const MAX_ITEMS_PER_SECTION = 30;
 const MAX_QUESTIONS = MAX_QUESTIONS_PER_ROUND;
 const MAX_NOTES = 3;
+const VALID_TARGETS = new Set<string>([...SECTION_ORDER, "general"]);
 
 /** 生成和保存共用同一口径，只统计栏目正文，避免模板标题/emoji 被算成编辑改动 */
 export function countDraftItems(draft: ReviewDraft): number {
@@ -53,7 +54,10 @@ function uniqueClean(items: string[] | undefined): string[] {
     if (typeof raw !== "string") continue;
     const item = normalizeItem(raw);
     if (!item) continue;
-    const key = item.replace(/[\s，。！？、；：""''（）()]/g, "");
+    const key = item
+      .replace(/[“”„‟]/g, '"')
+      .replace(/[‘’‚‛]/g, "'")
+      .replace(/[\s，。！？、；："'（）()]/g, "");
     if (!key || seen.has(key)) continue;
     seen.add(key);
     result.push(item);
@@ -94,10 +98,15 @@ export function normalizeDraft(
     if (!text || seenQuestions.has(text)) continue;
     seenQuestions.add(text);
 
-    const options = (question.options ?? [])
-      .map((option) => (typeof option === "string" ? option.trim() : ""))
-      .filter(Boolean)
-      .slice(0, 4);
+    const options = Array.from(
+      new Set(
+        (question.options ?? [])
+          .map((option) =>
+            typeof option === "string" ? option.trim() : "",
+          )
+          .filter(Boolean),
+      ),
+    ).slice(0, 4);
 
     let id = question.id?.trim() || `q${index + 1}`;
     while (usedIds.has(id)) {
@@ -105,12 +114,18 @@ export function normalizeDraft(
     }
     usedIds.add(id);
 
+    // 模型偶尔会给出不存在的栏目 key，统一回退到 general
+    const target =
+      question.target && VALID_TARGETS.has(question.target)
+        ? question.target
+        : "general";
+
     questions.push({
       id,
       text,
       options,
       multiple: question.multiple === true,
-      target: question.target ?? "general",
+      target,
       reason: question.reason?.trim() || undefined,
     });
   }

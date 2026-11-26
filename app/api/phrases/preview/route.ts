@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { AiError } from "@/lib/ai/errors";
 import {
   collectExistingPhrases,
   polishCustomPhrase,
@@ -37,21 +38,34 @@ export async function POST(request: Request) {
     const settings = await getSettings();
     const students = await listStudents();
 
-    const result = await polishCustomPhrase({
-      text: parsed.data.text,
-      existing: collectExistingPhrases(
-        Object.values(DAILY_PHRASES).flat(),
-        settings.customPhrases,
-      ),
-      studentNames: students.map((student) => student.name),
-    });
+    const result = await polishCustomPhrase(
+      {
+        text: parsed.data.text,
+        existing: collectExistingPhrases(
+          Object.values(DAILY_PHRASES).flat(),
+          settings.customPhrases,
+        ),
+        studentNames: students.map((student) => student.name),
+      },
+      {
+        onUsage: (usage) => {
+          console.info(
+            `[phrases:preview] tokens: prompt=${usage.promptTokens}, completion=${usage.completionTokens}, retried=${usage.retried}`,
+          );
+        },
+      },
+    );
 
     return NextResponse.json(result);
   } catch (error) {
     console.error("[phrases:preview]", error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "润色失败" },
-      { status: 422 },
-    );
+
+    // 校验类错误是给用户看的修改建议，其余原始异常一律不返回
+    const message =
+      error instanceof AiError && error.kind === "output"
+        ? error.message
+        : "润色失败，请稍后重试";
+
+    return NextResponse.json({ error: message }, { status: 422 });
   }
 }

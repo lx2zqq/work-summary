@@ -66,10 +66,11 @@ export function percentile(
   return sorted[index];
 }
 
+const byCreatedAt = (a: StatsEvent, b: StatsEvent) =>
+  a.createdAt.localeCompare(b.createdAt);
+
 export function summarizeEvents(input: StatsEvent[]): StatsSummary {
-  const events = [...input].sort((a, b) =>
-    a.createdAt.localeCompare(b.createdAt),
-  );
+  const events = [...input].sort(byCreatedAt);
 
   const started = events.filter(
     (event) => event.event === "generate_started",
@@ -124,6 +125,11 @@ export function summarizeEvents(input: StatsEvent[]): StatsSummary {
       .filter((value): value is string => Boolean(value)),
   );
 
+  // 只统计“当天既有终稿、又发生了复制”的交集，避免复制历史复盘把比例推过 1
+  const copiedWithFinalDays = [...copiedDays].filter((date) =>
+    finalDays.has(date),
+  ).length;
+
   const followUpSkipped = answered.filter(
     (event) => event.properties.skipped === true,
   ).length;
@@ -140,14 +146,14 @@ export function summarizeEvents(input: StatsEvent[]): StatsSummary {
     .map((event) => toNumber(event.properties.toolCallCount))
     .filter((value): value is number => value !== null);
 
-  // 同一天可能重新生成多次：取最后一次最终稿和最后一次保存做对比
+  // 同一天可能重新生成多次：先按时间升序，后写入的（更晚的）覆盖前面的
   const finalByDate = new Map<string, StatsEvent>();
-  for (const event of finalFinished) {
+  for (const event of [...finalFinished].sort(byCreatedAt)) {
     if (event.reviewDate) finalByDate.set(event.reviewDate, event);
   }
 
   const savedByDate = new Map<string, StatsEvent>();
-  for (const event of saved) {
+  for (const event of [...saved].sort(byCreatedAt)) {
     if (event.reviewDate) savedByDate.set(event.reviewDate, event);
   }
 
@@ -192,7 +198,7 @@ export function summarizeEvents(input: StatsEvent[]): StatsSummary {
       answered.length - followUpSkipped,
       answered.length,
     ),
-    copyRate: ratio(copiedDays.size, finalDays.size),
+    copyRate: Math.min(1, ratio(copiedWithFinalDays, finalDays.size)),
     avgItemDelta: average(itemDeltas),
     avgCharDelta: average(charDeltas),
     memoryHitRate: ratio(memoryStarts, started.length),

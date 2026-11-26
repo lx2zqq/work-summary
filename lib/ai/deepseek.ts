@@ -69,20 +69,26 @@ export function createClient(): OpenAI {
   });
 }
 
-export function extractJson(text: string): string {
-  let value = text.trim();
+/**
+ * 去掉 Markdown 代码块。
+ * 模型经常先写“好的，以下是 JSON：”再给代码块，
+ * 所以不能只判断字符串开头。
+ */
+function stripCodeFence(text: string): string {
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fenced?.[1]) return fenced[1].trim();
 
-  if (value.startsWith("```")) {
-    value = value
-      .replace(/^```(?:json)?\s*/i, "")
-      .replace(/\s*```$/, "")
-      .trim();
-  }
+  // 只有半个围栏时，清掉围栏标记本身，保留中间内容
+  return text.replace(/```(?:json)?/gi, "").trim();
+}
+
+export function extractJson(text: string): string {
+  const value = stripCodeFence(text.trim());
 
   const start = value.indexOf("{");
   const end = value.lastIndexOf("}");
   if (start >= 0 && end > start) {
-    value = value.slice(start, end + 1);
+    return value.slice(start, end + 1);
   }
 
   return value;
@@ -187,8 +193,9 @@ async function callOnce(input: {
     // 中止不是失败，保持原始错误名供路由识别
     if (isAbortError(error, input.signal)) throw error;
 
-    const message = error instanceof Error ? error.message : "未知错误";
-    throw new AiError(`模型调用失败：${message}`, "request");
+    // 原始 SDK 错误只写服务端日志
+    console.error("[ai:model]", error);
+    throw new AiError("模型调用失败，请稍后重试", "request");
   }
 
   const content = completion.choices[0]?.message?.content?.trim() ?? "";
@@ -443,14 +450,17 @@ export function finalizeDraft(
   return normalized;
 }
 
+/**
+ * 返回给前端的错误文案。
+ * 只有 timeout / output 两种是我们自己构造的中文提示；
+ * request / config 以及未知异常一律中性化，避免暴露环境变量名和 SDK 细节。
+ */
 export function getAiErrorMessage(error: unknown): string {
   if (error instanceof AiError) {
-    // 原始请求详情只写日志，页面上给一句中性提示
-    if (error.kind === "request" && error.message.startsWith("模型调用失败")) {
-      return "生成服务暂时出了点问题，请稍后重试";
+    if (error.kind === "timeout" || error.kind === "output") {
+      return error.message;
     }
-    return error.message;
   }
-  if (error instanceof Error) return error.message;
-  return "生成服务暂时不可用";
+
+  return "生成服务暂时出了点问题，请稍后重试";
 }

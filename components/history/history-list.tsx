@@ -8,7 +8,7 @@ import {
   Trash2,
 } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ChiikawaMascot } from "@/components/mascots";
 import { Badge } from "@/components/ui/badge";
@@ -86,14 +86,51 @@ export function HistoryList({
   );
   const [deleting, setDeleting] = useState(false);
 
+  const mountedRef = useRef(true);
+  const loadMoreLockRef = useRef(false);
+  const deleteLockRef = useRef(false);
+  const loadMoreAbortRef = useRef<AbortController | null>(null);
+  const deleteAbortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    mountedRef.current = true;
+
+    return () => {
+      mountedRef.current = false;
+      loadMoreAbortRef.current?.abort();
+      deleteAbortRef.current?.abort();
+    };
+  }, []);
+
+  // 服务端刷新后同步首屏数据，避免本地状态和 props 脱节。
+  // 在渲染期间比较上一次的 props，比在 effect 里 setState 少一次级联渲染。
+  const [propsSnapshot, setPropsSnapshot] = useState({
+    items,
+    total: stats.total,
+    hasMore,
+  });
+
+  if (
+    propsSnapshot.items !== items ||
+    propsSnapshot.total !== stats.total ||
+    propsSnapshot.hasMore !== hasMore
+  ) {
+    setPropsSnapshot({ items, total: stats.total, hasMore });
+    setList(items);
+    setTotal(stats.total);
+    setCanLoadMore(hasMore);
+  }
+
   const filtered = useMemo(() => {
-    const keyword = query.trim();
+    const keyword = query.trim().toLowerCase();
     const studentName =
       students.find((student) => student.id === studentId)?.name ?? "";
+    const studentNameLower = studentName.toLowerCase();
 
     return list.filter((item) => {
-      if (studentName && !item.finalText.includes(studentName)) return false;
-      if (keyword && !item.finalText.includes(keyword)) return false;
+      const text = item.finalText.toLowerCase();
+      if (studentName && !text.includes(studentNameLower)) return false;
+      if (keyword && !text.includes(keyword)) return false;
       return true;
     });
   }, [list, query, studentId, students]);
@@ -136,13 +173,19 @@ export function HistoryList({
 
   async function loadMore() {
     const oldest = list[list.length - 1]?.reviewDate;
-    if (!oldest || loadingMore) return;
+    // state 更新是异步的，用同步锁挡住连击
+    if (!oldest || loadMoreLockRef.current) return;
 
+    loadMoreLockRef.current = true;
+    loadMoreAbortRef.current?.abort();
+    const controller = new AbortController();
+    loadMoreAbortRef.current = controller;
     setLoadingMore(true);
 
     try {
       const response = await fetch(
         `/api/reviews?limit=50&before=${encodeURIComponent(oldest)}`,
+        { signal: controller.signal },
       );
       const data = (await response.json().catch(() => ({}))) as {
         error?: string;
@@ -152,6 +195,10 @@ export function HistoryList({
 
       if (!response.ok) {
         throw new Error(data.error || "加载失败，请稍后重试");
+      }
+
+      if (!mountedRef.current || loadMoreAbortRef.current !== controller) {
+        return;
       }
 
       const incoming = data.reviews ?? [];
@@ -164,20 +211,31 @@ export function HistoryList({
       });
       setCanLoadMore(Boolean(data.hasMore));
     } catch (error) {
+      if (controller.signal.aborted) return;
       toast.error(error instanceof Error ? error.message : "加载失败");
     } finally {
-      setLoadingMore(false);
+      if (loadMoreAbortRef.current === controller) {
+        loadMoreAbortRef.current = null;
+        loadMoreLockRef.current = false;
+        if (mountedRef.current) setLoadingMore(false);
+      }
     }
   }
 
   async function handleDelete() {
-    if (!deleteTarget) return;
+    const target = deleteTarget;
+    if (!target || deleteLockRef.current) return;
 
+    deleteLockRef.current = true;
+    deleteAbortRef.current?.abort();
+    const controller = new AbortController();
+    deleteAbortRef.current = controller;
     setDeleting(true);
 
     try {
-      const response = await fetch(`/api/reviews/${deleteTarget.id}`, {
+      const response = await fetch(`/api/reviews/${target.id}`, {
         method: "DELETE",
+        signal: controller.signal,
       });
       const data = (await response.json().catch(() => ({}))) as {
         error?: string;
@@ -187,22 +245,31 @@ export function HistoryList({
         throw new Error(data.error || "删除失败");
       }
 
+      if (!mountedRef.current || deleteAbortRef.current !== controller) {
+        return;
+      }
+
       setList((previous) =>
-        previous.filter((item) => item.id !== deleteTarget.id),
+        previous.filter((item) => item.id !== target.id),
       );
       setTotal((previous) => Math.max(0, previous - 1));
       setExpandedIds((previous) => {
-        if (!previous.has(deleteTarget.id)) return previous;
+        if (!previous.has(target.id)) return previous;
         const next = new Set(previous);
-        next.delete(deleteTarget.id);
+        next.delete(target.id);
         return next;
       });
       setDeleteTarget(null);
       toast.success("已删除这篇复盘");
     } catch (error) {
+      if (controller.signal.aborted) return;
       toast.error(error instanceof Error ? error.message : "删除失败");
     } finally {
-      setDeleting(false);
+      if (deleteAbortRef.current === controller) {
+        deleteAbortRef.current = null;
+        deleteLockRef.current = false;
+        if (mountedRef.current) setDeleting(false);
+      }
     }
   }
 

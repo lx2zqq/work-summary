@@ -1,6 +1,10 @@
 // 仅服务端使用：从当天最终复盘里提取长期记忆
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
-import { memoryExtractionSchema } from "@/lib/schema";
+import { normalizeMemoryText } from "@/lib/memory";
+import {
+  memoryExtractionSchema,
+  type ExtractedMemory,
+} from "@/lib/schema";
 import type { MemoryPromptItem, Student } from "@/lib/types";
 import {
   AiError,
@@ -10,6 +14,11 @@ import {
   type AiUsage,
 } from "./deepseek";
 import { createAbortError, isAbortError } from "./errors";
+
+/** 单次送进模型的复盘正文上限，避免超长流水账挤占上下文 */
+const MAX_FINAL_TEXT_CHARS = 6000;
+/** 学生名单最多带多少个名字 */
+const MAX_STUDENT_NAMES = 200;
 
 const OUTPUT_SCHEMA = `{
   "memories": [
@@ -78,9 +87,52 @@ function formatExistingMemories(memories: MemoryPromptItem[]): string {
 }
 
 function formatStudents(students: Student[]): string {
-  if (students.length === 0) return "暂无学生名单。";
+  const names = students
+    .slice(0, MAX_STUDENT_NAMES)
+    .map((student) => student.name);
 
-  return students.map((student) => `- ${student.name}`).join("\n");
+  if (names.length === 0) return "暂无学生名单。";
+
+  return names.map((name) => `- ${name}`).join("\n");
+}
+
+/** 按码点截断，避免把 emoji 之类的代理对切成半个字符 */
+function truncateChars(value: string, max: number): string {
+  const chars = Array.from(value);
+  return chars.length > max ? `${chars.slice(0, max).join("")}…` : value;
+}
+
+function memoryKey(
+  scope: string,
+  studentName: string | null | undefined,
+  content: string,
+): string {
+  return `${scope}|${(studentName ?? "").trim()}|${normalizeMemoryText(content)}`;
+}
+
+/** 同一批次内去重，并排除与已有记忆完全重复的条目 */
+function dedupeExtracted(
+  items: ExtractedMemory[],
+  existing: MemoryPromptItem[],
+): ExtractedMemory[] {
+  const seen = new Set<string>();
+  const existingKeys = new Set(
+    existing.map((memory) =>
+      memoryKey(memory.scope, memory.studentName, memory.content),
+    ),
+  );
+  const result: ExtractedMemory[] = [];
+
+  for (const item of items) {
+    const key = memoryKey(item.scope, item.studentName, item.content);
+
+    if (seen.has(key) || existingKeys.has(key)) continue;
+
+    seen.add(key);
+    result.push(item);
+  }
+
+  return result;
 }
 
 function parseMemories(content: string) {
@@ -140,6 +192,11 @@ export async function extractMemories(
     retried: false,
   };
 
+  const finalText = truncateChars(
+    input.finalText.trim(),
+    MAX_FINAL_TEXT_CHARS,
+  );
+
   const messages: ChatCompletionMessageParam[] = [
     { role: "system", content: MEMORY_RULES },
     {
@@ -148,7 +205,7 @@ export async function extractMemories(
         `【今天日期】${input.date}`,
         `【学生名单】\n${formatStudents(input.students)}`,
         `【已有记忆】\n${formatExistingMemories(input.existing)}`,
-        `【今天的最终复盘】\n${input.finalText.trim()}`,
+        `【今天的最终复盘】\n<<<\n${finalText}\n>>>`,
         "请只输出 JSON。",
       ].join("\n\n"),
     },
@@ -157,87 +214,89 @@ export async function extractMemories(
   let content = "";
 
   try {
-    const completion = await client.chat.completions.create(
-      {
-        model,
-        messages,
-        temperature: 0.1,
-        max_tokens: 1200,
-        response_format: { type: "json_object" },
-      },
-      { signal: options?.signal },
-    );
-
-    content = completion.choices[0]?.message?.content?.trim() ?? "";
-
-    if (completion.usage) {
-      usage.promptTokens += completion.usage.prompt_tokens ?? 0;
-      usage.completionTokens += completion.usage.completion_tokens ?? 0;
-      console.info(
-        `[ai:memory] ${model} tokens: prompt=${completion.usage.prompt_tokens}, completion=${completion.usage.completion_tokens}`,
+    try {
+      const completion = await client.chat.completions.create(
+        {
+          model,
+          messages,
+          temperature: 0.1,
+          max_tokens: 1200,
+          response_format: { type: "json_object" },
+        },
+        { signal: options?.signal },
       );
+
+      content = completion.choices[0]?.message?.content?.trim() ?? "";
+
+      if (completion.usage) {
+        usage.promptTokens += completion.usage.prompt_tokens ?? 0;
+        usage.completionTokens += completion.usage.completion_tokens ?? 0;
+        console.info(
+          `[ai:memory] ${model} tokens: prompt=${completion.usage.prompt_tokens}, completion=${completion.usage.completion_tokens}`,
+        );
+      }
+    } catch (error) {
+      if (isAbortError(error, options?.signal)) throw error;
+
+      // 原始 SDK 错误只写服务端日志
+      console.error("[ai:memory] 请求失败", error);
+      throw new AiError("记忆整理服务暂时不可用，请稍后重试", "request");
     }
-  } catch (error) {
-    if (isAbortError(error, options?.signal)) throw error;
 
-    const message =
-      error instanceof Error ? error.message : "未知错误";
-    throw new AiError(`记忆整理失败：${message}`, "request");
-  }
+    const first = parseMemories(content);
+    if (first.memories) {
+      return dedupeExtracted(first.memories, input.existing);
+    }
 
-  const first = parseMemories(content);
-  if (first.memories) {
-    options?.onUsage?.(usage);
-    return first.memories;
-  }
+    if (options?.signal?.aborted) throw createAbortError();
 
-  if (options?.signal?.aborted) throw createAbortError();
-
-  usage.retried = true;
-  const retryMessages: ChatCompletionMessageParam[] = [
-    ...messages,
-    { role: "assistant", content: content || "（空输出）" },
-    {
-      role: "user",
-      content: `上面的输出不能使用：${first.error}。请只输出修正后的完整 JSON，不要输出解释或 Markdown 代码块。`,
-    },
-  ];
-
-  try {
-    const retry = await client.chat.completions.create(
+    usage.retried = true;
+    const retryMessages: ChatCompletionMessageParam[] = [
+      ...messages,
+      { role: "assistant", content: content || "（空输出）" },
       {
-        model,
-        messages: retryMessages,
-        temperature: 0.1,
-        max_tokens: 1200,
-        response_format: { type: "json_object" },
+        role: "user",
+        content: `上面的输出不能使用：${first.error}。请只输出修正后的完整 JSON，不要输出解释或 Markdown 代码块。`,
       },
-      { signal: options?.signal },
-    );
-    const retryContent =
-      retry.choices[0]?.message?.content?.trim() ?? "";
+    ];
 
-    if (retry.usage) {
-      usage.promptTokens += retry.usage.prompt_tokens ?? 0;
-      usage.completionTokens += retry.usage.completion_tokens ?? 0;
+    try {
+      const retry = await client.chat.completions.create(
+        {
+          model,
+          messages: retryMessages,
+          temperature: 0.1,
+          max_tokens: 1200,
+          response_format: { type: "json_object" },
+        },
+        { signal: options?.signal },
+      );
+      const retryContent =
+        retry.choices[0]?.message?.content?.trim() ?? "";
+
+      if (retry.usage) {
+        usage.promptTokens += retry.usage.prompt_tokens ?? 0;
+        usage.completionTokens += retry.usage.completion_tokens ?? 0;
+      }
+
+      const second = parseMemories(retryContent);
+
+      if (second.memories) {
+        return dedupeExtracted(second.memories, input.existing);
+      }
+
+      throw new AiError(
+        "记忆整理结果格式不对，已自动重试一次，请稍后再试",
+        "output",
+      );
+    } catch (error) {
+      if (isAbortError(error, options?.signal)) throw error;
+      if (error instanceof AiError) throw error;
+      console.error("[ai:memory] 重试请求失败", error);
+      throw new AiError("记忆整理服务暂时不可用，请稍后重试", "request");
     }
-
-    const second = parseMemories(retryContent);
-
-    if (second.memories) {
-      options?.onUsage?.(usage);
-      return second.memories;
-    }
-
-    throw new AiError(
-      "记忆整理结果格式不对，已自动重试一次，请稍后再试",
-      "output",
-    );
-  } catch (error) {
-    if (isAbortError(error, options?.signal)) throw error;
-    if (error instanceof AiError) throw error;
-    const message =
-      error instanceof Error ? error.message : "未知错误";
-    throw new AiError(`记忆整理重试失败：${message}`, "request");
+  } finally {
+    // 成功、格式失败、网络失败都上报，避免统计漏掉重试消耗的 token
+    options?.onUsage?.(usage);
   }
 }

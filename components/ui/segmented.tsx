@@ -15,21 +15,25 @@ export function Segmented<T extends string>({
   onChange,
   className,
   ariaLabel,
+  disabled = false,
 }: {
   options: Option<T>[];
   value: T;
   onChange: (value: T) => void;
   className?: string;
   ariaLabel?: string;
+  disabled?: boolean;
 }) {
   return (
     <div
       className={cn(
         "inline-flex items-center rounded-lg border border-line bg-cream-deep/70 p-0.5",
+        disabled && "opacity-50",
         className,
       )}
       role="group"
       aria-label={ariaLabel}
+      aria-disabled={disabled}
     >
       {options.map((option) => {
         const active = option.value === value;
@@ -38,6 +42,8 @@ export function Segmented<T extends string>({
             key={option.value}
             type="button"
             aria-pressed={active}
+            disabled={disabled}
+            tabIndex={disabled ? -1 : undefined}
             onClick={() => onChange(option.value)}
             className={cn(
               "inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",

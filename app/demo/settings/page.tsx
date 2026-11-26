@@ -1,29 +1,17 @@
-"use client";
+import { redirect } from "next/navigation";
+import { DemoSettingsView } from "@/components/demo/demo-settings-view";
+import { getSession } from "@/lib/auth";
 
-import { useMemo } from "react";
-import { useDemo } from "@/components/demo/demo-provider";
-import { PageHeading } from "@/components/page-heading";
-import { SettingsForm } from "@/components/settings/settings-form";
-import { DEMO_AI_MODEL } from "@/lib/demo-data";
+export default async function DemoSettingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ preview?: string }>;
+}) {
+  const session = await getSession();
+  const { preview } = await searchParams;
 
-export default function DemoSettingsPage() {
-  const { settings, updateSettings } = useDemo();
+  // 已登录用户默认看正式设置；带 preview=1 时允许查看演示
+  if (session && preview !== "1") redirect("/settings");
 
-  const store = useMemo(
-    () => ({ update: updateSettings }),
-    [updateSettings],
-  );
-
-  return (
-    <div className="mx-auto max-w-5xl space-y-4">
-      <PageHeading title="设置" />
-      <SettingsForm
-        initialSettings={settings}
-        aiModel={DEMO_AI_MODEL}
-        aiConfigured
-        store={store}
-        demoMode
-      />
-    </div>
-  );
+  return <DemoSettingsView />;
 }

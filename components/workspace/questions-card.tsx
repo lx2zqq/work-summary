@@ -183,12 +183,12 @@ export function QuestionsCard({
 
               {question.options.length > 0 ? (
                 <div className="mt-2.5 flex flex-wrap gap-2 pl-7">
-                  {question.options.map((option) => {
+                  {question.options.map((option, optionIndex) => {
                     const selected = state.selected.includes(option);
 
                     return (
                       <button
-                        key={option}
+                        key={`${question.id}-option-${optionIndex}-${option}`}
                         type="button"
                         aria-pressed={selected}
                         onClick={() => toggleOption(question, option)}
@@ -208,6 +208,7 @@ export function QuestionsCard({
 
               <Input
                 value={state.custom}
+                aria-label={`第 ${index + 1} 个问题的补充说明`}
                 onChange={(event) =>
                   setCustom(question, event.target.value)
                 }

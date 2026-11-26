@@ -172,7 +172,7 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error("[generate:db]", error);
     return NextResponse.json(
-      { error: "数据库还没准备好，请先运行 npm run db:migrate" },
+      { error: "服务暂时不可用，请稍后重试" },
       { status: 500 },
     );
   }
@@ -216,8 +216,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       draft,
       fallback: true,
-      warning:
-        "服务端还没有配置 REVIEW_DEEPSEEK_API_KEY，已按原文生成草稿；配置后会自动使用 AI 整理。",
+      warning: "AI 服务暂时不可用，已按原文生成草稿，请手动调整。",
       memories: context.memories,
     });
   }

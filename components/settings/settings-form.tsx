@@ -133,7 +133,14 @@ export function SettingsForm({
 
     try {
       const response = await fetch("/api/auth/logout", { method: "POST" });
-      if (!response.ok) throw new Error("退出失败，请重试");
+      const data = (await response.json().catch(() => ({}))) as {
+        error?: string;
+      };
+
+      if (!response.ok) {
+        throw new Error(data.error || "退出失败，请重试");
+      }
+
       resetGenerationStore();
       router.replace("/login");
       router.refresh();
@@ -194,6 +201,7 @@ export function SettingsForm({
                 ]}
                 value={settings.defaultStyle}
                 onChange={changeDefaultStyle}
+                disabled={pendingKey !== null}
                 ariaLabel="默认文风"
               />
             </div>

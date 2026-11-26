@@ -65,6 +65,14 @@ export function useWorkspaceAutosave({
   const saveQueueRef = useRef<Promise<boolean>>(Promise.resolve(true));
   const savingCountRef = useRef(0);
   const editRevisionRef = useRef(0);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     dateRef.current = date;
@@ -82,14 +90,23 @@ export function useWorkspaceAutosave({
       options: { silent?: boolean },
       revision: number,
     ): Promise<boolean> => {
+      // 清空内容属于有效编辑：不发请求，但要把 dirty 复位，
+      // 否则自动保存会一直触发、状态永远停在“未保存”。
       if (!payload.rawInput.trim() && !hasDraftContent(payload.draft)) {
-        return false;
+        if (mountedRef.current && editRevisionRef.current === revision) {
+          setDirty(false);
+          setSaveFailed(false);
+        }
+        return true;
       }
 
-      const isLatest = () => editRevisionRef.current === revision;
+      const isLatest = () =>
+        mountedRef.current &&
+        editRevisionRef.current === revision &&
+        dateRef.current === payload.date;
 
       savingCountRef.current += 1;
-      setSaving(true);
+      if (mountedRef.current) setSaving(true);
       if (isLatest()) setSaveFailed(false);
 
       try {
@@ -110,9 +127,12 @@ export function useWorkspaceAutosave({
         const nextSavedAt =
           data.review?.updatedAt ?? new Date().toISOString();
         savedAtRef.current = nextSavedAt;
+
+        if (!mountedRef.current) return true;
         setSavedAt(nextSavedAt);
 
-        // 请求期间用户可能又改了内容，只有版本未变化才能标记为已保存
+        // 请求期间用户可能又改了内容，或已经切到别的日期，
+        // 只有版本和日期都没变化才能标记为已保存
         if (isLatest()) {
           setDirty(false);
           if (!options.silent) toast.success("已保存");
@@ -138,7 +158,9 @@ export function useWorkspaceAutosave({
         return false;
       } finally {
         savingCountRef.current = Math.max(0, savingCountRef.current - 1);
-        if (savingCountRef.current === 0) setSaving(false);
+        if (savingCountRef.current === 0 && mountedRef.current) {
+          setSaving(false);
+        }
       }
     },
     [activeJobIdRef],
@@ -178,26 +200,65 @@ export function useWorkspaceAutosave({
     dirtyRef.current = dirty;
   }, [date, rawInput, draft, style, conversation, round, dirty]);
 
-  // 切页时补存还没落库的输入；有生成任务时交给生成任务自己保存
+  /**
+   * 页面隐藏或卸载时的补存。
+   * 普通 fetch 可能被浏览器取消，所以优先 sendBeacon，
+   * 否则退回 keepalive 请求。
+   */
+  const flushWithKeepalive = useCallback(() => {
+    if (!dirtyRef.current) return;
+
+    const payload = latestPayloadRef.current;
+    if (!payload) return;
+    if (!payload.rawInput.trim() && !hasDraftContent(payload.draft)) return;
+
+    // 有生成任务在跑时，结果和保存交给生成流程
+    const job = getGenerationJob();
+    if (
+      job &&
+      job.date === payload.date &&
+      job.status !== "error" &&
+      !job.saveFailed
+    ) {
+      return;
+    }
+
+    const body = JSON.stringify(payload);
+
+    if (typeof navigator !== "undefined" && navigator.sendBeacon) {
+      const blob = new Blob([body], { type: "application/json" });
+      if (navigator.sendBeacon("/api/reviews", blob)) return;
+    }
+
+    void fetch("/api/reviews", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body,
+      keepalive: true,
+    }).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    const handlePageHide = () => flushWithKeepalive();
+    const handleVisibility = () => {
+      if (document.visibilityState === "hidden") flushWithKeepalive();
+    };
+
+    window.addEventListener("pagehide", handlePageHide);
+    document.addEventListener("visibilitychange", handleVisibility);
+
+    return () => {
+      window.removeEventListener("pagehide", handlePageHide);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [flushWithKeepalive]);
+
+  // 组件卸载（路由切换）时再补一次
   useEffect(() => {
     return () => {
-      if (!dirtyRef.current) return;
-
-      const job = getGenerationJob();
-
-      if (
-        job &&
-        job.date === dateRef.current &&
-        job.status !== "error" &&
-        !job.saveFailed
-      ) {
-        return;
-      }
-
-      const payload = latestPayloadRef.current;
-      if (payload) void persistReview(payload, { silent: true });
+      flushWithKeepalive();
     };
-  }, [persistReview]);
+  }, [flushWithKeepalive]);
 
   useEffect(() => {
     if (!dirty || loading || hydratedDate !== date) return;

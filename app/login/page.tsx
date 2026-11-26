@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { LoginForm } from "@/components/login-form";
 import { MascotFace } from "@/components/mascots";
 import { getSession } from "@/lib/auth";
+import { sanitizeNextPath } from "@/lib/safe-path";
 
 export default async function LoginPage({
   searchParams,
@@ -13,8 +14,7 @@ export default async function LoginPage({
   if (session) redirect("/");
 
   const { next } = await searchParams;
-  const safeNext =
-    next && next.startsWith("/") && !next.startsWith("//") ? next : "/";
+  const safeNext = sanitizeNextPath(next);
 
   return (
     <main className="app-bg flex min-h-dvh items-center justify-center px-4 py-10">

@@ -1,9 +1,11 @@
 name: Deploy production
 
 on:
-  push:
-    branches:
-      - main
+  # 只在 main 分支的 CI 成功完成后部署，避免把未通过检查的提交发到线上
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -15,27 +17,33 @@ concurrency:
 
 jobs:
   deploy:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # workflow_run 触发时部署 CI 验证过的那个提交，而不是默认分支最新提交
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Prepare SSH key
         env:
           SERVER_HOST: ${{ secrets.SERVER_HOST }}
           SERVER_SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
         run: |
-          if [ -z "$SERVER_HOST" ] || [ -z "$SERVER_SSH_KEY" ]; then
-            echo "SERVER_HOST 或 SERVER_SSH_KEY 未配置"
+          if [ -z "$SERVER_HOST" ] || [ -z "$SERVER_SSH_KEY" ] || [ -z "$SSH_KNOWN_HOSTS" ]; then
+            echo "SERVER_HOST / SERVER_SSH_KEY / SSH_KNOWN_HOSTS 未配置"
             exit 1
           fi
           mkdir -p ~/.ssh
           printf '%s\n' "$SERVER_SSH_KEY" | tr -d '\r' > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           echo "部署密钥指纹：$(ssh-keygen -lf ~/.ssh/deploy_key | awk '{print $2}')"
-          ssh-keyscan -H "$SERVER_HOST" >> ~/.ssh/known_hosts
+          # 使用提前固定的 known_hosts，避免运行时信任 ssh-keyscan 的结果
+          printf '%s\n' "$SSH_KNOWN_HOSTS" | tr -d '\r' > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
 
       - name: Deploy over SSH

@@ -137,7 +137,7 @@ const RESTYLE_RULES = `【改文风规则】
 - 详细版：展开每条到约 40-100 个汉字，补充对象、动作、结果/后续关注，但不得编造。
 - 不要原样照抄当前草稿；必须让用户能看出文风变化。
 - 五个核心栏目的空数组继续保持空数组。
-- 只输出 sections 和 notes；不要再提问，questions 必须为空数组。`;
+- 只输出 sections 和 notes，不要输出其他字段。`;
 
 const MEMORY_USAGE_RULES = `【长期记忆使用规则】
 - 长期记忆只用于理解背景和追踪进展，今天的流水账/问答才是事实来源。
@@ -225,6 +225,12 @@ function formatRecentReviews(
 function buildSystemPrompt(context: PromptContext): string {
   const isQuestions = context.mode === "questions";
   const isRestyle = context.mode === "restyle";
+
+  // 改文风以当前草稿为唯一底稿，没有草稿就无法生成有效结果
+  if (isRestyle && !context.currentDraft) {
+    throw new Error("改文风需要当前草稿");
+  }
+
   // 改文风只改措辞，不需要外部数据，永远不走工具
   const usesTools = context.toolsEnabled === true && !isRestyle;
   const outputSchema = isQuestions
@@ -292,14 +298,17 @@ ${formatRecentReviews(context.recentReviews)}`
       ? MEMORY_USAGE_RULES
       : "";
 
-  const contextBlock = [
-    `【今天的上下文】\n今天日期：${formatDateCN(context.reviewDate)}`,
-    settingsBlock,
-    studentsBlock,
-    recentBlock,
-  ]
-    .filter(Boolean)
-    .join("\n\n");
+  // 改文风不依赖日期、名单和历史，避免无关上下文干扰改写
+  const contextBlock = isRestyle
+    ? ""
+    : [
+        `【今天的上下文】\n今天日期：${formatDateCN(context.reviewDate)}`,
+        settingsBlock,
+        studentsBlock,
+        recentBlock,
+      ]
+        .filter(Boolean)
+        .join("\n\n");
 
   return [
     `你是“学管部工作复盘”写作助手，服务对象是教育培训机构的学管师。用户会把当天零散、口语化的工作流水账发给你，你要帮她把信息补全并整理成可以直接复制到钉钉工作群的规范复盘。`,
@@ -330,7 +339,7 @@ function buildUserPrompt(context: PromptContext): string {
     return [
       `【当前草稿】\n${JSON.stringify(context.currentDraft ?? {}, null, 2)}`,
       `【目标文风】${STYLE_LABEL[context.style]}`,
-      "请只输出重写后的 sections 和 notes。保留所有栏目、条目数量、顺序、事实和用户修改；只改文字表达和详略；questions 必须为空数组。不要输出 JSON 以外的内容。",
+      "请只输出重写后的 sections 和 notes。保留所有栏目、条目数量、顺序、事实和用户修改；只改文字表达和详略。不要输出 JSON 以外的内容。",
     ].join("\n\n");
   }
 

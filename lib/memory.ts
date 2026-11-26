@@ -145,10 +145,14 @@ export function resolveMemoryStudent(
   const name = input.studentName?.trim();
   if (!name) return { studentId: null, studentName: null };
 
-  const byName = students.find((student) => student.name === name);
-  return byName
-    ? { studentId: byName.id, studentName: byName.name }
-    : { studentId: null, studentName: name };
+  const byName = students.filter((student) => student.name === name);
+
+  // 同名学生会撞车：只有唯一匹配时才绑定 id，否则只保留名字
+  if (byName.length === 1) {
+    return { studentId: byName[0].id, studentName: byName[0].name };
+  }
+
+  return { studentId: null, studentName: name };
 }
 
 export function hasSameMemoryContent(

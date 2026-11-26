@@ -6,10 +6,11 @@ import {
   trackEvent,
 } from "@/lib/analytics/events";
 import { requireApiSession } from "@/lib/api-helpers";
+import { isoDateSchema } from "@/lib/schema";
 
 const bodySchema = z.object({
   event: z.enum(CLIENT_EVENTS),
-  reviewDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  reviewDate: isoDateSchema,
   properties: eventPropertiesSchema.default({}),
 });
 
@@ -24,11 +25,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "事件参数不对" }, { status: 400 });
   }
 
-  await trackEvent({
-    event: parsed.data.event,
-    reviewDate: parsed.data.reviewDate,
-    properties: parsed.data.properties,
-  });
+  try {
+    await trackEvent({
+      event: parsed.data.event,
+      reviewDate: parsed.data.reviewDate,
+      properties: parsed.data.properties,
+    });
+  } catch (error) {
+    // 埋点失败不影响前端主流程
+    console.error("[events:POST]", error);
+  }
 
   return NextResponse.json({ ok: true });
 }

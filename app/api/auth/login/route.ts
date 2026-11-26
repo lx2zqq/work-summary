@@ -6,6 +6,7 @@ import {
 } from "@/lib/auth";
 import {
   checkLoginRateLimit,
+  getClientId,
   resetLoginRateLimit,
 } from "@/lib/rate-limit";
 import { loginSchema } from "@/lib/schema";
@@ -13,7 +14,12 @@ import { loginSchema } from "@/lib/schema";
 export async function POST(request: Request) {
   const configError = getAuthConfigError();
   if (configError) {
-    return NextResponse.json({ error: configError }, { status: 500 });
+    // 配置细节只写服务端日志，不把环境变量名返回给客户端
+    console.error("[auth:login] 配置不完整：", configError);
+    return NextResponse.json(
+      { error: "服务暂时不可用，请稍后重试" },
+      { status: 500 },
+    );
   }
 
   const body = await request.json().catch(() => null);
@@ -22,13 +28,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "请输入密码" }, { status: 400 });
   }
 
-  const key = getClientKey(request);
+  const key = getClientId(request);
   const limit = checkLoginRateLimit(key);
   if (!limit.allowed) {
     const minutes = Math.max(1, Math.ceil(limit.retryAfter / 60));
     return NextResponse.json(
       { error: `尝试次数太多，请 ${minutes} 分钟后再试` },
-      { status: 429 },
+      {
+        status: 429,
+        headers: { "Retry-After": String(limit.retryAfter) },
+      },
     );
   }
 
@@ -44,16 +53,10 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error("[auth:login]", error);
     return NextResponse.json(
-      { error: "创建登录态失败，请检查 AUTH_SECRET" },
+      { error: "登录失败，请稍后重试" },
       { status: 500 },
     );
   }
 
   return NextResponse.json({ ok: true });
-}
-
-function getClientKey(request: Request): string {
-  const forwarded = request.headers.get("x-forwarded-for");
-  if (forwarded) return forwarded.split(",")[0]?.trim() || "unknown";
-  return request.headers.get("x-real-ip") || "local";
 }

@@ -7,7 +7,7 @@ import {
 } from "@/lib/ai/phrase";
 import { DAILY_PHRASES } from "@/lib/daily-phrase";
 import { firstIssue, requireApiSession } from "@/lib/api-helpers";
-import { getSettings, listStudents, updateSettings } from "@/lib/db/queries";
+import { listStudents, mutateCustomPhrases } from "@/lib/db/queries";
 import { addPhraseSchema } from "@/lib/schema";
 import { MAX_CUSTOM_PHRASES } from "@/lib/types";
 
@@ -27,38 +27,43 @@ export async function POST(request: Request) {
   }
 
   try {
-    const settings = await getSettings();
-
-    if (!canAddMorePhrases(settings.customPhrases)) {
-      return NextResponse.json(
-        { error: `最多保存 ${MAX_CUSTOM_PHRASES} 条，先删掉几条再加` },
-        { status: 400 },
-      );
-    }
-
     const students = await listStudents();
-    // 前端已经校验过，这里再校验一次，防止绕过预览接口直接写入
-    const issues = validateCustomPhrase({
-      phrase: parsed.data.phrase,
-      existing: collectExistingPhrases(
-        Object.values(DAILY_PHRASES).flat(),
-        settings.customPhrases,
-      ),
-      studentNames: students.map((student) => student.name),
+    const phrase = buildCustomPhrase(parsed.data);
+
+    // 读取和写入放在同一个事务里，避免并发添加时后一次覆盖前一次
+    const result = await mutateCustomPhrases((current) => {
+      if (!canAddMorePhrases(current)) {
+        return { error: `最多保存 ${MAX_CUSTOM_PHRASES} 条，先删掉几条再加` };
+      }
+
+      // 前端已经校验过，这里再校验一次，防止绕过预览接口直接写入
+      const issues = validateCustomPhrase({
+        phrase: parsed.data.phrase,
+        existing: collectExistingPhrases(
+          Object.values(DAILY_PHRASES).flat(),
+          current,
+        ),
+        studentNames: students.map((student) => student.name),
+      });
+
+      if (issues.length > 0) {
+        return { error: issues.join("；") };
+      }
+
+      return { next: [...current, phrase] };
     });
 
-    if (issues.length > 0) {
+    if (!result.ok) {
       return NextResponse.json(
-        { error: issues.join("；") },
-        { status: 400 },
+        { error: result.error },
+        { status: result.status },
       );
     }
 
-    const phrase = buildCustomPhrase(parsed.data);
-    const next = [...settings.customPhrases, phrase];
-    const saved = await updateSettings({ customPhrases: next });
-
-    return NextResponse.json({ phrase, phrases: saved.customPhrases });
+    return NextResponse.json(
+      { phrase, phrases: result.phrases },
+      { status: 201 },
+    );
   } catch (error) {
     console.error("[phrases:add]", error);
     return NextResponse.json({ error: "保存失败" }, { status: 500 });

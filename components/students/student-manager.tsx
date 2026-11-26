@@ -1,7 +1,7 @@
 "use client";
 
 import { Pencil, Plus, Trash2, UserRound } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { HachiwareMascot } from "@/components/mascots";
 import { Badge } from "@/components/ui/badge";
@@ -87,8 +87,32 @@ export function StudentManager({
   const [deleting, setDeleting] = useState(false);
   const [detailStudent, setDetailStudent] = useState<Student | null>(null);
 
+  const mountedRef = useRef(true);
+  const saveLockRef = useRef(false);
+  const deleteLockRef = useRef(false);
+  const saveAbortRef = useRef<AbortController | null>(null);
+  const deleteAbortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    mountedRef.current = true;
+
+    return () => {
+      mountedRef.current = false;
+      saveAbortRef.current?.abort();
+      deleteAbortRef.current?.abort();
+    };
+  }, []);
+
+  // 服务端刷新后同步 props；在渲染期间比较，避免 effect 里 setState
+  const [initialSnapshot, setInitialSnapshot] = useState(initialStudents);
+
+  if (initialSnapshot !== initialStudents) {
+    setInitialSnapshot(initialStudents);
+    setStudents(initialStudents);
+  }
+
   const filtered = useMemo(() => {
-    const keyword = query.trim();
+    const keyword = query.trim().toLowerCase();
 
     return students.filter((student) => {
       if (statusFilter !== "all" && student.status !== statusFilter) {
@@ -101,7 +125,7 @@ export function StudentManager({
         student.grade ?? "",
         student.subjects ?? "",
         student.note ?? "",
-      ].some((value) => value.includes(keyword));
+      ].some((value) => value.toLowerCase().includes(keyword));
     });
   }, [students, query, statusFilter]);
 
@@ -143,19 +167,28 @@ export function StudentManager({
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!form.name.trim()) {
+    const name = form.name.trim();
+
+    if (!name) {
       toast.error("请填写学生姓名");
       return;
     }
 
+    if (saveLockRef.current) return;
+    saveLockRef.current = true;
     setSaving(true);
 
+    saveAbortRef.current?.abort();
+    const controller = new AbortController();
+    saveAbortRef.current = controller;
+
     const payload = {
-      name: form.name,
-      grade: form.grade || null,
-      subjects: form.subjects || null,
+      // 姓名和年级提交前统一去掉首尾空格，避免出现看不见的空格
+      name,
+      grade: form.grade.trim() || null,
+      subjects: form.subjects.trim() || null,
       status: form.status,
-      note: form.note || null,
+      note: form.note.trim() || null,
     };
 
     try {
@@ -168,6 +201,7 @@ export function StudentManager({
                 method: editing ? "PATCH" : "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(payload),
+                signal: controller.signal,
               },
             );
             const data = (await response.json().catch(() => ({}))) as {
@@ -181,6 +215,8 @@ export function StudentManager({
 
             return data.student;
           })();
+
+      if (!mountedRef.current || saveAbortRef.current !== controller) return;
 
       setStudents((previous) =>
         editing
@@ -196,23 +232,35 @@ export function StudentManager({
       }
       toast.success(editing ? "已更新学生信息" : "已添加学生");
     } catch (error) {
+      if (controller.signal.aborted) return;
       toast.error(error instanceof Error ? error.message : "保存失败");
     } finally {
-      setSaving(false);
+      if (saveAbortRef.current === controller) {
+        saveAbortRef.current = null;
+        saveLockRef.current = false;
+        if (mountedRef.current) setSaving(false);
+      }
     }
   }
 
   async function handleDelete() {
-    if (!deleteTarget) return;
+    const target = deleteTarget;
+    if (!target || deleteLockRef.current) return;
 
+    deleteLockRef.current = true;
     setDeleting(true);
+
+    deleteAbortRef.current?.abort();
+    const controller = new AbortController();
+    deleteAbortRef.current = controller;
 
     try {
       if (store) {
-        await store.remove(deleteTarget.id);
+        await store.remove(target.id);
       } else {
-        const response = await fetch(`/api/students/${deleteTarget.id}`, {
+        const response = await fetch(`/api/students/${target.id}`, {
           method: "DELETE",
+          signal: controller.signal,
         });
         const data = (await response.json().catch(() => ({}))) as {
           error?: string;
@@ -223,16 +271,25 @@ export function StudentManager({
         }
       }
 
+      if (!mountedRef.current || deleteAbortRef.current !== controller) {
+        return;
+      }
+
       setStudents((previous) =>
-        previous.filter((item) => item.id !== deleteTarget.id),
+        previous.filter((item) => item.id !== target.id),
       );
-      if (detailStudent?.id === deleteTarget.id) setDetailStudent(null);
+      if (detailStudent?.id === target.id) setDetailStudent(null);
       setDeleteTarget(null);
       toast.success("已删除");
     } catch (error) {
+      if (controller.signal.aborted) return;
       toast.error(error instanceof Error ? error.message : "删除失败");
     } finally {
-      setDeleting(false);
+      if (deleteAbortRef.current === controller) {
+        deleteAbortRef.current = null;
+        deleteLockRef.current = false;
+        if (mountedRef.current) setDeleting(false);
+      }
     }
   }
 

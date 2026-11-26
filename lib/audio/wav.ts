@@ -3,6 +3,25 @@
 
 export const ASR_SAMPLE_RATE = 16_000;
 
+/** WAV 头的前 12 字节：RIFF + 4 字节长度 + WAVE */
+const WAV_MAGIC_BYTES = 12;
+
+/** 校验文件头魔数，防止把非 WAV 文件当作录音上传 */
+export function isWavHeader(bytes: Uint8Array): boolean {
+  if (bytes.length < WAV_MAGIC_BYTES) return false;
+
+  return (
+    bytes[0] === 0x52 && // R
+    bytes[1] === 0x49 && // I
+    bytes[2] === 0x46 && // F
+    bytes[3] === 0x46 && // F
+    bytes[8] === 0x57 && // W
+    bytes[9] === 0x41 && // A
+    bytes[10] === 0x56 && // V
+    bytes[11] === 0x45 // E
+  );
+}
+
 const WAV_HEADER_BYTES = 44;
 const BITS_PER_SAMPLE = 16;
 const BYTES_PER_SAMPLE = BITS_PER_SAMPLE / 8;
@@ -26,6 +45,11 @@ export function mergeChunks(chunks: Float32Array[]): Float32Array {
   return merged;
 }
 
+/**
+ * 把任意采样率的 PCM 线性重采样到 16kHz。
+ * 输入低于 16kHz 时上采样，避免直接按 16kHz 编码导致音频加速变调；
+ * 输入高于 16kHz 时降采样。
+ */
 export function downsample(
   samples: Float32Array,
   inputSampleRate: number,
@@ -34,18 +58,18 @@ export function downsample(
     return new Float32Array(0);
   }
 
-  if (inputSampleRate <= ASR_SAMPLE_RATE) {
+  if (inputSampleRate === ASR_SAMPLE_RATE) {
     return samples.slice();
   }
 
   const ratio = inputSampleRate / ASR_SAMPLE_RATE;
-  const outputLength = Math.floor(samples.length / ratio);
+  const outputLength = Math.max(1, Math.round(samples.length / ratio));
   const output = new Float32Array(outputLength);
 
-  // 线性插值降采样，短录音足够用，避免引入额外依赖
+  // 线性插值，短录音足够用，避免引入额外依赖
   for (let index = 0; index < outputLength; index += 1) {
     const position = index * ratio;
-    const left = Math.floor(position);
+    const left = Math.min(Math.floor(position), samples.length - 1);
     const right = Math.min(left + 1, samples.length - 1);
     const weight = position - left;
 

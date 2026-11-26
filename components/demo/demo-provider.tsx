@@ -5,6 +5,7 @@ import {
   useCallback,
   useContext,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import {
@@ -162,13 +163,17 @@ export function DemoProvider({
     [memories],
   );
 
+  const settingsRef = useRef(settings);
+
   const updateSettings = useCallback(
     async (patch: Partial<AppSettings>) => {
-      const next = { ...settings, ...patch };
-      setSettings(next);
+      // 用函数式更新避免并发 patch 互相覆盖，同时用 ref 返回最新值
+      const next = { ...settingsRef.current, ...patch };
+      settingsRef.current = next;
+      setSettings((current) => ({ ...current, ...patch }));
       return next;
     },
-    [settings],
+    [],
   );
 
   const addDemoReview = useCallback(

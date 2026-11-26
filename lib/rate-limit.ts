@@ -43,16 +43,33 @@ export function createRateLimiter({
     nextSweepAt = now + windowMs;
   };
 
-  const makeRoom = (now: number) => {
-    if (buckets.size < maxEntries) return;
+  /**
+   * 腾出一个位置。返回 false 表示一个都不该删。
+   * 只淘汰计数最低且尚未封禁的桶；如果所有桶都在封禁中，
+   * 宁可这次不建桶，也不能把正在限流的高计数 IP 提前放出来。
+   */
+  const makeRoom = (now: number): boolean => {
+    if (buckets.size < maxEntries) return true;
 
     sweep(now);
+    if (buckets.size < maxEntries) return true;
 
-    while (buckets.size >= maxEntries) {
-      const oldest = buckets.keys().next();
-      if (oldest.done) break;
-      buckets.delete(oldest.value);
+    let lowestKey: string | null = null;
+    let lowestCount = Number.POSITIVE_INFINITY;
+
+    for (const [key, bucket] of buckets) {
+      if (bucket.count < lowestCount) {
+        lowestCount = bucket.count;
+        lowestKey = key;
+      }
     }
+
+    if (lowestKey !== null && lowestCount < maxAttempts) {
+      buckets.delete(lowestKey);
+      return true;
+    }
+
+    return false;
   };
 
   function check(key: string): RateLimitResult {
@@ -64,7 +81,11 @@ export function createRateLimiter({
 
     if (!bucket || bucket.resetAt <= now) {
       if (bucket) buckets.delete(key);
-      makeRoom(now);
+
+      // 表满且全是封禁中的桶：本次放行但不建桶，
+      // 宁可少限流一个新 IP，也不提前解封正在被限流的 IP
+      if (!makeRoom(now)) return { allowed: true, retryAfter: 0 };
+
       buckets.set(key, { count: 1, resetAt: now + windowMs });
       return { allowed: true, retryAfter: 0 };
     }
@@ -129,13 +150,30 @@ const aiLimiters: Record<AiRateLimitScope, RateLimiter> = {
   }),
 };
 
-/** 取客户端标识：Vercel / 反向代理优先，本地开发兜底 unknown */
+/**
+ * 取客户端 IP，用于登录和 AI 接口限流。
+ *
+ * 部署在 Nginx 反向代理后时，需要配置：
+ *   proxy_set_header X-Real-IP $remote_addr;
+ *   proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+ *
+ * 优先 x-real-ip（反代用 $remote_addr 覆盖写入，客户端无法伪造）；
+ * 没有时取 x-forwarded-for 最右侧一跳，即最近一层代理追加的地址，
+ * 左侧可以被客户端随意伪造，不能直接取第一项。
+ */
 export function getClientId(request: Request): string {
-  const forwarded = request.headers.get("x-forwarded-for");
-  const first = forwarded?.split(",")[0]?.trim();
-  if (first) return first;
+  const realIp = request.headers.get("x-real-ip")?.trim();
+  if (realIp) return realIp;
 
-  return request.headers.get("x-real-ip")?.trim() || "unknown";
+  const forwarded = request.headers.get("x-forwarded-for");
+  const forwardedIps = forwarded
+    ?.split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+  const forwardedIp = forwardedIps?.[forwardedIps.length - 1];
+  if (forwardedIp) return forwardedIp;
+
+  return "unknown";
 }
 
 /** AI 计费接口按客户端 IP 计数 */

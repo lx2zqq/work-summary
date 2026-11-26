@@ -3,6 +3,7 @@ import {
   ASR_SAMPLE_RATE,
   downsample,
   encodeWav16kMono,
+  isWavHeader,
   mergeChunks,
 } from "@/lib/audio/wav";
 
@@ -16,6 +17,33 @@ function readAscii(view: DataView, offset: number, length: number): string {
   return text;
 }
 
+describe("isWavHeader", () => {
+  it("接受标准 RIFF/WAVE 头", () => {
+    const bytes = new Uint8Array([
+      0x52, 0x49, 0x46, 0x46, 0x24, 0x00, 0x00, 0x00, 0x57, 0x41, 0x56,
+      0x45,
+    ]);
+
+    expect(isWavHeader(bytes)).toBe(true);
+  });
+
+  it("拒绝不足 12 字节的输入", () => {
+    expect(isWavHeader(new Uint8Array(0))).toBe(false);
+    expect(isWavHeader(new Uint8Array(11))).toBe(false);
+  });
+
+  it("拒绝非 WAV 文件头", () => {
+    expect(isWavHeader(new TextEncoder().encode("GIF89a......"))).toBe(
+      false,
+    );
+  });
+
+  it("RIFF 或 WAVE 任一不匹配都拒绝", () => {
+    expect(isWavHeader(new TextEncoder().encode("RIFF....JUNK"))).toBe(false);
+    expect(isWavHeader(new TextEncoder().encode("XXXX....WAVE"))).toBe(false);
+  });
+});
+
 describe("downsample", () => {
   it("48kHz 一秒音频降为 16kHz", () => {
     const input = new Float32Array(48_000);
@@ -24,9 +52,21 @@ describe("downsample", () => {
     expect(output.length).toBe(16_000);
   });
 
-  it("低于 16kHz 时原样复制", () => {
+  it("低于 16kHz 时线性上采样，保持时长不变", () => {
     const input = new Float32Array([0.1, -0.2, 0.3]);
     const output = downsample(input, 8_000);
+
+    // 8kHz 3 个样本 = 0.375ms，上采样到 16kHz 后应有 6 个样本
+    expect(output.length).toBe(6);
+    expect(output[0]).toBeCloseTo(0.1, 6);
+    expect(output[2]).toBeCloseTo(-0.2, 6);
+    expect(output[4]).toBeCloseTo(0.3, 6);
+    expect(output[5]).toBeCloseTo(0.3, 6);
+  });
+
+  it("16kHz 输入原样复制", () => {
+    const input = new Float32Array([0.1, -0.2, 0.3]);
+    const output = downsample(input, 16_000);
 
     expect(output.length).toBe(3);
     expect(output[0]).toBeCloseTo(0.1, 6);

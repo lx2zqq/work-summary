@@ -13,7 +13,7 @@ export async function GET() {
   } catch (error) {
     console.error("[settings:GET]", error);
     return NextResponse.json(
-      { error: "读取设置失败，请检查数据库" },
+      { error: "读取设置失败，请稍后重试" },
       { status: 500 },
     );
   }

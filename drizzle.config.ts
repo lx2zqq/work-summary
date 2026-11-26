@@ -8,5 +8,5 @@ export default defineConfig({
   out: "./drizzle",
   ...(url ? { dbCredentials: { url } } : {}),
   verbose: true,
-  strict: false,
+  strict: true,
 });

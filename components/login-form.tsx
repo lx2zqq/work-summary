@@ -5,6 +5,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
+import { sanitizeNextPath } from "@/lib/safe-path";
 
 export function LoginForm({ next }: { next: string }) {
   const [password, setPassword] = useState("");
@@ -40,7 +41,7 @@ export function LoginForm({ next }: { next: string }) {
       toast.success("欢迎回来");
       // 登录态是服务端 HttpOnly Cookie，整页跳转能确保浏览器先保存 Cookie，
       // 也避免 Next 客户端路由缓存让服务端看起来还没登录。
-      window.location.replace(next);
+      window.location.replace(sanitizeNextPath(next));
     } catch {
       setError("网络好像不太顺，再试一次");
     } finally {
@@ -81,7 +82,10 @@ export function LoginForm({ next }: { next: string }) {
       </div>
 
       {error ? (
-        <p className="rounded-lg border border-danger-line bg-danger-soft px-3 py-2.5 text-sm font-medium leading-relaxed text-danger">
+        <p
+          role="alert"
+          className="rounded-lg border border-danger-line bg-danger-soft px-3 py-2.5 text-sm font-medium leading-relaxed text-danger"
+        >
           {error}
         </p>
       ) : null}

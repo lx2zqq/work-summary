@@ -77,12 +77,15 @@ export async function trackEvent(input: {
   properties?: EventProperties;
 }): Promise<void> {
   try {
+    // 运行时不信任调用方：未知字段或非法值直接丢弃这条埋点，不能写进分析表
+    const properties = eventPropertiesSchema.parse(input.properties ?? {});
+
     await getDb()
       .insert(usageEvents)
       .values({
         event: input.event,
         reviewDate: input.reviewDate ?? null,
-        properties: compactProperties(input.properties ?? {}),
+        properties: compactProperties(properties),
       });
   } catch (error) {
     console.warn("[analytics] 记录事件失败：", input.event, error);

@@ -142,7 +142,7 @@ describe("executeTool", () => {
       }),
     );
 
-    expect(JSON.parse(result.content).error).toContain("数据库连接失败");
+    expect(JSON.parse(result.content).error).toBe("查询失败");
     warn.mockRestore();
   });
 });
@@ -168,5 +168,55 @@ describe("createToolCache", () => {
     await runTool("search_memories", JSON.stringify({ studentName: "陈一鸣" }), deps);
 
     expect(searchMemories).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("createToolCache 边界", () => {
+  it("参数键顺序不同但内容相同仍然命中缓存", async () => {
+    const searchStudents = vi.fn(async () => [student("林小满")]);
+    const deps = makeDeps({ searchStudents });
+    const runTool = createToolCache();
+
+    await runTool(
+      "search_students",
+      JSON.stringify({ query: "林", status: "在读" }),
+      deps,
+    );
+    await runTool(
+      "search_students",
+      JSON.stringify({ status: "在读", query: "林" }),
+      deps,
+    );
+
+    expect(searchStudents).toHaveBeenCalledTimes(1);
+  });
+
+  it("失败结果不缓存，重试会重新查询", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    let calls = 0;
+    const searchStudents = vi.fn(async () => {
+      calls += 1;
+      if (calls === 1) throw new Error("数据库连接失败");
+      return [student("林小满")];
+    });
+    const deps = makeDeps({ searchStudents });
+    const runTool = createToolCache();
+
+    const first = await runTool(
+      "search_students",
+      JSON.stringify({ query: "林" }),
+      deps,
+    );
+    expect(JSON.parse(first.content).error).toBe("查询失败");
+
+    const second = await runTool(
+      "search_students",
+      JSON.stringify({ query: "林" }),
+      deps,
+    );
+    expect(JSON.parse(second.content).count).toBe(1);
+    expect(searchStudents).toHaveBeenCalledTimes(2);
+
+    warn.mockRestore();
   });
 });

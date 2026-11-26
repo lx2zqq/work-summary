@@ -147,3 +147,52 @@ describe("answersFromConversation", () => {
     });
   });
 });
+
+describe("answersFromConversation 边界情况", () => {
+  it("无选项时自定义内容里的“；补充：”完整保留", () => {
+    const result = answersFromConversation([QUESTIONS[2]], [
+      {
+        question: "还有什么补充？",
+        answer: "家长说：周日上午；补充：下午也有空",
+      },
+    ]);
+
+    expect(result.q3).toEqual({
+      selected: [],
+      custom: "家长说：周日上午；补充：下午也有空",
+    });
+  });
+
+  it("选项本身含顿号时不会被拆成两半", () => {
+    const question: FollowUpQuestion = {
+      id: "q4",
+      text: "排课时间？",
+      options: ["周四、周五", "周六"],
+      multiple: true,
+      target: "jiaoxiao",
+    };
+
+    const result = answersFromConversation([question], [
+      { question: "排课时间？", answer: "周四、周五、周六" },
+    ]);
+
+    expect(result.q4).toEqual({
+      selected: ["周四、周五", "周六"],
+      custom: "",
+    });
+  });
+
+  it("自定义内容含“；补充：”时不被截断", () => {
+    const result = answersFromConversation([QUESTIONS[0]], [
+      {
+        question: "今天有试听吗？",
+        answer: "有；补充：周六；补充：周日也有空",
+      },
+    ]);
+
+    expect(result.q1).toEqual({
+      selected: ["有"],
+      custom: "周六；补充：周日也有空",
+    });
+  });
+});

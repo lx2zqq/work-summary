@@ -15,13 +15,20 @@ import {
 } from "drizzle-orm";
 import { todayISO } from "@/lib/date";
 import { normalizeDraft } from "@/lib/draft";
-import type { StudentInput } from "@/lib/schema";
+import type { ExtractedMemory, StudentInput } from "@/lib/schema";
+import {
+  MEMORY_MERGE_THRESHOLD,
+  hasSameMemoryContent,
+  memorySimilarity,
+  resolveMemoryStudent,
+} from "@/lib/memory";
 import { renderReview } from "@/lib/template";
 import {
   DEFAULT_SETTINGS,
   emptyDraft,
   hasDraftContent,
   type AppSettings,
+  type CustomPhrase,
   type Memory,
   type MemoryInput,
   type MemoryPromptItem,
@@ -251,12 +258,23 @@ export async function getReviewByDate(
   return mapReview(rows[0], settings);
 }
 
+/** 导出单次最多返回的复盘篇数，超出时接口会带 X-Export-Truncated 提示 */
+export const MAX_EXPORT_REVIEWS = 2000;
+
 /** 数据备份用：完整复盘记录，包含 rawInput / draft / conversation */
-export async function listReviewsForExport(): Promise<ReviewRecord[]> {
+export async function listReviewsForExport(
+  limit = MAX_EXPORT_REVIEWS,
+): Promise<ReviewRecord[]> {
+  const safeLimit = Math.min(
+    Math.max(1, Math.trunc(limit)),
+    MAX_EXPORT_REVIEWS,
+  );
+
   const rows = await getDb()
     .select()
     .from(reviews)
-    .orderBy(desc(reviews.reviewDate));
+    .orderBy(desc(reviews.reviewDate))
+    .limit(safeLimit);
 
   const settings = await getSettings();
 
@@ -410,12 +428,17 @@ export async function saveReview(input: {
   return mapReview(row);
 }
 
+/** 单次记忆列表的硬上限，避免一次把整库拉进内存 */
+export const MAX_MEMORY_PAGE = 1000;
+
 export async function listMemories(limit = 300): Promise<Memory[]> {
+  const safeLimit = Math.min(Math.max(1, Math.trunc(limit)), MAX_MEMORY_PAGE);
+
   const rows = await getDb()
     .select()
     .from(memories)
     .orderBy(desc(memories.importance), desc(memories.updatedAt))
-    .limit(limit);
+    .limit(safeLimit);
 
   return rows.map(mapMemory);
 }
@@ -452,7 +475,7 @@ export async function createMemory(input: MemoryInput): Promise<Memory> {
 
 export async function updateMemory(
   id: string,
-  input: MemoryInput,
+  input: MemoryInput & { status?: Memory["status"] },
 ): Promise<Memory | null> {
   const [row] = await getDb()
     .update(memories)
@@ -463,7 +486,8 @@ export async function updateMemory(
       category: input.category,
       content: input.content,
       importance: input.importance,
-      status: "active",
+      // 不传 status 时保留数据库里的原值，避免把已归档的记忆重新激活
+      ...(input.status ? { status: input.status } : {}),
       updatedAt: new Date(),
       ...(input.sourceDate !== undefined
         ? { sourceDate: input.sourceDate }
@@ -594,4 +618,199 @@ export async function markMemoryExtracted(date: string): Promise<string> {
     .where(eq(reviews.reviewDate, date));
 
   return extractedAt.toISOString();
+}
+
+export type CustomPhraseMutationResult =
+  | { next: CustomPhrase[] }
+  | { error: string; status?: number };
+
+/**
+ * 在事务里读取并更新自定义话术。
+ * 先对 settings 行加锁，避免两个请求同时读到旧数组后互相覆盖。
+ */
+export async function mutateCustomPhrases(
+  mutate: (current: CustomPhrase[]) => CustomPhraseMutationResult,
+): Promise<
+  | { ok: true; phrases: CustomPhrase[] }
+  | { ok: false; error: string; status: number }
+> {
+  return getDb().transaction(async (tx) => {
+    const [row] = await tx
+      .select()
+      .from(settingsTable)
+      .where(eq(settingsTable.id, 1))
+      .limit(1)
+      .for("update");
+
+    const current = row ? mapSettings(row).customPhrases : [];
+    const result = mutate(current);
+
+    if ("error" in result) {
+      return {
+        ok: false as const,
+        error: result.error,
+        status: result.status ?? 400,
+      };
+    }
+
+    const updatedAt = new Date();
+    const [updated] = await tx
+      .insert(settingsTable)
+      .values({
+        id: 1,
+        ...DEFAULT_SETTINGS,
+        customPhrases: result.next,
+        updatedAt,
+      })
+      .onConflictDoUpdate({
+        target: settingsTable.id,
+        set: { customPhrases: result.next, updatedAt },
+      })
+      .returning();
+
+    if (!updated) throw new Error("保存话术失败");
+
+    return {
+      ok: true as const,
+      phrases: mapSettings(updated).customPhrases,
+    };
+  });
+}
+
+/**
+ * 事务内写入提取出的记忆，并标记复盘已提取。
+ * 中途失败会整体回滚，不会出现“记忆写了但标记没更新”的半截状态。
+ */
+export async function saveExtractedMemories(input: {
+  date: string;
+  items: ExtractedMemory[];
+  students: Student[];
+}): Promise<{ created: number; updated: number; extractedAt: string }> {
+  return getDb().transaction(async (tx) => {
+    const rows = await tx
+      .select()
+      .from(memories)
+      .where(eq(memories.status, "active"))
+      .orderBy(desc(memories.importance), desc(memories.updatedAt))
+      .limit(200)
+      .for("update");
+
+    const existing = rows.map(mapMemory);
+    /** 本轮新建的记忆也参与后续去重比较 */
+    const working = [...existing];
+    const createdIds: string[] = [];
+    const touchedIds = new Set<string>();
+
+    const sameStudent = (
+      memory: Memory,
+      resolved: { studentId: string | null; studentName: string | null },
+    ) => {
+      if (resolved.studentId) {
+        return memory.studentId === resolved.studentId;
+      }
+
+      return (
+        memory.studentId === null &&
+        memory.studentName === resolved.studentName
+      );
+    };
+
+    const updateById = async (
+      id: string,
+      item: ExtractedMemory,
+      resolved: { studentId: string | null; studentName: string | null },
+    ) => {
+      const [row] = await tx
+        .update(memories)
+        .set({
+          scope: item.scope,
+          studentId: resolved.studentId,
+          studentName: resolved.studentName,
+          category: item.category,
+          content: item.content,
+          importance: item.importance,
+          sourceDate: input.date,
+          updatedAt: new Date(),
+        })
+        .where(eq(memories.id, id))
+        .returning({ id: memories.id });
+
+      if (row) touchedIds.add(row.id);
+    };
+
+    for (const item of input.items) {
+      const resolved = resolveMemoryStudent(item, input.students);
+
+      if (item.scope === "student" && !resolved.studentName) continue;
+
+      const existingById = item.id
+        ? existing.find((memory) => memory.id === item.id)
+        : null;
+
+      if (existingById) {
+        await updateById(existingById.id, item, resolved);
+        continue;
+      }
+
+      const duplicate = working.find(
+        (memory) =>
+          memory.scope === item.scope &&
+          sameStudent(memory, resolved) &&
+          hasSameMemoryContent(memory, item.content),
+      );
+
+      if (duplicate) continue;
+
+      // 模型没按 id 更新时，用相似度兜底合并同一件事的不同说法
+      const similar = working
+        .filter(
+          (memory) =>
+            memory.scope === item.scope &&
+            memory.category === item.category &&
+            sameStudent(memory, resolved),
+        )
+        .map((memory) => ({
+          memory,
+          score: memorySimilarity(memory.content, item.content),
+        }))
+        .filter((entry) => entry.score >= MEMORY_MERGE_THRESHOLD)
+        .sort((a, b) => b.score - a.score)[0]?.memory;
+
+      if (similar) {
+        await updateById(similar.id, item, resolved);
+        continue;
+      }
+
+      const [created] = await tx
+        .insert(memories)
+        .values({
+          scope: item.scope,
+          studentId: resolved.studentId,
+          studentName: resolved.studentName,
+          category: item.category,
+          content: item.content,
+          importance: item.importance,
+          sourceDate: input.date,
+        })
+        .returning();
+
+      if (created) {
+        createdIds.push(created.id);
+        touchedIds.add(created.id);
+        working.push(mapMemory(created));
+      }
+    }
+
+    const extractedAt = new Date();
+    await tx
+      .update(reviews)
+      .set({ memoryExtractedAt: extractedAt })
+      .where(eq(reviews.reviewDate, input.date));
+
+    return {
+      created: createdIds.length,
+      updated: Math.max(0, touchedIds.size - createdIds.length),
+      extractedAt: extractedAt.toISOString(),
+    };
+  });
 }

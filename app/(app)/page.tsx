@@ -1,4 +1,5 @@
 import { Workspace } from "@/components/workspace/workspace";
+import { requireSession } from "@/lib/auth";
 import { isValidISODate, todayISO } from "@/lib/date";
 import {
   getReviewByDate,
@@ -13,6 +14,9 @@ export default async function HomePage({
 }: {
   searchParams: Promise<{ date?: string }>;
 }) {
+  // 查询之前先鉴权：layout 和 page 是并行渲染的，不能只依赖 layout
+  await requireSession();
+
   const { date } = await searchParams;
   const reviewDate =
     date && isValidISODate(date) ? date : todayISO();

@@ -13,7 +13,7 @@ export async function GET() {
   } catch (error) {
     console.error("[students:GET]", error);
     return NextResponse.json(
-      { error: "读取学生名单失败，请检查数据库" },
+      { error: "读取学生名单失败，请稍后重试" },
       { status: 500 },
     );
   }

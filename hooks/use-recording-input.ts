@@ -151,6 +151,18 @@ export function useRecordingInput({
   }, [clearTimers]);
 
   const cancelRecording = useCallback(() => {
+    // getUserMedia 还在等待期时也要让这次启动失效
+    if (startingRef.current) {
+      startingRef.current = false;
+      activeRef.current = false;
+      sessionIdRef.current += 1;
+      setRecording(false);
+      setSeconds(0);
+      chunksRef.current = [];
+      releaseAudio();
+      return;
+    }
+
     if (!activeRef.current) return;
 
     activeRef.current = false;
@@ -163,6 +175,8 @@ export function useRecordingInput({
   }, [releaseAudio]);
 
   const transcribe = useCallback(async (blob: Blob) => {
+    // 新的转写开始时中止上一次请求，避免旧结果晚到后覆盖新文本
+    abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
     setTranscribing(true);
@@ -205,10 +219,11 @@ export function useRecordingInput({
           : "语音转写失败，请检查网络后重试。",
       );
     } finally {
+      // 只有当前请求才能结束转写状态，旧请求被中止时不要影响新的转写
       if (abortRef.current === controller) {
         abortRef.current = null;
+        setTranscribing(false);
       }
-      setTranscribing(false);
     }
   }, []);
 

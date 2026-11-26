@@ -158,3 +158,47 @@ describe("formatStatsMarkdown", () => {
     expect(text).toContain("2000 ms");
   });
 });
+
+describe("summarizeEvents 边界情况", () => {
+  it("复制历史复盘时 copyRate 不会超过 1", () => {
+    const summary = summarizeEvents([
+      event(
+        "generate_finished",
+        "2026-11-13T01:00:00.000Z",
+        { mode: "final" },
+        "2026-11-13",
+      ),
+      event("review_copied", "2026-11-13T02:00:00.000Z", {}, "2026-11-13"),
+      // 复制的是没有终稿的历史日期，不应计入分子
+      event("review_copied", "2026-11-13T03:00:00.000Z", {}, "2026-11-10"),
+    ]);
+
+    expect(summary.copyRate).toBe(1);
+  });
+
+  it("同一天多次最终稿时取时间最晚的一次计算改动", () => {
+    const summary = summarizeEvents([
+      event(
+        "generate_finished",
+        "2026-11-13T01:00:00.000Z",
+        { mode: "final", itemCount: 1, charCount: 10 },
+        "2026-11-13",
+      ),
+      event(
+        "generate_finished",
+        "2026-11-13T03:00:00.000Z",
+        { mode: "final", itemCount: 5, charCount: 50 },
+        "2026-11-13",
+      ),
+      event(
+        "review_saved",
+        "2026-11-13T04:00:00.000Z",
+        { itemCount: 6, charCount: 60 },
+        "2026-11-13",
+      ),
+    ]);
+
+    expect(summary.avgItemDelta).toBe(1);
+    expect(summary.avgCharDelta).toBe(10);
+  });
+});

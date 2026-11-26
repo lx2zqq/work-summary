@@ -1,3 +1,5 @@
+import { isValidISODate } from "./date";
+
 const STORAGE_KEY = "work-summary:selected-date-v1";
 
 let selectedDate: string | null = null;
@@ -13,7 +15,9 @@ function loadFromStorage() {
   loaded = true;
 
   try {
-    selectedDate = window.sessionStorage.getItem(STORAGE_KEY);
+    const stored = window.sessionStorage.getItem(STORAGE_KEY);
+    // 存储里可能是旧版本或手动改过的脏值，只接受真实存在的日期
+    selectedDate = stored && isValidISODate(stored) ? stored : null;
   } catch {
     selectedDate = null;
   }
@@ -37,6 +41,8 @@ export function getSelectedDateServerSnapshot(): null {
 
 /** 切换日期时同步，让“今日复盘”入口带回当前日期 */
 export function setSelectedDate(date: string): void {
+  if (!isValidISODate(date)) return;
+
   loadFromStorage();
 
   if (selectedDate === date) return;

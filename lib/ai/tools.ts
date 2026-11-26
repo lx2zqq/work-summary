@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { ChatCompletionFunctionTool } from "openai/resources/chat/completions";
+import { isValidISODate } from "@/lib/date";
 import type { MemoryPromptItem, Student } from "@/lib/types";
 
 /** 单次工具返回给模型的文字上限，避免把历史全量拖进上下文 */
@@ -25,11 +26,11 @@ export const searchReviewsSchema = z.object({
   keyword: z.string().trim().max(20).optional(),
   beforeDate: z
     .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .refine(isValidISODate, "日期格式不对")
     .optional(),
   afterDate: z
     .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .refine(isValidISODate, "日期格式不对")
     .optional(),
   limit: z.number().int().min(1).max(MAX_REVIEW_RESULTS).optional(),
 });
@@ -172,10 +173,16 @@ export type ToolExecution = {
   content: string;
   /** 本次工具命中的记忆，用于前端展示“参考了哪些记忆” */
   memories: MemoryPromptItem[];
+  /** 失败结果不写入缓存，避免模型换参数重试时拿到旧错误 */
+  ok: boolean;
 };
 
 function failure(message: string): ToolExecution {
-  return { content: JSON.stringify({ error: message }), memories: [] };
+  return {
+    content: JSON.stringify({ error: message }),
+    memories: [],
+    ok: false,
+  };
 }
 
 function parseArgs(raw: string): { ok: true; value: unknown } | { ok: false } {
@@ -211,6 +218,7 @@ export async function executeTool(
           students: formatStudents(students),
         }),
         memories: [],
+        ok: true,
       };
     }
 
@@ -226,6 +234,7 @@ export async function executeTool(
           memories: formatMemories(memories),
         }),
         memories,
+        ok: true,
       };
     }
 
@@ -241,20 +250,38 @@ export async function executeTool(
           reviews: formatReviews(reviews),
         }),
         memories: [],
+        ok: true,
       };
     }
 
     return failure(`未知工具：${name}`);
   } catch (error) {
+    // 数据库/SDK 的原始报错只写服务端日志，不能透传给模型
     const detail =
-      error instanceof z.ZodError
-        ? "参数不符合要求"
-        : error instanceof Error
-          ? error.message
-          : "查询失败";
-    console.warn(`[tools] ${name} 执行失败：`, detail);
+      error instanceof z.ZodError ? "参数不符合要求" : "查询失败";
+    console.warn(
+      `[tools] ${name} 执行失败：`,
+      error instanceof Error ? error.message : error,
+    );
     return failure(detail);
   }
+}
+
+/** 参数键排序后作为缓存 key，键顺序不同但内容相同的调用也能命中 */
+function normalizeArgsKey(rawArgs: string): string {
+  const parsed = parseArgs(rawArgs);
+  if (!parsed.ok) return rawArgs;
+
+  const value = parsed.value;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return JSON.stringify(value);
+  }
+
+  const sorted = Object.keys(value as Record<string, unknown>)
+    .sort()
+    .map((key) => [key, (value as Record<string, unknown>)[key]]);
+
+  return JSON.stringify(sorted);
 }
 
 /** 同一次生成内重复调用同一个工具时复用结果，模型经常把同一个学生查两遍 */
@@ -266,12 +293,12 @@ export function createToolCache() {
     rawArgs: string,
     deps: ToolDeps,
   ): Promise<ToolExecution> {
-    const key = `${name}:${rawArgs}`;
+    const key = `${name}:${normalizeArgsKey(rawArgs)}`;
     const hit = cache.get(key);
     if (hit) return hit;
 
     const result = await executeTool(name, rawArgs, deps);
-    cache.set(key, result);
+    if (result.ok) cache.set(key, result);
     return result;
   };
 }

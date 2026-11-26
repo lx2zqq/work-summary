@@ -3,6 +3,7 @@ import {
   rateLimitExceeded,
   requireApiSession,
 } from "@/lib/api-helpers";
+import { isWavHeader } from "@/lib/audio/wav";
 import { checkAiRateLimit } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
@@ -10,8 +11,10 @@ export const maxDuration = 60;
 
 const DEFAULT_BASE_URL = "https://api.siliconflow.cn/v1";
 const DEFAULT_MODEL = "FunAudioLLM/SenseVoiceSmall";
-// Vercel 函数请求体上限 4.5MB，这里再留一点余量
+// 单文件上限 4MB，足够 60 秒 16kHz 单声道 WAV
 const MAX_FILE_BYTES = 4 * 1024 * 1024;
+// Content-Length 还包含 multipart 边界和其他字段，单独留一点余量
+const MAX_FORM_BYTES = MAX_FILE_BYTES + 64 * 1024;
 
 function isUploadedFile(
   value: FormDataEntryValue | null | undefined,
@@ -41,14 +44,20 @@ export async function POST(request: Request) {
   const limit = checkAiRateLimit(request, "transcribe");
   if (!limit.allowed) return rateLimitExceeded(limit.retryAfter);
 
+  // 先看 Content-Length，明显超限时不必把整个请求体读进内存
+  const contentLength = Number(request.headers.get("content-length"));
+  if (Number.isFinite(contentLength) && contentLength > MAX_FORM_BYTES) {
+    return NextResponse.json(
+      { error: "录音太长了，请控制在 60 秒以内" },
+      { status: 413 },
+    );
+  }
+
   const apiKey = process.env.REVIEW_ASR_API_KEY?.trim();
 
   if (!apiKey) {
     return NextResponse.json(
-      {
-        error:
-          "服务端还没有配置 REVIEW_ASR_API_KEY，暂时不能转写语音。可以先直接打字。",
-      },
+      { error: "语音转写服务暂时不可用，可以先直接打字。" },
       { status: 503 },
     );
   }
@@ -74,6 +83,15 @@ export async function POST(request: Request) {
     return NextResponse.json(
       { error: "录音太长了，请控制在 60 秒以内" },
       { status: 413 },
+    );
+  }
+
+  // 扩展名和 MIME 都能伪造，再确认一次真正的 RIFF/WAVE 头
+  const header = new Uint8Array(await file.slice(0, 12).arrayBuffer());
+  if (!isWavHeader(header)) {
+    return NextResponse.json(
+      { error: "录音格式不对，请重新录一次" },
+      { status: 400 },
     );
   }
 
@@ -109,19 +127,32 @@ export async function POST(request: Request) {
       );
     }
 
-    let data: { text?: unknown } = {};
+    let data: unknown;
 
     try {
-      data = JSON.parse(raw) as { text?: unknown };
+      data = JSON.parse(raw);
     } catch {
-      // 上游没有返回 JSON 时按空结果处理
+      console.error("[transcribe:asr] 上游返回不是合法 JSON");
+      return NextResponse.json(
+        { error: "语音转写服务暂时不可用，请稍后重试或直接打字。" },
+        { status: 502 },
+      );
     }
 
-    // SenseVoice 可能带 <|zh|><|NEUTRAL|> 这类标记，去掉后再展示
     const text =
-      typeof data.text === "string"
-        ? data.text.replace(/<\|[^|]*\|>/g, "").trim()
-        : "";
+      data &&
+      typeof data === "object" &&
+      typeof (data as { text?: unknown }).text === "string"
+        ? (data as { text: string }).text.replace(/<\|[^|]*\|>/g, "").trim()
+        : null;
+
+    if (text === null) {
+      console.error("[transcribe:asr] 上游响应缺少 text 字段");
+      return NextResponse.json(
+        { error: "语音转写服务暂时不可用，请稍后重试或直接打字。" },
+        { status: 502 },
+      );
+    }
 
     if (!text) {
       return NextResponse.json(

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { trackEvent } from "@/lib/analytics/events";
 import { firstIssue, requireApiSession } from "@/lib/api-helpers";
+import { parsePositiveInt } from "@/lib/query-params";
 import { isValidISODate } from "@/lib/date";
 import {
   getReviewByDate,
@@ -38,10 +39,14 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "日期格式不对" }, { status: 400 });
     }
 
-    const rawLimit = Number(searchParams.get("limit") ?? 50);
-    const limit = Number.isFinite(rawLimit)
-      ? Math.min(Math.max(Math.trunc(rawLimit), 1), 100)
-      : 50;
+    const limit = parsePositiveInt(searchParams.get("limit"), {
+      fallback: 50,
+      max: 100,
+    });
+
+    if (limit === null) {
+      return NextResponse.json({ error: "limit 参数不对" }, { status: 400 });
+    }
 
     // 多查一条用于判断是否还有更早的复盘，截断后返回
     const rows = await listReviews(limit + 1, before ?? undefined);
@@ -52,7 +57,7 @@ export async function GET(request: Request) {
   } catch (error) {
     console.error("[reviews:GET]", error);
     return NextResponse.json(
-      { error: "读取历史失败，请检查数据库是否已初始化" },
+      { error: "读取历史失败，请稍后重试" },
       { status: 500 },
     );
   }
@@ -98,23 +103,28 @@ export async function POST(request: Request) {
 
     // 只统计已经有正文的保存，避免自动保存的中间态把数据冲淡
     if (finalText) {
-      await trackEvent({
-        event: "review_saved",
-        reviewDate: input.date,
-        properties: {
-          style: input.style,
-          round: input.round,
-          itemCount: countDraftItems(draft),
-          charCount: countDraftChars(draft),
-        },
-      });
+      try {
+        await trackEvent({
+          event: "review_saved",
+          reviewDate: input.date,
+          properties: {
+            style: input.style,
+            round: input.round,
+            itemCount: countDraftItems(draft),
+            charCount: countDraftChars(draft),
+          },
+        });
+      } catch (error) {
+        // 埋点失败不能影响已经保存成功的复盘
+        console.error("[reviews:POST] 埋点失败", error);
+      }
     }
 
     return NextResponse.json({ review, finalText });
   } catch (error) {
     console.error("[reviews:POST]", error);
     return NextResponse.json(
-      { error: "保存失败，请检查数据库连接" },
+      { error: "保存失败，请稍后重试" },
       { status: 500 },
     );
   }

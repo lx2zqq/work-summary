@@ -24,6 +24,14 @@ type Props = {
   onSave: (draft: ReviewDraft) => void;
 };
 
+// 编辑器里的条目 id 只用于 React key，不需要持久化
+let itemIdCounter = 0;
+
+function createItemId(section: SectionKey): string {
+  itemIdCounter += 1;
+  return `${section}-item-${itemIdCounter}`;
+}
+
 export function DraftEditor(props: Props) {
   if (!props.open) return null;
   return <DraftEditorInner {...props} />;
@@ -39,6 +47,19 @@ function DraftEditorInner({
   const [local, setLocal] = useState<ReviewDraft>(() =>
     structuredClone(draft),
   );
+
+  // 给每条记录分配稳定 id，避免用数组下标导致编辑时输入框错位
+  const [itemIds, setItemIds] = useState<Record<string, string[]>>(() => {
+    const result: Record<string, string[]> = {};
+
+    for (const key of SECTION_ORDER) {
+      result[key] = (draft.sections[key] ?? []).map(() =>
+        createItemId(key),
+      );
+    }
+
+    return result;
+  });
 
   function updateItem(section: SectionKey, index: number, value: string) {
     setLocal((previous) => ({
@@ -62,6 +83,12 @@ function DraftEditorInner({
         ),
       },
     }));
+    setItemIds((previous) => ({
+      ...previous,
+      [section]: (previous[section] ?? []).filter(
+        (_, itemIndex) => itemIndex !== index,
+      ),
+    }));
   }
 
   function addItem(section: SectionKey) {
@@ -71,6 +98,10 @@ function DraftEditorInner({
         ...previous.sections,
         [section]: [...previous.sections[section], ""],
       },
+    }));
+    setItemIds((previous) => ({
+      ...previous,
+      [section]: [...(previous[section] ?? []), createItemId(section)],
     }));
   }
 
@@ -88,6 +119,14 @@ function DraftEditorInner({
         ...previous,
         sections: { ...previous.sections, [section]: next },
       };
+    });
+    setItemIds((previous) => {
+      const ids = [...(previous[section] ?? [])];
+      const target = index + offset;
+      if (target < 0 || target >= ids.length) return previous;
+
+      [ids[index], ids[target]] = [ids[target], ids[index]];
+      return { ...previous, [section]: ids };
     });
   }
 
@@ -111,6 +150,17 @@ function DraftEditorInner({
           ),
           [to]: [...previous.sections[to], item],
         },
+      };
+    });
+    setItemIds((previous) => {
+      const fromIds = previous[from] ?? [];
+      const moved = fromIds[index];
+      if (moved === undefined) return previous;
+
+      return {
+        ...previous,
+        [from]: fromIds.filter((_, itemIndex) => itemIndex !== index),
+        [to]: [...(previous[to] ?? []), moved],
       };
     });
   }
@@ -160,11 +210,12 @@ function DraftEditorInner({
                 <div className="mt-2 space-y-2">
                   {items.map((item, index) => (
                     <div
-                      key={`${key}-${index}`}
+                      key={itemIds[key]?.[index] ?? `${key}-${index}`}
                       className="rounded-xl border border-line/70 bg-cream/60 p-2"
                     >
                       <Textarea
                         value={item}
+                        aria-label={`${SECTION_META[key].title} 第 ${index + 1} 条`}
                         onChange={(event) =>
                           updateItem(key, index, event.target.value)
                         }

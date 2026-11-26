@@ -157,6 +157,12 @@ export function useVoiceInput({
     recognitionRef.current = null;
 
     if (recognition) {
+      // 先摘掉回调，避免停止过程中的 onend 再次触发自动重启
+      recognition.onstart = null;
+      recognition.onresult = null;
+      recognition.onerror = null;
+      recognition.onend = null;
+
       try {
         recognition.stop();
       } catch {
@@ -283,7 +289,13 @@ export function useVoiceInput({
       }
 
       restartTimerRef.current = setTimeout(() => {
+        restartTimerRef.current = null;
         if (!activeRef.current || sessionIdRef.current !== sessionId) return;
+
+        // 每次自动重启都是一段新的识别会话，重新统计启动时间和结果
+        everStartedRef.current = false;
+        sessionStartedAtRef.current = 0;
+        receivedResultRef.current = false;
 
         try {
           recognition.start();
@@ -329,6 +341,12 @@ export function useVoiceInput({
       recognitionRef.current = null;
 
       if (recognition) {
+        // 卸载时先断开所有回调引用，避免已销毁的组件再被回调写入
+        recognition.onstart = null;
+        recognition.onresult = null;
+        recognition.onerror = null;
+        recognition.onend = null;
+
         try {
           recognition.abort();
         } catch {

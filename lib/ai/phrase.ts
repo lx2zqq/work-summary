@@ -13,14 +13,22 @@ import {
   createClient,
   extractJson,
   getAiModelName,
+  type AiUsage,
 } from "./deepseek";
-import { AiError } from "./errors";
+import { AiError, isAbortError } from "./errors";
 
 /** 润色后的合格区间，比内置库略宽一点，给模型留余量 */
 export const PHRASE_MIN_LENGTH = TARGET_PHRASE_MIN_LENGTH;
 export const PHRASE_MAX_LENGTH = 65;
 /** 和已有话术相似到这个程度就当作重复 */
 export const PHRASE_DUPLICATE_THRESHOLD = 0.7;
+
+/** 单次润色请求的超时 */
+const ATTEMPT_TIMEOUT_MS = 25_000;
+/** 整个润色任务的预算，避免 3 次重试串成 75 秒 */
+const TOTAL_BUDGET_MS = 45_000;
+/** 剩余预算低于这个值就不再发起下一次请求 */
+const MIN_ATTEMPT_MS = 6_000;
 
 const PHRASE_THEMES: PhraseTheme[] = [
   "general",
@@ -172,96 +180,136 @@ function parsePhrase(content: string): PolishResult | null {
  * 调模型把用户的一句话润色成合规话术。
  * 第一次不合格时把原因回传给模型再试一次，仍不合格就报错。
  */
-export async function polishCustomPhrase(input: {
-  text: string;
-  existing: string[];
-  studentNames: string[];
-}): Promise<PolishResult> {
+export async function polishCustomPhrase(
+  input: {
+    text: string;
+    existing: string[];
+    studentNames: string[];
+  },
+  options?: {
+    onUsage?: (usage: AiUsage) => void;
+    signal?: AbortSignal;
+  },
+): Promise<PolishResult> {
   const client = createClient();
   const model = getAiModelName();
   // 原话已经能判断主题时，以规则结果为准，避免模型把错题写成日常通用话术
   const requiredTheme = detectThemeFromText(input.text);
+  const deadline = Date.now() + TOTAL_BUDGET_MS;
+
+  const usage: AiUsage = {
+    promptTokens: 0,
+    completionTokens: 0,
+    retried: false,
+  };
 
   let content = "";
   let feedback = "";
 
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    const userContent = [
-      `【用户提供的话术】\n${input.text.trim()}`,
-      requiredTheme !== "general"
-        ? `【主题提示】原话属于「${THEME_NAME[requiredTheme]}」主题，改写必须围绕这个主题，theme 字段也填 ${requiredTheme}。`
-        : "",
-      feedback ? `【上一次的问题】\n${feedback}` : "",
-      "请只输出 JSON。",
-    ]
-      .filter(Boolean)
-      .join("\n\n");
+  try {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const remaining = deadline - Date.now();
 
-    let completion;
+      if (remaining < MIN_ATTEMPT_MS) {
+        throw new AiError("润色超时，请稍后重试", "timeout");
+      }
 
-    try {
-      completion = await client.chat.completions.create(
-        {
-          model,
-          messages: [
-            { role: "system", content: PHRASE_RULES },
-            { role: "user", content: userContent },
-          ],
-          temperature: attempt === 0 ? 0.3 : 0.1,
-          max_tokens: 4000,
-          // 润色是个小任务，降低思考强度：默认档位会想到 token 上限，
-          // 正文被挤成空字符串，单次请求能拖到 25 秒以上
-          reasoning_effort: "low",
-        },
-        { timeout: 25_000 },
-      );
-    } catch (error) {
-      const detail = error instanceof Error ? error.message : "未知错误";
-      throw new AiError(`润色失败：${detail}`, "request");
-    }
+      const userContent = [
+        `【用户提供的话术】\n${input.text.trim()}`,
+        requiredTheme !== "general"
+          ? `【主题提示】原话属于「${THEME_NAME[requiredTheme]}」主题，改写必须围绕这个主题，theme 字段也填 ${requiredTheme}。`
+          : "",
+        feedback ? `【上一次的问题】\n${feedback}` : "",
+        "请只输出 JSON。",
+      ]
+        .filter(Boolean)
+        .join("\n\n");
 
-    content = completion.choices[0]?.message?.content?.trim() ?? "";
+      let completion;
 
-    if (!content) {
-      console.warn(
-        "[phrase] 模型返回空内容，finish_reason=",
-        completion.choices[0]?.finish_reason,
-        "usage=",
-        JSON.stringify(completion.usage ?? null),
-      );
-    }
-    const parsed = parsePhrase(content);
+      try {
+        completion = await client.chat.completions.create(
+          {
+            model,
+            messages: [
+              { role: "system", content: PHRASE_RULES },
+              { role: "user", content: userContent },
+            ],
+            temperature: attempt === 0 ? 0.3 : 0.1,
+            max_tokens: 4000,
+            // 润色是个小任务，降低思考强度：默认档位会想到 token 上限，
+            // 正文被挤成空字符串，单次请求能拖到 25 秒以上
+            reasoning_effort: "low",
+          },
+          {
+            timeout: Math.min(ATTEMPT_TIMEOUT_MS, remaining),
+            signal: options?.signal,
+          },
+        );
+      } catch (error) {
+        if (isAbortError(error, options?.signal)) throw error;
 
-    if (!parsed) {
-      console.warn(
-        "[phrase] 模型输出无法解析：",
-        content.slice(0, 400),
-      );
-      feedback = "输出不是合法 JSON，或者缺少 phrase / theme 字段";
-      continue;
-    }
+        // 原始 SDK 错误只写服务端日志
+        console.error("[phrase] 润色请求失败", error);
+        throw new AiError("润色失败，请稍后重试", "request");
+      }
 
-    const issues = validateCustomPhrase({
-      phrase: parsed.phrase,
-      existing: input.existing,
-      studentNames: input.studentNames,
-      requiredTheme,
-    });
+      usage.promptTokens += completion.usage?.prompt_tokens ?? 0;
+      usage.completionTokens += completion.usage?.completion_tokens ?? 0;
+      if (attempt > 0) usage.retried = true;
 
-    if (issues.length === 0) {
-      return {
+      content = completion.choices[0]?.message?.content?.trim() ?? "";
+
+      if (!content) {
+        console.warn(
+          "[phrase] 模型返回空内容，finish_reason=",
+          completion.choices[0]?.finish_reason,
+          "usage=",
+          JSON.stringify(completion.usage ?? null),
+        );
+      }
+      const parsed = parsePhrase(content);
+
+      if (!parsed) {
+        console.warn(
+          "[phrase] 模型输出无法解析：",
+          content.slice(0, 400),
+        );
+        feedback = "输出不是合法 JSON，或者缺少 phrase / theme 字段";
+        continue;
+      }
+
+      // 原话能判断主题时，模型返回的 theme 必须一致，否则当作不合格重试
+      if (requiredTheme !== "general" && parsed.theme !== requiredTheme) {
+        feedback = `theme 必须是 ${requiredTheme}，不要填 ${parsed.theme}`;
+        continue;
+      }
+
+      const issues = validateCustomPhrase({
         phrase: parsed.phrase,
-        theme: requiredTheme !== "general" ? requiredTheme : parsed.theme,
-      };
+        existing: input.existing,
+        studentNames: input.studentNames,
+        requiredTheme,
+      });
+
+      if (issues.length === 0) {
+        return {
+          phrase: parsed.phrase,
+          theme: requiredTheme !== "general" ? requiredTheme : parsed.theme,
+        };
+      }
+
+      feedback = issues.join("；");
     }
 
-    feedback = issues.join("；");
+    throw new AiError(
+      `润色结果不合格：${feedback || "模型没有返回可用内容"}`,
+      "output",
+    );
+  } finally {
+    // 成功、超时、请求失败都把消耗上报给调用方
+    options?.onUsage?.(usage);
   }
-
-  throw new AiError(
-    `润色结果不合格：${feedback || "模型没有返回可用内容"}`,
-    "output",
-  );
 }
 
 export function buildCustomPhrase(input: {

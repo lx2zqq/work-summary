@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isValidISODate } from "./date";
 import { MAX_FOLLOW_UP_ROUNDS, MEMORY_CATEGORIES } from "./types";
 
 // 手动重新生成会重置追问轮次但保留历史问答，所以不能按单次 3×3 来限制
@@ -16,6 +17,11 @@ export const sectionKeySchema = z.enum([
 ]);
 
 export const reviewStyleSchema = z.enum(["concise", "detailed"]);
+
+/** 严格日历日期：格式正确且年月日真实存在 */
+export const isoDateSchema = z
+  .string()
+  .refine(isValidISODate, "日期格式不对");
 
 export const studentStatusSchema = z.enum([
   "在读",
@@ -55,7 +61,7 @@ export const draftSchema = z.object({
 });
 
 export const generateRequestSchema = z.object({
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  date: isoDateSchema,
   rawInput: z
     .string()
     .trim()
@@ -83,7 +89,7 @@ export const generateRequestSchema = z.object({
 );
 
 export const saveReviewSchema = z.object({
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  date: isoDateSchema,
   rawInput: z.string().max(6000).default(""),
   draft: draftSchema,
   style: reviewStyleSchema.default("concise"),
@@ -128,7 +134,11 @@ export const memoryCategorySchema = z.enum(MEMORY_CATEGORIES);
 export const memoryInputSchema = z
   .object({
     scope: memoryScopeSchema,
-    studentId: z.string().uuid().nullish(),
+    // 表单没选学生时会提交空串，统一转成 null
+    studentId: z.preprocess(
+      (value) => (value === "" ? null : value),
+      z.string().uuid().nullish(),
+    ),
     studentName: z.string().trim().max(20).nullish(),
     category: memoryCategorySchema.default("其他"),
     content: z
@@ -146,21 +156,28 @@ export const memoryInputSchema = z
   );
 
 export const extractMemoriesRequestSchema = z.object({
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  date: isoDateSchema,
   force: z.boolean().default(false),
 });
 
 export const memoryExtractionSchema = z.object({
   memories: z
     .array(
-      z.object({
-        id: z.string().uuid().nullish(),
-        scope: memoryScopeSchema,
-        studentName: z.string().trim().max(20).nullish(),
-        category: memoryCategorySchema.default("其他"),
-        content: z.string().trim().min(1).max(300),
-        importance: z.number().int().min(1).max(3).default(2),
-      }),
+      z
+        .object({
+          id: z.string().uuid().nullish(),
+          scope: memoryScopeSchema,
+          studentName: z.string().trim().max(20).nullish(),
+          category: memoryCategorySchema.default("其他"),
+          content: z.string().trim().min(1).max(300),
+          importance: z.number().int().min(1).max(3).default(2),
+        })
+        // 学生记忆必须带姓名，否则无法归属到具体学生
+        .refine(
+          (value) =>
+            value.scope !== "student" || Boolean(value.studentName?.trim()),
+          { message: "学生记忆需要学生姓名", path: ["studentName"] },
+        ),
     )
     .max(10)
     .default([]),

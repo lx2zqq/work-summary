@@ -274,8 +274,11 @@ export function Workspace({
     activeJobIdRef,
     mountedRef,
     pageUnloadingRef,
+    dateRef,
     onLoadReview: applyReviewRecord,
   });
+
+  const extractAbortRef = useRef<AbortController | null>(null);
 
   const extractMemory = useCallback(
     async (
@@ -293,6 +296,11 @@ export function Workspace({
       extractingMemoryRef.current = true;
       setExtractingMemory(true);
 
+      // 切日或重复触发时中止旧提取
+      extractAbortRef.current?.abort();
+      const controller = new AbortController();
+      extractAbortRef.current = controller;
+
       try {
         if (!options.skipSave) {
           const saved = await saveNow({ silent: true });
@@ -307,6 +315,7 @@ export function Workspace({
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ date: targetDate, force }),
+          signal: controller.signal,
         });
         const data = (await response.json().catch(() => ({}))) as {
           error?: string;
@@ -339,18 +348,44 @@ export function Workspace({
           }
         }
       } catch (error) {
+        if (controller.signal.aborted) return;
         if (dateRef.current === targetDate) {
           toast.error(
             error instanceof Error ? error.message : "提取记忆失败",
           );
         }
       } finally {
-        extractingMemoryRef.current = false;
-        setExtractingMemory(false);
+        if (extractAbortRef.current === controller) {
+          extractAbortRef.current = null;
+          extractingMemoryRef.current = false;
+          if (mountedRef.current) setExtractingMemory(false);
+        }
       }
     },
-    [date, initialSettings.enableMemory, saveNow],
+    [date, initialSettings.enableMemory, saveNow, mountedRef],
   );
+
+  // Toast 里的操作按钮可能在 8 秒后、切日之后才被点击，
+  // 用 ref 读取最新的保存和提取实现，避免闭包指向旧日期。
+  const saveNowRef = useRef(saveNow);
+  const extractMemoryRef = useRef(extractMemory);
+  const memoryToastIdRef = useRef<string | number | null>(null);
+
+  useEffect(() => {
+    saveNowRef.current = saveNow;
+  }, [saveNow]);
+
+  useEffect(() => {
+    extractMemoryRef.current = extractMemory;
+  }, [extractMemory]);
+
+  // 卸载时中止在途的记忆提取请求
+  useEffect(() => {
+    return () => {
+      extractAbortRef.current?.abort();
+      extractAbortRef.current = null;
+    };
+  }, []);
 
   const memoryStale = useMemo(() => {
     if (!memoryExtractedAt) return false;
@@ -536,6 +571,8 @@ export function Workspace({
     ],
   );
 
+  const dateChangeAbortRef = useRef<AbortController | null>(null);
+
   const handleDateChange = useCallback(
     async (nextDate: string) => {
       if (!isValidISODate(nextDate) || nextDate === date || loading) {
@@ -545,6 +582,17 @@ export function Workspace({
       const previousDate = date;
       const hasSomething =
         rawInput.trim().length > 0 || hasDraftContent(draft);
+
+      // 切日后旧的记忆提取和提示都失效，先清理掉
+      extractAbortRef.current?.abort();
+      extractAbortRef.current = null;
+      extractingMemoryRef.current = false;
+      setExtractingMemory(false);
+
+      if (memoryToastIdRef.current) {
+        toast.dismiss(memoryToastIdRef.current);
+        memoryToastIdRef.current = null;
+      }
 
       // 先锁住编辑和生成，等保存及新日期加载完成再解锁
       setLoadingKind("date");
@@ -559,11 +607,18 @@ export function Workspace({
         }
       }
 
+      // 连续切日时中止上一次加载
+      dateChangeAbortRef.current?.abort();
+      const controller = new AbortController();
+      dateChangeAbortRef.current = controller;
+
       setHydratedDate("");
       setDate(nextDate);
 
       try {
-        const response = await fetch(`/api/reviews?date=${nextDate}`);
+        const response = await fetch(`/api/reviews?date=${nextDate}`, {
+          signal: controller.signal,
+        });
         const data = (await response.json().catch(() => ({}))) as {
           error?: string;
           review?: ReviewRecord | null;
@@ -588,13 +643,18 @@ export function Workspace({
             : `开始写 ${relativeDateLabel(nextDate)} 的复盘`,
         );
       } catch (error) {
+        if (controller.signal.aborted) return;
+
         setDate(previousDate);
         setHydratedDate(previousDate);
         toast.error(
           error instanceof Error ? error.message : "加载失败",
         );
       } finally {
-        setLoadingKind(null);
+        if (dateChangeAbortRef.current === controller) {
+          dateChangeAbortRef.current = null;
+          setLoadingKind(null);
+        }
       }
     },
     [
@@ -646,7 +706,7 @@ export function Workspace({
       return true;
     }
 
-    toast.success("已复制，去钉钉粘贴吧", {
+    const toastId = toast.success("已复制，去钉钉粘贴吧", {
       description:
         memoryAction === "first"
           ? "顺便提取今天的长期记忆？"
@@ -656,18 +716,21 @@ export function Workspace({
         label: memoryAction === "first" ? "提取记忆" : "更新记忆",
         onClick: () => {
           void (async () => {
-            const saved = await saveNow({ silent: true });
+            // 按钮可能在 8 秒后、甚至在切日之后才被点击，
+            // 这里读取最新实现，避免保存/提取到旧日期的数据
+            const saved = await saveNowRef.current({ silent: true });
 
             if (!saved) {
               toast.error("复盘保存失败，记忆还没提取");
               return;
             }
 
-            await extractMemory(false, { skipSave: true });
+            await extractMemoryRef.current(false, { skipSave: true });
           })();
         },
       },
     });
+    memoryToastIdRef.current = toastId;
 
     return true;
   }, [
@@ -678,8 +741,6 @@ export function Workspace({
     initialSettings.enableMemory,
     memoryExtractedAt,
     memoryStale,
-    saveNow,
-    extractMemory,
   ]);
 
   const handleEditorSave = useCallback(

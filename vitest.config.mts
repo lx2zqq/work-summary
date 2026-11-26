@@ -9,6 +9,7 @@ export default defineConfig({
   },
   test: {
     environment: "node",
-    include: ["tests/**/*.test.ts"],
+    // tsx 预留给后续前端组件测试；需要 DOM 时再单独用 environment: "jsdom"
+    include: ["tests/**/*.test.{ts,tsx}"],
   },
 });

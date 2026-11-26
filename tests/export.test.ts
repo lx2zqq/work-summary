@@ -93,3 +93,52 @@ describe("buildBackupMarkdown", () => {
     expect(output).toContain("学生名单：暂无");
   });
 });
+
+describe("buildBackupMarkdown 边界情况", () => {
+  it("同名不同学生按 studentId 分开分组", () => {
+    const otherStudent: Student = {
+      ...student,
+      id: "student-2",
+      name: "林小满",
+    };
+    const otherMemory: Memory = {
+      ...memory,
+      id: "memory-2",
+      studentId: "student-2",
+      content: "英语口语需要加强。",
+    };
+
+    const output = buildBackupMarkdown({
+      exportedAt: "2026-11-24T10:00:00.000Z",
+      students: [student, otherStudent],
+      memories: [memory, otherMemory],
+      reviews: [],
+    });
+
+    expect(output.match(/### 林小满/g)?.length).toBe(2);
+    expect(output).toContain("数学基础较弱。");
+    expect(output).toContain("英语口语需要加强。");
+  });
+
+  it("多行记忆压成一行，复盘正文用引用块避免 Markdown 结构", () => {
+    const multiLineMemory: Memory = {
+      ...memory,
+      content: "第一行\n第二行",
+    };
+    const multiLineReview: ReviewRecord = {
+      ...review,
+      finalText: "标题\n# 不是标题\n- 不是列表",
+    };
+
+    const output = buildBackupMarkdown({
+      exportedAt: "2026-11-24T10:00:00.000Z",
+      students: [student],
+      memories: [multiLineMemory],
+      reviews: [multiLineReview],
+    });
+
+    expect(output).toContain("第一行 第二行");
+    expect(output).toContain("> # 不是标题");
+    expect(output).toContain("> - 不是列表");
+  });
+});

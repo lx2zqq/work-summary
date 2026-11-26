@@ -4,28 +4,8 @@ import { useEffect } from "react";
 import { UsagiMascot } from "@/components/mascots";
 import { Button } from "@/components/ui/button";
 
-/** 把一长串堆栈翻译成一句能照着做的提示 */
-function describeError(error: Error): string {
-  const message = error.message || "";
-
-  if (
-    /CONNECT_TIMEOUT|ECONNREFUSED|ENOTFOUND|ETIMEDOUT|Connection terminated|connect (ETIMEDOUT|ECONNREFUSED)/i.test(
-      message,
-    )
-  ) {
-    return "数据库连不上。本地测试可以先把 .env.local 里的 DATABASE_URL 注释掉，改用本地数据库；线上请检查 Supabase 是否可用。";
-  }
-
-  if (/does not exist|relation .* does not exist|table .* not found/i.test(message)) {
-    return "数据库表还没建好，先执行 npm run db:migrate。";
-  }
-
-  if (/password authentication failed|invalid password/i.test(message)) {
-    return "数据库账号或密码不对，检查 DATABASE_URL。";
-  }
-
-  return message || "请稍后重试。";
-}
+/** 只有开发环境展示原始错误，生产环境一律用通用文案 */
+const isDev = process.env.NODE_ENV !== "production";
 
 export default function ErrorPage({
   error,
@@ -46,16 +26,20 @@ export default function ErrorPage({
           页面出了点问题
         </h1>
         <p className="mt-2 text-sm leading-relaxed text-ink-soft">
-          {describeError(error)}
+          刷新一下再试试，如果一直这样，请稍后再来。
         </p>
 
-        {error.message ? (
-          <details className="mt-3 rounded-lg bg-cream-deep/60 px-3 py-2 text-left">
+        <Button className="mt-5" onClick={reset}>
+          重试
+        </Button>
+
+        {isDev ? (
+          <details className="mt-4 rounded-lg bg-cream-deep/60 px-3 py-2 text-left">
             <summary className="cursor-pointer list-none text-xs font-medium text-ink-soft">
-              查看详细错误
+              调试信息（仅开发环境）
             </summary>
             <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words text-[10px] leading-relaxed text-ink-soft">
-              {error.message.slice(0, 2000)}
+              {error.message || "（无错误信息）"}
             </pre>
             {error.digest ? (
               <p className="mt-1 text-[10px] text-ink-soft/70">
@@ -64,10 +48,6 @@ export default function ErrorPage({
             ) : null}
           </details>
         ) : null}
-
-        <Button className="mt-5" onClick={reset}>
-          重试
-        </Button>
       </div>
     </div>
   );

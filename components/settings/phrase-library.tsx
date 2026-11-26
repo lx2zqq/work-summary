@@ -103,6 +103,12 @@ export function PhraseLibrary({
   }
 
   async function handleDelete(id: string) {
+    // 演示模式的数据只在内存里，不能请求真实的 DELETE 接口
+    if (demoMode) {
+      toast.info("演示模式下不能删除话术");
+      return;
+    }
+
     setDeletingId(id);
 
     try {
@@ -154,7 +160,7 @@ export function PhraseLibrary({
             placeholder="输入常用话术，自动润色并查重…"
             className="mt-3 min-h-[90px] bg-paper text-sm"
             maxLength={300}
-            disabled={polishing}
+            disabled={polishing || adding}
           />
 
           <div className="mt-2 flex items-center justify-between gap-2">
@@ -167,7 +173,7 @@ export function PhraseLibrary({
                 void handlePolish();
               }}
               loading={polishing}
-              disabled={!text.trim() || full}
+              disabled={!text.trim() || full || adding}
             >
               润色并预览
             </Button>
@@ -195,7 +201,7 @@ export function PhraseLibrary({
                   <Button
                     variant="ghost"
                     size="sm"
-                    disabled={polishing}
+                    disabled={polishing || adding}
                     onClick={() => {
                       void handlePolish();
                     }}
@@ -205,6 +211,7 @@ export function PhraseLibrary({
                   <Button
                     size="sm"
                     loading={adding}
+                    disabled={polishing}
                     onClick={() => {
                       void handleAdd();
                     }}
@@ -238,7 +245,7 @@ export function PhraseLibrary({
                   <button
                     type="button"
                     aria-label="删除这条话术"
-                    disabled={deletingId === phrase.id}
+                    disabled={demoMode || deletingId === phrase.id}
                     onClick={() => {
                       void handleDelete(phrase.id);
                     }}

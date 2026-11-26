@@ -1,6 +1,23 @@
 import { formatDateCN } from "./date";
 import type { Memory, ReviewRecord, Student } from "./types";
 
+/** 记忆内容压成一行，避免换行破坏列表结构 */
+function normalizeInline(text: string): string {
+  return text.replace(/\s*\n+\s*/g, " ").trim();
+}
+
+/** 复盘正文用引用块输出，避免正文里的 #、- 被 Markdown 当成结构 */
+function quoteBlock(text: string): string {
+  return text
+    .split(/\r?\n/)
+    .map((line) => `> ${line.trimEnd()}`)
+    .join("\n");
+}
+
+function studentStatusLabel(status: Student["status"] | null | undefined) {
+  return status || "未知";
+}
+
 /** 设置页「导出 Markdown」用的人类可读备份 */
 export function buildBackupMarkdown(input: {
   exportedAt: string;
@@ -17,22 +34,39 @@ export function buildBackupMarkdown(input: {
     "",
   ];
 
-  const groups = new Map<string, Memory[]>();
+  const studentById = new Map(
+    input.students.map((student) => [student.id, student]),
+  );
+  // 优先按 studentId 分组，同名但不同学生不会被合并成一组
+  const groups = new Map<string, { title: string; items: Memory[] }>();
 
   for (const memory of input.memories) {
-    const key =
-      memory.scope === "student"
-        ? memory.studentName ?? "未关联学生"
-        : "通用记忆";
-    const bucket = groups.get(key) ?? [];
-    bucket.push(memory);
+    let key: string;
+    let title: string;
+
+    if (memory.scope === "general") {
+      key = "general";
+      title = "通用记忆";
+    } else if (memory.studentId) {
+      key = `id:${memory.studentId}`;
+      title =
+        studentById.get(memory.studentId)?.name ??
+        memory.studentName ??
+        "未关联学生";
+    } else {
+      key = `name:${memory.studentName ?? ""}`;
+      title = memory.studentName ?? "未关联学生";
+    }
+
+    const bucket = groups.get(key) ?? { title, items: [] };
+    bucket.items.push(memory);
     groups.set(key, bucket);
   }
 
   if (groups.size === 0) {
     lines.push("（还没有长期记忆）", "");
   } else {
-    for (const [title, items] of groups) {
+    for (const { title, items } of groups.values()) {
       lines.push(`### ${title}`, "");
 
       for (const memory of items) {
@@ -43,7 +77,7 @@ export function buildBackupMarkdown(input: {
         const importance = Math.min(3, Math.max(1, memory.importance));
 
         lines.push(
-          `- [${memory.category}] 重要度 ${importance}/3 · ${source}${archived}：${memory.content}`,
+          `- [${memory.category}] 重要度 ${importance}/3 · ${source}${archived}：${normalizeInline(memory.content)}`,
         );
       }
 
@@ -62,18 +96,21 @@ export function buildBackupMarkdown(input: {
       lines.push(
         `### ${formatDateCN(review.reviewDate)}（${review.style === "concise" ? "简洁" : "详细"}）`,
         "",
-        review.finalText.trim(),
+        quoteBlock(review.finalText.trim()),
         "",
       );
     }
   }
 
-  lines.push(
-    "---",
-    "",
-    `学生名单：${input.students.map((student) => `${student.name}（${student.status}）`).join("、") || "暂无"}`,
-    "",
-  );
+  const studentLine =
+    input.students
+      .map(
+        (student) =>
+          `${student.name}（${studentStatusLabel(student.status)}）`,
+      )
+      .join("、") || "暂无";
+
+  lines.push("---", "", `学生名单：${studentLine}`, "");
 
   return lines.join("\n");
 }

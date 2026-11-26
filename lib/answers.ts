@@ -42,6 +42,9 @@ export function setAnswerCustom(
   return { ...current, custom: value };
 }
 
+/** 选项和自定义补充之间的分隔标记 */
+const CUSTOM_MARKER = "；补充：";
+
 export function buildAnswer(state: QuestionAnswer): string {
   const custom = state.custom.trim();
 
@@ -50,7 +53,91 @@ export function buildAnswer(state: QuestionAnswer): string {
   }
 
   const selected = state.selected.join("、");
-  return custom ? `${selected}；补充：${custom}` : selected;
+  return custom ? `${selected}${CUSTOM_MARKER}${custom}` : selected;
+}
+
+type ParsedSelected = {
+  selected: string[];
+  /** 选项部分是否完全由已知选项组成 */
+  matchedAll: boolean;
+  /** 已经消费掉的字符数，包含分隔用的顿号 */
+  consumedLength: number;
+};
+
+/**
+ * 按已知选项解析选项部分。
+ * 选项本身可能带顿号，所以先整体匹配，再按长度从长到短贪心匹配，
+ * 不能直接 split("、")，否则会把一个选项拆成两半。
+ */
+function parseSelected(part: string, options: string[]): ParsedSelected {
+  const trimmed = part.trim();
+  if (!trimmed) return { selected: [], matchedAll: true, consumedLength: 0 };
+
+  if (options.includes(trimmed)) {
+    return {
+      selected: [trimmed],
+      matchedAll: true,
+      consumedLength: trimmed.length,
+    };
+  }
+
+  const sorted = [...options].sort((a, b) => b.length - a.length);
+  const selected: string[] = [];
+  let rest = trimmed;
+  let consumed = 0;
+
+  while (rest.length > 0) {
+    const hit = sorted.find(
+      (option) => rest === option || rest.startsWith(`${option}、`),
+    );
+    if (!hit) break;
+
+    selected.push(hit);
+    consumed += hit.length;
+    rest = rest.slice(hit.length);
+
+    if (rest.startsWith("、")) {
+      rest = rest.slice(1);
+      consumed += 1;
+    }
+  }
+
+  return { selected, matchedAll: rest.length === 0, consumedLength: consumed };
+}
+
+/**
+ * 解析一条已提交的答案。
+ * 只有“；补充：”前面的内容完全由已知选项组成时，它才是安全边界；
+ * 否则说明标记本身属于用户补充内容，必须整段保留，避免自定义内容被截断丢弃。
+ */
+function parseStoredAnswer(answer: string, options: string[]): QuestionAnswer {
+  const trimmed = answer.trim();
+  if (!trimmed) return { selected: [], custom: "" };
+
+  const markerIndex = trimmed.indexOf(CUSTOM_MARKER);
+
+  if (markerIndex >= 0) {
+    const parsed = parseSelected(trimmed.slice(0, markerIndex), options);
+
+    if (parsed.matchedAll && parsed.selected.length > 0) {
+      return {
+        selected: parsed.selected,
+        custom: trimmed.slice(markerIndex + CUSTOM_MARKER.length).trim(),
+      };
+    }
+  }
+
+  const parsed = parseSelected(trimmed, options);
+
+  if (parsed.selected.length > 0) {
+    const tail = trimmed.slice(parsed.consumedLength);
+    return {
+      selected: parsed.selected,
+      custom: tail.replace(/^[；;、\s]+/, "").trim(),
+    };
+  }
+
+  return { selected: [], custom: trimmed };
 }
 
 /**
@@ -62,7 +149,6 @@ export function answersFromConversation(
   conversation: QAPair[],
 ): Record<string, QuestionAnswer> {
   const result: Record<string, QuestionAnswer> = {};
-  const marker = "；补充：";
 
   for (const question of questions) {
     let pair: QAPair | undefined;
@@ -79,19 +165,7 @@ export function answersFromConversation(
     const answer = pair.answer.trim();
     if (!answer) continue;
 
-    const markerIndex = answer.indexOf(marker);
-    const selectedPart =
-      markerIndex >= 0 ? answer.slice(0, markerIndex) : answer;
-    const customPart =
-      markerIndex >= 0 ? answer.slice(markerIndex + marker.length) : "";
-    const selected = selectedPart
-      .split("、")
-      .map((value) => value.trim())
-      .filter((value) => question.options.includes(value));
-    const custom =
-      customPart || (selected.length === 0 ? selectedPart : "");
-
-    result[question.id] = { selected, custom };
+    result[question.id] = parseStoredAnswer(answer, question.options);
   }
 
   return result;

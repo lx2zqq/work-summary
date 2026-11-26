@@ -28,7 +28,7 @@ export async function DELETE(
   } catch (error) {
     console.error("[reviews:DELETE]", error);
     return NextResponse.json(
-      { error: "删除失败，请检查数据库连接" },
+      { error: "删除失败，请稍后重试" },
       { status: 500 },
     );
   }

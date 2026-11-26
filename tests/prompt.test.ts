@@ -315,3 +315,28 @@ describe("buildPromptMessages", () => {
     expect(content).not.toMatch(/\n{3,}/);
   });
 });
+
+describe("restyle 模式", () => {
+  const RESTYLE_BASE: PromptContext = {
+    ...BASE,
+    mode: "restyle",
+    style: "detailed",
+    currentDraft: emptyDraft(),
+  };
+
+  it("缺少当前草稿时直接报错", () => {
+    expect(() => buildPromptMessages({ ...BASE, mode: "restyle" })).toThrow(
+      "改文风需要当前草稿",
+    );
+  });
+
+  it("只带草稿和目标文风，不带日期与轮次", () => {
+    const [system, user] = buildPromptMessages(RESTYLE_BASE);
+
+    expect(system?.content).toContain("只改文风");
+    expect(system?.content).not.toContain("今天日期");
+    expect(user?.content).not.toContain("今天日期");
+    expect(user?.content).not.toContain("轮追问");
+    expect(user?.content).toContain("【目标文风】");
+  });
+});

@@ -2,7 +2,7 @@
 
 import { Brain, Pencil, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { UsagiMascot } from "@/components/mascots";
 import { Badge } from "@/components/ui/badge";
@@ -136,6 +136,30 @@ export function MemoryManager({
   const [deleteTarget, setDeleteTarget] = useState<Memory | null>(null);
   const [deleting, setDeleting] = useState(false);
 
+  const mountedRef = useRef(true);
+  const saveLockRef = useRef(false);
+  const deleteLockRef = useRef(false);
+  const saveAbortRef = useRef<AbortController | null>(null);
+  const deleteAbortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    mountedRef.current = true;
+
+    return () => {
+      mountedRef.current = false;
+      saveAbortRef.current?.abort();
+      deleteAbortRef.current?.abort();
+    };
+  }, []);
+
+  // 服务端刷新后同步 props；在渲染期间比较，避免 effect 里 setState
+  const [initialSnapshot, setInitialSnapshot] = useState(initialMemories);
+
+  if (initialSnapshot !== initialMemories) {
+    setInitialSnapshot(initialMemories);
+    setMemories(initialMemories);
+  }
+
   const activeMemories = useMemo(
     () => memories.filter((memory) => memory.status === "active"),
     [memories],
@@ -177,8 +201,10 @@ export function MemoryManager({
       }
       if (!keyword) return true;
 
+      const needle = keyword.toLowerCase();
+
       return [memory.content, memory.studentName ?? "", memory.category].some(
-        (value) => value.includes(keyword),
+        (value) => value.toLowerCase().includes(needle),
       );
     });
   }, [memories, query, scope, effectiveCategory]);
@@ -258,7 +284,14 @@ export function MemoryManager({
       return;
     }
 
+    if (saveLockRef.current) return;
+    saveLockRef.current = true;
     setSaving(true);
+
+    // 重复提交时中止旧请求
+    saveAbortRef.current?.abort();
+    const controller = new AbortController();
+    saveAbortRef.current = controller;
 
     const payload = {
       scope: form.scope,
@@ -283,6 +316,7 @@ export function MemoryManager({
                 method: editing ? "PATCH" : "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(payload),
+                signal: controller.signal,
               },
             );
             const data = (await response.json().catch(() => ({}))) as {
@@ -297,6 +331,8 @@ export function MemoryManager({
             return data.memory;
           })();
 
+      if (!mountedRef.current || saveAbortRef.current !== controller) return;
+
       setMemories((previous) =>
         editing
           ? previous.map((item) =>
@@ -308,23 +344,35 @@ export function MemoryManager({
       if (!editing) resetFilters();
       toast.success(editing ? "记忆已更新" : "记忆已添加");
     } catch (error) {
+      if (controller.signal.aborted) return;
       toast.error(error instanceof Error ? error.message : "保存失败");
     } finally {
-      setSaving(false);
+      if (saveAbortRef.current === controller) {
+        saveAbortRef.current = null;
+        saveLockRef.current = false;
+        if (mountedRef.current) setSaving(false);
+      }
     }
   }
 
   async function handleDelete() {
-    if (!deleteTarget) return;
+    const target = deleteTarget;
+    if (!target || deleteLockRef.current) return;
 
+    deleteLockRef.current = true;
     setDeleting(true);
+
+    deleteAbortRef.current?.abort();
+    const controller = new AbortController();
+    deleteAbortRef.current = controller;
 
     try {
       if (store) {
-        await store.remove(deleteTarget.id);
+        await store.remove(target.id);
       } else {
-        const response = await fetch(`/api/memories/${deleteTarget.id}`, {
+        const response = await fetch(`/api/memories/${target.id}`, {
           method: "DELETE",
+          signal: controller.signal,
         });
         const data = (await response.json().catch(() => ({}))) as {
           error?: string;
@@ -335,15 +383,24 @@ export function MemoryManager({
         }
       }
 
+      if (!mountedRef.current || deleteAbortRef.current !== controller) {
+        return;
+      }
+
       setMemories((previous) =>
-        previous.filter((item) => item.id !== deleteTarget.id),
+        previous.filter((item) => item.id !== target.id),
       );
       setDeleteTarget(null);
       toast.success("记忆已删除");
     } catch (error) {
+      if (controller.signal.aborted) return;
       toast.error(error instanceof Error ? error.message : "删除失败");
     } finally {
-      setDeleting(false);
+      if (deleteAbortRef.current === controller) {
+        deleteAbortRef.current = null;
+        deleteLockRef.current = false;
+        if (mountedRef.current) setDeleting(false);
+      }
     }
   }
 

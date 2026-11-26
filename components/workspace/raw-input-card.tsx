@@ -10,7 +10,13 @@ import {
   Users,
 } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useRef, useState, useSyncExternalStore } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/input";
@@ -71,18 +77,23 @@ function appendVoiceText(
   current: string,
   transcript: string,
   separator: "" | "\n",
-): string {
+): { value: string; truncated: boolean } {
   const chunk = transcript.trim();
-  if (!chunk) return current;
+  if (!chunk) return { value: current, truncated: false };
 
   const needsNewline =
     separator === "\n" && current.length > 0 && !current.endsWith("\n");
   const joiner = needsNewline ? "\n" : needsSpace(current, chunk) ? " " : "";
   const available = RAW_INPUT_MAX_LENGTH - current.length - joiner.length;
 
-  if (available <= 0) return current;
+  if (available <= 0) {
+    return { value: current, truncated: true };
+  }
 
-  return `${current}${joiner}${chunk.slice(0, available)}`;
+  return {
+    value: `${current}${joiner}${chunk.slice(0, available)}`,
+    truncated: chunk.length > available,
+  };
 }
 
 type Props = {
@@ -147,18 +158,34 @@ export function RawInputCard({
     getServerSnapshot,
   );
 
+  // 语音识别可能在同一个渲染周期连续回调多次，必须用 ref 读取最新值，
+  // 否则第二次回调会基于旧 value 覆盖第一次追加的内容
+  const valueRef = useRef(value);
+
+  useEffect(() => {
+    valueRef.current = value;
+  }, [value]);
+
   const appendTranscript = useCallback(
     (text: string, separator: "" | "\n") => {
-      const next = appendVoiceText(value, text, separator);
+      const current = valueRef.current;
+      const { value: next, truncated } = appendVoiceText(
+        current,
+        text,
+        separator,
+      );
 
-      if (next === value) {
+      // 只有真正写到 6000 字上限才提示，内容为空时不打扰用户
+      if (truncated) {
         toast.error("已经到 6000 字上限了");
-        return;
       }
 
+      if (next === current) return;
+
+      valueRef.current = next;
       onChange(next);
     },
-    [value, onChange],
+    [onChange],
   );
 
   // 语音识别按停顿多次返回，连续拼接；录音转写只返回一次，另起一行
@@ -403,7 +430,7 @@ export function RawInputCard({
           </p>
         ) : null}
 
-        {hydrated && !voiceSupported ? (
+        {hydrated && !voiceSupported && !demoMode ? (
           <p className="mb-2 mt-2 rounded-lg bg-cream-deep px-3 py-2 text-[11px] leading-relaxed text-ink-soft ring-1 ring-line/60">
             当前浏览器不支持语音输入，请直接打字。
           </p>

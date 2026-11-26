@@ -1,22 +1,17 @@
-"use client";
+import { redirect } from "next/navigation";
+import { DemoStudentsView } from "@/components/demo/demo-students-view";
+import { getSession } from "@/lib/auth";
 
-import { useDemo } from "@/components/demo/demo-provider";
-import { PageHeading } from "@/components/page-heading";
-import { StudentManager } from "@/components/students/student-manager";
+export default async function DemoStudentsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ preview?: string }>;
+}) {
+  const session = await getSession();
+  const { preview } = await searchParams;
 
-export default function DemoStudentsPage() {
-  const { students, memories, reviews, studentStore } = useDemo();
+  // 已登录用户默认看正式学生名单；带 preview=1 时允许查看演示
+  if (session && preview !== "1") redirect("/students");
 
-  return (
-    <div className="space-y-4">
-      <PageHeading title="学生名单" />
-      <StudentManager
-        initialStudents={students}
-        memories={memories}
-        reviews={reviews}
-        store={studentStore}
-        demoMode
-      />
-    </div>
-  );
+  return <DemoStudentsView />;
 }
