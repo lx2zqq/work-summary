@@ -10,7 +10,7 @@
 
 ## 生成提示「服务端还没有配置 REVIEW_DEEPSEEK_API_KEY」
 
-在 `.env.local` 或部署平台环境变量里填写 `REVIEW_DEEPSEEK_API_KEY`，然后重启开发服务器或重新部署。未配置时应用不会崩，会按原文生成兜底草稿。
+在服务器项目目录的 `.env` 填写 `REVIEW_DEEPSEEK_API_KEY`，然后执行 `sudo systemctl restart work-summary`；本地开发改 `.env.local` 后重启 `npm run dev`。未配置时应用不会崩，会按原文生成兜底草稿。
 
 ## 提示 401 / 模型不存在
 
@@ -26,37 +26,70 @@
 npm run db:migrate
 ```
 
-Supabase 环境确认：
+服务器环境确认：
 
-- `.env.local` 或 Vercel 的 `DATABASE_URL` 是 Transaction pooler 连接串；
-- 迁移本身用 Session pooler / Direct connection；
-- 迁移后 Supabase Table Editor 能看到五张表。
+- `.env` 里的 `DATABASE_URL` 是 Supabase/Postgres 连接串；
+- 用同一个连接串执行 `npm run db:migrate`；
+- 迁移后 Supabase Table Editor 能看到 `reviews`、`students`、`settings`、`memories`、`usage_events` 五张表。
 
-## Vercel 报「生产环境必须配置 DATABASE_URL」
+## 生产环境报「必须配置 DATABASE_URL」
 
-生产环境不会回退到 PGlite。到 Vercel 添加 Supabase Transaction pooler 连接串，然后 Redeploy。
+生产环境不会回退到 PGlite。编辑服务器项目目录的 `.env`，填入 Supabase/Postgres 连接串，然后执行 `sudo systemctl restart work-summary`。下次自动部署会重新执行迁移和构建。
 
 ## 连接 Supabase 报 `unsupported startup parameter: pgbouncer`
 
-连接串里混入了 Prisma 专用参数。删除 `pgbouncer=true` 和 `connection_limit=1`，保留 `sslmode=require`。项目会自动清理这两个参数，但迁移脚本和外部工具仍建议手动去掉。
+连接串里混入了 Prisma 专用参数。删除 `pgbouncer=true` 和 `connection_limit=1`，保留 `sslmode=require`。应用运行时和迁移脚本都会自动清理这两个参数；如果用 `psql` 等外部工具连接，仍需手动去掉。
 
 ## 数据库报 `relation does not exist` / 没有表
 
-建表迁移没有跑成功，或者 Vercel 连到了另一个 Supabase 项目。先用 Session pooler 跑 `npm run db:migrate`，再到 Table Editor 确认表是否存在。
+建表迁移没有跑成功，或者服务器 `.env` 的 `DATABASE_URL` 指向了另一个 Supabase 项目。用正确的连接串执行 `npm run db:migrate`，再到 Table Editor 确认表是否存在。
 
 ## 生成时 504 / 超时
 
-生成接口最长 60 秒，模型单次请求限制 25 秒。检查：
+- 先看 `systemctl status work-summary` 和服务日志（`journalctl -u work-summary -n 100 --no-pager`）；
+- 检查 Nginx/Caddy 的反向代理超时是否短于实际生成耗时；
+- 检查模型是否限流、服务器出口网络是否正常；
+- 本机 `curl http://127.0.0.1:3000/login` 正常但外网超时，重点检查反向代理和防火墙。
 
-- Vercel 是否开启 Fluid Compute；
-- 函数区域是否离 Supabase 太远；
-- 是否频繁触发模型限流。
+## GitHub Actions / `scripts/deploy.sh` 部署失败
 
-必要时升级套餐或换普通 Node 服务器。
+按顺序检查：
 
-## Vercel 构建卡在 npm 安装
+1. `SERVER_HOST`、`SERVER_USER`、`SERVER_SSH_KEY`、`SSH_KNOWN_HOSTS` 是否都配置；
+2. CI 是否在 `main` 上成功完成；
+3. 私钥是否与服务器 `~/.ssh/authorized_keys` 匹配，`SSH_KNOWN_HOSTS` 是否是当前服务器的 host key；
+4. 服务器项目目录是否有未提交改动（`git status --short` 必须为空）；
+5. `git pull --ff-only origin main` 是否因本地分叉失败；
+6. `npm ci`、`npm run build` 是否失败或 OOM；
+7. 部署用户是否能免密执行 `sudo systemctl restart work-summary`；
+8. 最后一步 `curl http://127.0.0.1:3000/login` 是否成功。
 
-`package-lock.json` 应指向官方 `registry.npmjs.org`。如果日志出现 `registry.npmmirror.com`，说明 lockfile 被改过，重新拉取仓库版本再部署。
+## 服务器 502 / 打不开
+
+- `systemctl status work-summary` 看服务是否在运行；
+- `curl http://127.0.0.1:3000/login` 看应用是否响应；
+- 检查 Nginx/Caddy 的 upstream 是否指向 `127.0.0.1:3000`，以及 80/443 端口和防火墙；
+- 查看 `journalctl -u work-summary` 和反向代理错误日志。
+
+## 服务器构建卡在 npm 安装 / 内存不足
+
+`package-lock.json` 应指向官方 `registry.npmjs.org`；如果日志出现 `registry.npmmirror.com`，重新拉取仓库版本。`scripts/deploy.sh` 默认用 `NODE_OPTIONS=--max-old-space-size=1536` 构建；小内存服务器可调大或增加 swap。
+
+## `AUTH_SECRET` 报错或登录失败
+
+生产环境 `AUTH_SECRET` 至少 32 字节。用 `openssl rand -hex 32` 或 `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` 生成，写入服务器 `.env` 后执行 `sudo systemctl restart work-summary`。更换 `AUTH_SECRET` 会使现有登录 Cookie 失效，需要重新登录。
+
+## HSTS 重复 / 想关闭应用层 HSTS
+
+默认开启 HSTS。如果 Nginx/Caddy 已经统一添加 `Strict-Transport-Security`，在服务器 `.env` 设置 `DISABLE_HSTS=1` 并重启服务。HSTS 只对 HTTPS 响应生效，纯 HTTP 调试可以忽略。
+
+## 修改服务器环境变量后怎么生效
+
+编辑服务器项目目录的 `.env`，然后执行 `sudo systemctl restart work-summary`。GitHub Actions 只部署代码，不会修改服务器 `.env`。
+
+## 自动部署会覆盖服务器 `.env` 吗
+
+不会。`.env` 不在仓库里，`scripts/deploy.sh` 只做 `git pull`、`npm ci`、迁移、构建和重启。
 
 ## PGlite 初始化失败 / 数据库被锁
 
@@ -64,7 +97,7 @@ PGlite 同一时间只能被一个进程打开。不要同时开多个 `npm run 
 
 ## 复制按钮在公网 HTTP 下没反应
 
-Clipboard API 需要 HTTPS 或 localhost。应用有 `execCommand` 兜底，但建议部署到 HTTPS。
+Clipboard API 需要 HTTPS 或 localhost。给 Nginx/Caddy 配置 HTTPS；应用有 `execCommand` 兜底，但仍建议使用 HTTPS。
 
 ## 手机上日期显示成 `11/13/2026`
 
@@ -72,7 +105,11 @@ Clipboard API 需要 HTTPS 或 localhost。应用有 `execCommand` 兜底，但�
 
 ## 安卓微信点语音提示「没有听到声音」
 
-微信内核不支持 Web Speech API。新版会自动切换为录音转写：再点一次麦克风，允许权限，说完点「停止并转写」。如果提示未配置 `REVIEW_ASR_API_KEY`，先到 SiliconFlow 创建 Key 并填入环境变量。
+微信内核不支持 Web Speech API。新版会自动切换为录音转写：再点一次麦克风，允许权限，说完点「停止并转写」。未配置 `REVIEW_ASR_API_KEY` 时提示直接打字；录音转写要求 WAV、单文件不超过 4MB（约 60 秒），格式不对会提示重新录。
+
+## `/demo` 是什么？
+
+免登录演示页，使用 `lib/demo-data.ts` 的内存数据，不读写正式数据库，刷新后恢复初始状态。已登录用户默认进入正式工作台；需要查看演示时访问 `/demo?preview=1`。
 
 ## `npm run eval` 和 `npm run eval:ai` 有什么区别？
 
