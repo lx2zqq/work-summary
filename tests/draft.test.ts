@@ -84,6 +84,24 @@ describe("normalizeDraft", () => {
     expect(draft.questions[0].multiple).toBe(true);
     expect(draft.questions[1].multiple).toBe(false);
   });
+
+  it("保留日常复盘追问的 section 标识，旧数据缺省为 undefined", () => {
+    const draft = normalizeDraft({
+      questions: [
+        {
+          text: "今天这些事推进下来，有没有哪个环节下次可以处理得更顺一点？",
+          section: " richang ",
+        },
+        {
+          text: "今天有试听吗？",
+          options: ["有", "没有"],
+        },
+      ],
+    });
+
+    expect(draft.questions[0].section).toBe("richang");
+    expect(draft.questions[1].section).toBeUndefined();
+  });
 });
 
 describe("mergeFollowUpDraft", () => {

@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { buildPromptMessages, type PromptContext } from "@/lib/ai/prompt";
 import {
+  AI_SKIP_ANSWER,
   DEFAULT_SETTINGS,
   MAX_FOLLOW_UP_ROUNDS,
+  RICHANG_MIN_CHARS,
   emptyDraft,
 } from "@/lib/types";
 
@@ -120,7 +122,7 @@ describe("buildPromptMessages", () => {
     expect(system?.content).not.toContain("【长期记忆】");
   });
 
-  it("最终模式要求 richang 恰好 1 条且 25-60 字", () => {
+  it("最终模式要求 richang 恰好 1 条，并提出温和的优化建议", () => {
     const [system] = buildPromptMessages({
       ...BASE,
       mode: "final",
@@ -128,9 +130,96 @@ describe("buildPromptMessages", () => {
     });
 
     expect(system?.content).toContain("richang 必须恰好 1 条");
-    expect(system?.content).toContain("25-60 个汉字");
-    expect(system?.content).toContain("不要为凑字数编造");
+    expect(system?.content).toContain("30-70 个汉字");
+    expect(system?.content).toContain(`${RICHANG_MIN_CHARS} 字以上`);
+    expect(system?.content).toContain("温和");
+    expect(system?.content).toContain("不要生硬自责");
+    expect(system?.content).toContain("不知道说什么");
+    expect(system?.content).toContain("今日表现不足");
+    expect(system?.content).toContain("纯工作总结");
     expect(system?.content).not.toContain("dailyPhrase");
+  });
+
+  it("追问模式要求日常复盘追问带 section 标识", () => {
+    const [system] = buildPromptMessages(BASE);
+
+    expect(system?.content).toContain('"section": "richang"');
+    expect(system?.content).toContain(
+      "只有日常工作复盘追问才输出",
+    );
+    expect(system?.content).toContain(
+      "结合当天流水账里的具体环节温和提问",
+    );
+  });
+
+  it("用户跳过日常复盘追问时，最终 prompt 明确要求由 AI 提炼", () => {
+    const [, user] = buildPromptMessages({
+      ...BASE,
+      mode: "final",
+      round: MAX_FOLLOW_UP_ROUNDS,
+      answers: [
+        {
+          question:
+            "今天这些事推进下来，有没有哪个环节下次可以处理得更顺一点？",
+          answer: AI_SKIP_ANSWER,
+        },
+      ],
+    });
+
+    expect(user?.content).toContain("【用户已跳过日常工作复盘追问】");
+    expect(user?.content).toContain("不要照抄");
+    expect(user?.content).toContain(AI_SKIP_ANSWER);
+    expect(user?.content).toContain("温和、可落地的优化建议");
+  });
+
+  it("示例中的 richang 是温和优化建议，不是工作小结", () => {
+    const [system] = buildPromptMessages({
+      ...BASE,
+      mode: "final",
+      round: MAX_FOLLOW_UP_ROUNDS,
+    });
+
+    expect(system?.content).toContain("给林小满讲完错题后");
+    expect(system?.content).toContain("后面就不用临时催了");
+    expect(system?.content).not.toContain(
+      "下次给林小满讲完错题，可以顺手",
+    );
+    expect(system?.content).not.toContain(
+      "今天主要跟进了林小满的作业和错题，两道错题讲解后家长已经知情",
+    );
+  });
+
+  it("richang 示例不共用同一条句式", () => {
+    const [finalSystem] = buildPromptMessages({
+      ...BASE,
+      mode: "final",
+      round: MAX_FOLLOW_UP_ROUNDS,
+    });
+    const [restyleSystem] = buildPromptMessages({
+      ...BASE,
+      mode: "restyle",
+      currentDraft: emptyDraft(),
+    });
+    const finalContent = finalSystem?.content ?? "";
+    const restyleContent = restyleSystem?.content ?? "";
+
+    for (const content of [finalContent, restyleContent]) {
+      expect(content.match(/可以顺手/g)?.length ?? 0).toBe(0);
+      expect(content.match(/跟进会更顺/g)?.length ?? 0).toBe(0);
+    }
+    expect(finalContent).toContain("把订正检查的时间记在当天的跟进里");
+    expect(restyleContent).toContain("这样第二次核对就能直接看结果");
+  });
+
+  it("改文风示例包含日常复盘的温和优化对比", () => {
+    const [system] = buildPromptMessages({
+      ...BASE,
+      mode: "restyle",
+      currentDraft: emptyDraft(),
+    });
+
+    expect(system?.content).toContain("【日常工作复盘的文风对比】");
+    expect(system?.content).toContain("下次跟进作业前");
   });
 
   it("通用话术开关只影响程序追加，不要求模型输出", () => {

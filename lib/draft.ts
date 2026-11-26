@@ -41,6 +41,7 @@ type DraftLike = {
     options?: string[];
     multiple?: boolean;
     target?: SectionKey | "general";
+    section?: string;
     reason?: string;
   }>;
   notes?: string[];
@@ -120,12 +121,16 @@ export function normalizeDraft(
         ? question.target
         : "general";
 
+    // 旧数据没有 section，保持 undefined；只有日常复盘追问会带 richang
+    const section = question.section?.trim().slice(0, 20) || undefined;
+
     questions.push({
       id,
       text,
       options,
       multiple: question.multiple === true,
       target,
+      section,
       reason: question.reason?.trim() || undefined,
     });
   }

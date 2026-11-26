@@ -13,6 +13,12 @@ export type ReviewStyle = "concise" | "detailed";
 export const MAX_FOLLOW_UP_ROUNDS = 3;
 export const MAX_QUESTIONS_PER_ROUND = 3;
 
+/** 日常工作复盘的最短有效字数，prompt 与 eval 检查共用 */
+export const RICHANG_MIN_CHARS = 25;
+
+/** 用户跳过日常复盘追问时提交的明确标记，prompt 据此走“由 AI 提炼”分支 */
+export const AI_SKIP_ANSWER = "跳过，由 AI 提炼";
+
 export type StudentStatus = "在读" | "停课" | "潜在" | "已结课";
 
 export type FollowUpQuestion = {
@@ -21,6 +27,11 @@ export type FollowUpQuestion = {
   options: string[];
   multiple: boolean;
   target: SectionKey | "general";
+  /**
+   * 可选的栏目标识。目前只用于标记日常复盘追问（"richang"），
+   * 前端据此展示“跳过，由 AI 提炼”；旧数据没有该字段时保持 undefined。
+   */
+  section?: string;
   reason?: string;
 };
 

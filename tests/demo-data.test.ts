@@ -56,6 +56,17 @@ describe("演示数据", () => {
     );
   });
 
+  it("演示 richang 使用温和优化口吻，不是工作小结", () => {
+    for (const draft of [DEMO_DRAFT_CONCISE, DEMO_DRAFT_DETAILED]) {
+      const item = draft.sections.richang[0] ?? "";
+
+      expect(item.length).toBeGreaterThanOrEqual(25);
+      expect(item.length).toBeLessThanOrEqual(100);
+      expect(item).not.toContain("整体推进正常");
+      expect(item).not.toContain("后续继续盯");
+    }
+  });
+
   it("追问问题都有 id、选项和合法栏目", () => {
     expect(DEMO_QUESTIONS).toHaveLength(3);
 

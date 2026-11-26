@@ -3,10 +3,13 @@ import {
   EMPTY_ANSWER,
   answersFromConversation,
   buildAnswer,
+  clearAnswerSkip,
+  isRichangQuestion,
   setAnswerCustom,
+  setAnswerSkip,
   toggleAnswerOption,
 } from "@/lib/answers";
-import type { FollowUpQuestion } from "@/lib/types";
+import { AI_SKIP_ANSWER, type FollowUpQuestion } from "@/lib/types";
 
 describe("toggleAnswerOption", () => {
   it("单选题保留已填的补充内容", () => {
@@ -56,6 +59,25 @@ describe("setAnswerCustom", () => {
 
     expect(next.selected).toEqual(["A"]);
     expect(next.custom).toBe("补充");
+  });
+});
+
+describe("跳过日常复盘追问", () => {
+  it("只有 section 为 richang 的追问允许跳过", () => {
+    expect(isRichangQuestion({ section: "richang" })).toBe(true);
+    expect(isRichangQuestion({ section: "yeji" })).toBe(false);
+    expect(isRichangQuestion({})).toBe(false);
+  });
+
+  it("跳过时提交明确标记，撤销后保留原输入", () => {
+    const withCustom = setAnswerCustom(EMPTY_ANSWER, "先按原计划");
+    const skipped = setAnswerSkip(withCustom);
+
+    expect(buildAnswer(skipped)).toBe(AI_SKIP_ANSWER);
+
+    const restored = clearAnswerSkip(skipped);
+    expect(restored.aiSkip).toBe(false);
+    expect(buildAnswer(restored)).toBe("先按原计划");
   });
 });
 
@@ -144,6 +166,27 @@ describe("answersFromConversation", () => {
     expect(result.q1).toEqual({
       selected: ["有"],
       custom: "已确认",
+    });
+  });
+
+  it("还原日常复盘追问的跳过状态", () => {
+    const question: FollowUpQuestion = {
+      id: "q5",
+      text: "今天这些事推进下来，有没有哪个环节下次可以处理得更顺一点？",
+      options: ["有，稍后补充", "暂时没有"],
+      multiple: false,
+      target: "richang",
+      section: "richang",
+    };
+
+    const result = answersFromConversation([question], [
+      { question: question.text, answer: AI_SKIP_ANSWER },
+    ]);
+
+    expect(result.q5).toEqual({
+      selected: [],
+      custom: "",
+      aiSkip: true,
     });
   });
 });

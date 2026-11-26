@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  draftSchema,
   generateRequestSchema,
   saveReviewSchema,
   studentInputSchema,
@@ -55,6 +56,21 @@ describe("generateRequestSchema", () => {
         conversation: answers,
       }).success,
     ).toBe(true);
+  });
+});
+
+describe("draftSchema", () => {
+  it("允许追问携带可选的日常复盘 section 标识", () => {
+    const parsed = draftSchema.parse({
+      questions: [
+        {
+          text: "今天这些事推进下来，有没有哪个环节下次可以处理得更顺一点？",
+          section: "richang",
+        },
+      ],
+    });
+
+    expect(parsed.questions?.[0]?.section).toBe("richang");
   });
 });
 

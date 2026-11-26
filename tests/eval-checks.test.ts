@@ -10,6 +10,7 @@ import {
   type CheckInput,
 } from "@/lib/eval/checks";
 import {
+  RICHANG_MIN_CHARS,
   emptySections,
   type ReviewDraft,
   type SectionKey,
@@ -199,11 +200,11 @@ describe("runChecks", () => {
     expect(failedNames(checks)).not.toContain("追问质量");
   });
 
-  it("richang 达到 25 字即可通过", () => {
+  it("richang 达到最低字数即可通过", () => {
     const richang =
       "今天跟进了林小满的作业和错题，家长已知情，明天继续检查订正。";
 
-    expect(richang.length).toBeGreaterThanOrEqual(25);
+    expect(richang.length).toBeGreaterThanOrEqual(RICHANG_MIN_CHARS);
 
     const checks = runChecks(
       input({
@@ -217,7 +218,7 @@ describe("runChecks", () => {
     expect(failedNames(checks)).not.toContain("日常工作复盘");
   });
 
-  it("richang 少于 25 字时失败", () => {
+  it("richang 少于最低字数时失败", () => {
     const checks = runChecks(
       input({
         draft: draft({
@@ -228,6 +229,59 @@ describe("runChecks", () => {
     );
 
     expect(failedNames(checks)).toContain("日常工作复盘");
+  });
+
+  it("richang 照搬“不知道说什么”等敷衍语时失败", () => {
+    const checks = runChecks(
+      input({
+        draft: draft({
+          xueqing: ["林小满：完成今日作业，错题已讲解。"],
+          richang: [
+            "不知道说什么，今天正常整理资料和课表，后续继续关注。",
+          ],
+        }),
+      }),
+    );
+
+    const richang = checks.find(
+      (check) => check.name === "日常工作复盘",
+    );
+    expect(richang?.passed).toBe(false);
+    expect(richang?.detail).toContain("不知道说什么");
+  });
+
+  it("richang 以“跳过”开头时失败", () => {
+    const checks = runChecks(
+      input({
+        draft: draft({
+          xueqing: ["林小满：完成今日作业，错题已讲解。"],
+          richang: [
+            "跳过，由 AI 提炼，今天完成了作业和错题讲解，后续继续努力提升效率。",
+          ],
+        }),
+      }),
+    );
+
+    const richang = checks.find(
+      (check) => check.name === "日常工作复盘",
+    );
+    expect(richang?.passed).toBe(false);
+    expect(richang?.detail).toContain("跳过");
+  });
+
+  it("richang 在句中合理使用“跳过”时不误判", () => {
+    const checks = runChecks(
+      input({
+        draft: draft({
+          xueqing: ["林小满：完成今日作业，错题已讲解。"],
+          richang: [
+            "下次和家长确认排课前，先核对一遍课表，不要跳过确认环节，避免临时改时间。",
+          ],
+        }),
+      }),
+    );
+
+    expect(failedNames(checks)).not.toContain("日常工作复盘");
   });
 });
 

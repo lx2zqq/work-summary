@@ -40,6 +40,8 @@ const questionSchema = z.object({
   target: z
     .union([sectionKeySchema, z.literal("general")])
     .optional(),
+  // 仅日常复盘追问会带 "richang"，旧草稿没有该字段
+  section: z.string().trim().max(20).optional(),
   reason: z.string().max(200).optional(),
 });
 

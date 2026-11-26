@@ -1,5 +1,6 @@
 import {
   MAX_QUESTIONS_PER_ROUND,
+  RICHANG_MIN_CHARS,
   SECTION_ORDER,
   type QAPair,
   type ReviewDraft,
@@ -57,6 +58,18 @@ const PLACEHOLDERS = ["待确认", "待补充", "未提供", "不明确"];
 
 /** 追问会直接展示给用户，不能出现内部实现概念 */
 const QUESTION_INTERNAL_TERMS = ["长期记忆里", "根据记忆", "系统记录"];
+
+/** richang 照搬用户敷衍语时会出现这些文本 */
+const RICHANG_FILLER_PHRASES = [
+  "不知道说什么",
+  "不知道说啥",
+  "没啥说的",
+  "没什么好说的",
+  "没想好",
+];
+
+/** “跳过”只在开头出现时视为照搬，避免误伤“不要跳过确认环节”这类合理建议 */
+const RICHANG_SKIP_PREFIXES = ["跳过"];
 
 export function countItems(draft: ReviewDraft): number {
   return Object.values(draft.sections).reduce(
@@ -135,8 +148,26 @@ export function runChecks(input: CheckInput): CheckResult[] {
       issues.push(`需要 1 条，实际 ${richang.length} 条`);
     }
     for (const item of richang) {
-      if (item.trim().length < 25) {
-        issues.push(`“${item.slice(0, 12)}…”少于 25 字`);
+      const trimmed = item.trim();
+
+      if (trimmed.length < RICHANG_MIN_CHARS) {
+        issues.push(
+          `“${item.slice(0, 12)}…”少于 ${RICHANG_MIN_CHARS} 字`,
+        );
+      }
+
+      const filler = RICHANG_FILLER_PHRASES.find((phrase) =>
+        trimmed.includes(phrase),
+      );
+      if (filler) {
+        issues.push(`“${item.slice(0, 12)}…”照搬了“${filler}”`);
+      }
+
+      const skipped = RICHANG_SKIP_PREFIXES.find((prefix) =>
+        trimmed.startsWith(prefix),
+      );
+      if (skipped) {
+        issues.push(`“${item.slice(0, 12)}…”以“${skipped}”开头`);
       }
     }
 

@@ -72,4 +72,20 @@ describe("judgeDraft", () => {
       console.error = error;
     }
   });
+
+  it("judge 规则明确 richang 的合理优化不算幻觉", async () => {
+    const { client, calls } = fakeClient([VALID_SCORE]);
+
+    await judgeDraft(INPUT, { client });
+
+    const params = calls[0] as {
+      messages: Array<{ role: string; content: string }>;
+    };
+    const system =
+      params.messages.find((message) => message.role === "system")?.content ??
+      "";
+
+    expect(system).toContain("richang 评判口径");
+    expect(system).toContain("不应判为幻觉");
+  });
 });

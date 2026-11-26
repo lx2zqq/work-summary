@@ -1,18 +1,18 @@
 {
-  "generatedAt": "2026-11-24T12:51:13.748Z",
-  "promptVersion": "2026-11-24.2",
+  "generatedAt": "2026-11-26T11:57:31.236Z",
+  "promptVersion": "2026-11-26.2",
   "caseCount": 30,
   "summary": {
     "total": 30,
-    "passed": 30,
-    "failed": 0,
+    "passed": 29,
+    "failed": 1,
     "errors": 0,
-    "passRate": 1,
-    "avgDurationMs": 4617.566666666667,
-    "p95DurationMs": 7726,
-    "avgPromptTokens": 3743.733333333333,
-    "avgCompletionTokens": 619.5,
-    "avgToolCalls": 1.6,
+    "passRate": 0.9666666666666667,
+    "avgDurationMs": 4429.4,
+    "p95DurationMs": 8426,
+    "avgPromptTokens": 4047.3333333333335,
+    "avgCompletionTokens": 528.8,
+    "avgToolCalls": 1.5666666666666667,
     "toolCallRate": 0.5333333333333333,
     "degradedCount": 0
   },
@@ -70,7 +70,7 @@
     {
       "tag": "final",
       "total": 23,
-      "passed": 23
+      "passed": 22
     },
     {
       "tag": "irrelevant",
@@ -90,7 +90,7 @@
     {
       "tag": "medium",
       "total": 5,
-      "passed": 5
+      "passed": 4
     },
     {
       "tag": "memory",
@@ -115,7 +115,7 @@
     {
       "tag": "optional-sections",
       "total": 1,
-      "passed": 1
+      "passed": 0
     },
     {
       "tag": "parent",
@@ -167,9 +167,9 @@
         "core-sections"
       ],
       "status": "passed",
-      "durationMs": 4701,
-      "promptTokens": 4726,
-      "completionTokens": 449,
+      "durationMs": 2938,
+      "promptTokens": 5199,
+      "completionTokens": 221,
       "toolCallNames": [
         "search_memories",
         "search_students"
@@ -222,9 +222,9 @@
         "performance"
       ],
       "status": "passed",
-      "durationMs": 4496,
-      "promptTokens": 2276,
-      "completionTokens": 525,
+      "durationMs": 2788,
+      "promptTokens": 2524,
+      "completionTokens": 347,
       "toolCallNames": [],
       "toolRounds": 1,
       "degraded": false,
@@ -269,9 +269,9 @@
         "detailed"
       ],
       "status": "passed",
-      "durationMs": 4360,
-      "promptTokens": 2349,
-      "completionTokens": 608,
+      "durationMs": 6458,
+      "promptTokens": 2597,
+      "completionTokens": 904,
       "toolCallNames": [],
       "toolRounds": 1,
       "degraded": false,
@@ -316,9 +316,9 @@
         "anti-hallucination"
       ],
       "status": "passed",
-      "durationMs": 3270,
-      "promptTokens": 2267,
-      "completionTokens": 535,
+      "durationMs": 4652,
+      "promptTokens": 2515,
+      "completionTokens": 632,
       "toolCallNames": [],
       "toolRounds": 1,
       "degraded": false,
@@ -358,9 +358,9 @@
         "core-sections"
       ],
       "status": "passed",
-      "durationMs": 3642,
-      "promptTokens": 4689,
-      "completionTokens": 492,
+      "durationMs": 3081,
+      "promptTokens": 5198,
+      "completionTokens": 260,
       "toolCallNames": [
         "search_students",
         "search_memories"
@@ -413,12 +413,12 @@
         "core-sections"
       ],
       "status": "passed",
-      "durationMs": 7726,
-      "promptTokens": 4894,
-      "completionTokens": 1182,
+      "durationMs": 4737,
+      "promptTokens": 5416,
+      "completionTokens": 404,
       "toolCallNames": [
-        "search_memories",
-        "search_students"
+        "search_students",
+        "search_memories"
       ],
       "toolRounds": 2,
       "degraded": false,
@@ -467,10 +467,10 @@
         "final",
         "optional-sections"
       ],
-      "status": "passed",
-      "durationMs": 3692,
-      "promptTokens": 2279,
-      "completionTokens": 595,
+      "status": "failed",
+      "durationMs": 3156,
+      "promptTokens": 2527,
+      "completionTokens": 374,
       "toolCallNames": [],
       "toolRounds": 1,
       "degraded": false,
@@ -492,8 +492,8 @@
         },
         {
           "name": "栏目覆盖",
-          "passed": true,
-          "detail": ""
+          "passed": false,
+          "detail": "xueqing 需要至少 1 条，实际 0"
         },
         {
           "name": "工具调用",
@@ -515,16 +515,16 @@
         "multi-student"
       ],
       "status": "passed",
-      "durationMs": 5542,
-      "promptTokens": 4865,
-      "completionTokens": 742,
+      "durationMs": 3765,
+      "promptTokens": 8036,
+      "completionTokens": 304,
       "toolCallNames": [
-        "search_memories",
-        "search_memories",
         "search_students",
-        "search_students"
+        "search_students",
+        "search_memories",
+        "search_memories"
       ],
-      "toolRounds": 2,
+      "toolRounds": 3,
       "degraded": false,
       "checks": [
         {
@@ -572,9 +572,9 @@
         "parent"
       ],
       "status": "passed",
-      "durationMs": 3070,
-      "promptTokens": 4872,
-      "completionTokens": 298,
+      "durationMs": 4203,
+      "promptTokens": 5374,
+      "completionTokens": 295,
       "toolCallNames": [
         "search_students",
         "search_memories"
@@ -627,12 +627,12 @@
         "performance"
       ],
       "status": "passed",
-      "durationMs": 4882,
-      "promptTokens": 6462,
-      "completionTokens": 453,
+      "durationMs": 2515,
+      "promptTokens": 5204,
+      "completionTokens": 222,
       "toolCallNames": [
-        "search_students",
-        "search_memories"
+        "search_memories",
+        "search_students"
       ],
       "toolRounds": 2,
       "degraded": false,
@@ -682,12 +682,13 @@
         "core-sections"
       ],
       "status": "passed",
-      "durationMs": 4760,
-      "promptTokens": 4769,
-      "completionTokens": 495,
+      "durationMs": 4935,
+      "promptTokens": 5354,
+      "completionTokens": 694,
       "toolCallNames": [
-        "search_memories",
-        "search_students"
+        "search_students",
+        "search_students",
+        "search_memories"
       ],
       "toolRounds": 2,
       "degraded": false,
@@ -737,9 +738,9 @@
         "detailed"
       ],
       "status": "passed",
-      "durationMs": 10123,
-      "promptTokens": 7809,
-      "completionTokens": 1581,
+      "durationMs": 9048,
+      "promptTokens": 8629,
+      "completionTokens": 1297,
       "toolCallNames": [
         "search_students",
         "search_students",
@@ -791,9 +792,9 @@
         "performance"
       ],
       "status": "passed",
-      "durationMs": 6774,
-      "promptTokens": 7775,
-      "completionTokens": 1106,
+      "durationMs": 4556,
+      "promptTokens": 8471,
+      "completionTokens": 525,
       "toolCallNames": [
         "search_students",
         "search_students",
@@ -847,9 +848,9 @@
         "difficulty"
       ],
       "status": "passed",
-      "durationMs": 3803,
-      "promptTokens": 4974,
-      "completionTokens": 421,
+      "durationMs": 7830,
+      "promptTokens": 5539,
+      "completionTokens": 947,
       "toolCallNames": [
         "search_memories",
         "search_memories"
@@ -897,18 +898,16 @@
         "voice-style"
       ],
       "status": "passed",
-      "durationMs": 6048,
-      "promptTokens": 7770,
-      "completionTokens": 736,
+      "durationMs": 8426,
+      "promptTokens": 5555,
+      "completionTokens": 1181,
       "toolCallNames": [
         "search_memories",
         "search_memories",
         "search_memories",
-        "search_students",
-        "search_students",
         "search_students"
       ],
-      "toolRounds": 3,
+      "toolRounds": 2,
       "degraded": false,
       "checks": [
         {
@@ -951,9 +950,9 @@
         "empty"
       ],
       "status": "passed",
-      "durationMs": 5167,
-      "promptTokens": 2261,
-      "completionTokens": 790,
+      "durationMs": 4512,
+      "promptTokens": 2509,
+      "completionTokens": 603,
       "toolCallNames": [],
       "toolRounds": 1,
       "degraded": false,
@@ -993,9 +992,9 @@
         "long-input"
       ],
       "status": "passed",
-      "durationMs": 3465,
-      "promptTokens": 2585,
-      "completionTokens": 413,
+      "durationMs": 7638,
+      "promptTokens": 2833,
+      "completionTokens": 1102,
       "toolCallNames": [],
       "toolRounds": 1,
       "degraded": false,
@@ -1040,12 +1039,12 @@
         "numbers"
       ],
       "status": "passed",
-      "durationMs": 4889,
-      "promptTokens": 4716,
-      "completionTokens": 546,
+      "durationMs": 5880,
+      "promptTokens": 5220,
+      "completionTokens": 730,
       "toolCallNames": [
-        "search_students",
-        "search_memories"
+        "search_memories",
+        "search_students"
       ],
       "toolRounds": 2,
       "degraded": false,
@@ -1095,9 +1094,9 @@
         "negative"
       ],
       "status": "passed",
-      "durationMs": 3630,
-      "promptTokens": 2278,
-      "completionTokens": 708,
+      "durationMs": 3459,
+      "promptTokens": 2526,
+      "completionTokens": 462,
       "toolCallNames": [],
       "toolRounds": 1,
       "degraded": false,
@@ -1142,9 +1141,9 @@
         "negative"
       ],
       "status": "passed",
-      "durationMs": 4115,
-      "promptTokens": 2272,
-      "completionTokens": 573,
+      "durationMs": 4317,
+      "promptTokens": 2520,
+      "completionTokens": 568,
       "toolCallNames": [],
       "toolRounds": 1,
       "degraded": false,
@@ -1188,12 +1187,12 @@
         "questions"
       ],
       "status": "passed",
-      "durationMs": 6599,
-      "promptTokens": 4525,
-      "completionTokens": 1002,
+      "durationMs": 7895,
+      "promptTokens": 4899,
+      "completionTokens": 1055,
       "toolCallNames": [
-        "search_students",
-        "search_memories"
+        "search_memories",
+        "search_students"
       ],
       "toolRounds": 2,
       "degraded": false,
@@ -1228,9 +1227,9 @@
         "irrelevant"
       ],
       "status": "passed",
-      "durationMs": 4145,
-      "promptTokens": 2270,
-      "completionTokens": 652,
+      "durationMs": 3201,
+      "promptTokens": 2518,
+      "completionTokens": 336,
       "toolCallNames": [],
       "toolRounds": 1,
       "degraded": false,
@@ -1280,9 +1279,9 @@
         "conflict"
       ],
       "status": "passed",
-      "durationMs": 5547,
-      "promptTokens": 4748,
-      "completionTokens": 674,
+      "durationMs": 4992,
+      "promptTokens": 5247,
+      "completionTokens": 590,
       "toolCallNames": [
         "search_students",
         "search_memories"
@@ -1334,9 +1333,9 @@
         "questions"
       ],
       "status": "passed",
-      "durationMs": 7165,
-      "promptTokens": 4513,
-      "completionTokens": 1067,
+      "durationMs": 6040,
+      "promptTokens": 4881,
+      "completionTokens": 829,
       "toolCallNames": [
         "search_students",
         "search_memories"
@@ -1374,9 +1373,9 @@
         "filter"
       ],
       "status": "passed",
-      "durationMs": 4820,
-      "promptTokens": 4718,
-      "completionTokens": 654,
+      "durationMs": 3613,
+      "promptTokens": 5214,
+      "completionTokens": 367,
       "toolCallNames": [
         "search_students",
         "search_memories"
@@ -1410,6 +1409,11 @@
           "detail": ""
         },
         {
+          "name": "栏目覆盖",
+          "passed": true,
+          "detail": ""
+        },
+        {
           "name": "工具调用",
           "passed": true,
           "detail": ""
@@ -1429,9 +1433,9 @@
         "detailed"
       ],
       "status": "passed",
-      "durationMs": 3501,
-      "promptTokens": 953,
-      "completionTokens": 484,
+      "durationMs": 1992,
+      "promptTokens": 1006,
+      "completionTokens": 119,
       "toolCallNames": [],
       "toolRounds": 1,
       "degraded": false,
@@ -1476,9 +1480,9 @@
         "concise"
       ],
       "status": "passed",
-      "durationMs": 906,
-      "promptTokens": 912,
-      "completionTokens": 79,
+      "durationMs": 1729,
+      "promptTokens": 965,
+      "completionTokens": 75,
       "toolCallNames": [],
       "toolRounds": 1,
       "degraded": false,
@@ -1518,9 +1522,9 @@
         "empty-sections"
       ],
       "status": "passed",
-      "durationMs": 3705,
-      "promptTokens": 948,
-      "completionTokens": 478,
+      "durationMs": 1305,
+      "promptTokens": 1001,
+      "completionTokens": 104,
       "toolCallNames": [],
       "toolRounds": 1,
       "degraded": false,
@@ -1555,9 +1559,9 @@
         "richang"
       ],
       "status": "passed",
-      "durationMs": 1887,
-      "promptTokens": 874,
-      "completionTokens": 116,
+      "durationMs": 1292,
+      "promptTokens": 927,
+      "completionTokens": 152,
       "toolCallNames": [],
       "toolRounds": 1,
       "degraded": false,
@@ -1592,9 +1596,9 @@
         "detailed"
       ],
       "status": "passed",
-      "durationMs": 2097,
-      "promptTokens": 963,
-      "completionTokens": 131,
+      "durationMs": 1929,
+      "promptTokens": 1016,
+      "completionTokens": 165,
       "toolCallNames": [],
       "toolRounds": 1,
       "degraded": false,

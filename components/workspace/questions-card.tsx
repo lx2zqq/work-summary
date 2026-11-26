@@ -1,6 +1,12 @@
 "use client";
 
-import { ArrowRight, Brain, MessageSquare, SkipForward } from "lucide-react";
+import {
+  ArrowRight,
+  Brain,
+  MessageSquare,
+  SkipForward,
+  Sparkles,
+} from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -10,7 +16,10 @@ import { Input } from "@/components/ui/input";
 import {
   EMPTY_ANSWER,
   buildAnswer,
+  clearAnswerSkip,
+  isRichangQuestion,
   setAnswerCustom,
+  setAnswerSkip,
   toggleAnswerOption,
   type QuestionAnswer,
 } from "@/lib/answers";
@@ -74,12 +83,38 @@ export function QuestionsCard({
     }));
   }
 
+  function skipQuestion(question: FollowUpQuestion) {
+    setAnswers((previous) => ({
+      ...previous,
+      [question.id]: setAnswerSkip(
+        previous[question.id] ?? EMPTY_ANSWER,
+      ),
+    }));
+  }
+
+  function undoSkip(question: FollowUpQuestion) {
+    setAnswers((previous) => ({
+      ...previous,
+      [question.id]: clearAnswerSkip(
+        previous[question.id] ?? EMPTY_ANSWER,
+      ),
+    }));
+  }
+
   function handleSubmit() {
     const pairs = questions
-      .map((question) => ({
-        question: question.text,
-        answer: buildAnswer(getAnswer(question.id)),
-      }))
+      .map((question) => {
+        const state = getAnswer(question.id);
+
+        return {
+          question: question.text,
+          // 跳过标记只允许出现在日常复盘追问上，其他追问绝不带出
+          answer: buildAnswer({
+            ...state,
+            aiSkip: isRichangQuestion(question) && state.aiSkip === true,
+          }),
+        };
+      })
       .filter((pair) => pair.answer.length > 0);
 
     if (pairs.length === 0) {
@@ -161,6 +196,9 @@ export function QuestionsCard({
       <div className="flex-1 space-y-3.5 px-0.5">
         {questions.map((question, index) => {
           const state = getAnswer(question.id);
+          // 严格隔离：只有日常复盘追问才展示“跳过，由 AI 提炼”
+          const richang = isRichangQuestion(question);
+          const skipped = richang && state.aiSkip === true;
 
           return (
             <div
@@ -181,46 +219,80 @@ export function QuestionsCard({
                 </span>
               </div>
 
-              {question.options.length > 0 ? (
-                <div className="mt-2.5 flex flex-wrap gap-2 pl-7">
-                  {question.options.map((option, optionIndex) => {
-                    const selected = state.selected.includes(option);
-
-                    return (
-                      <button
-                        key={`${question.id}-option-${optionIndex}-${option}`}
-                        type="button"
-                        aria-pressed={selected}
-                        onClick={() => toggleOption(question, option)}
-                        className={cn(
-                          "rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors",
-                          selected
-                            ? "border-brand-deep bg-brand-deep text-white"
-                            : "border-line bg-paper text-ink-soft hover:bg-cream-deep hover:text-ink",
-                        )}
-                      >
-                        {option}
-                      </button>
-                    );
-                  })}
+              {skipped ? (
+                <div
+                  role="status"
+                  className="mt-2.5 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg bg-brand-soft px-2.5 py-1.5 text-[11px] text-brand-deep"
+                >
+                  <Sparkles className="h-3.5 w-3.5 shrink-0" />
+                  <span>已跳过，将由 AI 结合今日工作提炼优化建议</span>
+                  <button
+                    type="button"
+                    onClick={() => undoSkip(question)}
+                    className="font-medium underline underline-offset-2 transition-colors hover:text-brand-strong"
+                  >
+                    改为自己写
+                  </button>
                 </div>
-              ) : null}
+              ) : (
+                <>
+                  {question.options.length > 0 ? (
+                    <div className="mt-2.5 flex flex-wrap gap-2 pl-7">
+                      {question.options.map((option, optionIndex) => {
+                        const selected = state.selected.includes(option);
 
-              <Input
-                value={state.custom}
-                aria-label={`第 ${index + 1} 个问题的补充说明`}
-                onChange={(event) =>
-                  setCustom(question, event.target.value)
-                }
-                placeholder={
-                  question.options.length > 0
-                    ? question.multiple
-                      ? "补充说明，可多选…"
-                      : "补充说明（可选）…"
-                    : "直接写答案…"
-                }
-                className="mt-2.5 h-9 bg-paper text-xs"
-              />
+                        return (
+                          <button
+                            key={`${question.id}-option-${optionIndex}-${option}`}
+                            type="button"
+                            aria-pressed={selected}
+                            onClick={() => toggleOption(question, option)}
+                            className={cn(
+                              "rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors",
+                              selected
+                                ? "border-brand-deep bg-brand-deep text-white"
+                                : "border-line bg-paper text-ink-soft hover:bg-cream-deep hover:text-ink",
+                            )}
+                          >
+                            {option}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+
+                  {richang ? (
+                    <div className="mt-2 pl-7">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => skipQuestion(question)}
+                        disabled={loading}
+                        className="h-7 px-2 text-[11px] text-brand-deep hover:bg-brand-soft hover:text-brand-strong"
+                      >
+                        <Sparkles className="h-3.5 w-3.5" />
+                        跳过，由 AI 提炼
+                      </Button>
+                    </div>
+                  ) : null}
+
+                  <Input
+                    value={state.custom}
+                    aria-label={`第 ${index + 1} 个问题的补充说明`}
+                    onChange={(event) =>
+                      setCustom(question, event.target.value)
+                    }
+                    placeholder={
+                      question.options.length > 0
+                        ? question.multiple
+                          ? "补充说明，可多选…"
+                          : "补充说明（可选）…"
+                        : "直接写答案…"
+                    }
+                    className="mt-2.5 h-9 bg-paper text-xs"
+                  />
+                </>
+              )}
             </div>
           );
         })}

@@ -622,6 +622,8 @@ export const EVAL_CASES: EvalCase[] = [
       mustInclude: ["林小满"],
       mustNotInclude: ["周子航"],
       forbidStudents: ["周子航"],
+      // 短输入也要收口到 1 条 richang，避免模型退回工作小结或输出多条
+      sections: { richang: { minItems: 1, maxItems: 1 } },
     },
   },
 

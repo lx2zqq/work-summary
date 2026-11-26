@@ -1,16 +1,39 @@
 // 追问答案的纯状态逻辑，方便单测，也避免组件里状态互相覆盖。
 
-import type { FollowUpQuestion, QAPair } from "./types";
+import {
+  AI_SKIP_ANSWER,
+  type FollowUpQuestion,
+  type QAPair,
+} from "./types";
 
 export type QuestionAnswer = {
   selected: string[];
   custom: string;
+  /** 日常复盘追问被用户跳过，交给 AI 结合当天工作提炼 */
+  aiSkip?: boolean;
 };
 
 export const EMPTY_ANSWER: QuestionAnswer = {
   selected: [],
   custom: "",
 };
+
+/** 标记日常复盘追问为“跳过，由 AI 提炼” */
+export function setAnswerSkip(current: QuestionAnswer): QuestionAnswer {
+  return { ...current, aiSkip: true };
+}
+
+/** 撤销跳过，保留用户之前输入的内容 */
+export function clearAnswerSkip(current: QuestionAnswer): QuestionAnswer {
+  return { ...current, aiSkip: false };
+}
+
+/** 只有日常复盘追问允许“跳过，由 AI 提炼”，其他追问一律不允许 */
+export function isRichangQuestion(
+  question: Pick<FollowUpQuestion, "section">,
+): boolean {
+  return question.section === "richang";
+}
 
 export function toggleAnswerOption(
   current: QuestionAnswer,
@@ -46,6 +69,9 @@ export function setAnswerCustom(
 const CUSTOM_MARKER = "；补充：";
 
 export function buildAnswer(state: QuestionAnswer): string {
+  // 跳过状态优先：即使之前填过内容，也按明确标记提交
+  if (state.aiSkip) return AI_SKIP_ANSWER;
+
   const custom = state.custom.trim();
 
   if (state.selected.length === 0) {
@@ -113,6 +139,11 @@ function parseSelected(part: string, options: string[]): ParsedSelected {
 function parseStoredAnswer(answer: string, options: string[]): QuestionAnswer {
   const trimmed = answer.trim();
   if (!trimmed) return { selected: [], custom: "" };
+
+  // 生成失败重试时还原跳过状态，而不是把标记当成用户手写内容
+  if (trimmed === AI_SKIP_ANSWER) {
+    return { selected: [], custom: "", aiSkip: true };
+  }
 
   const markerIndex = trimmed.indexOf(CUSTOM_MARKER);
 

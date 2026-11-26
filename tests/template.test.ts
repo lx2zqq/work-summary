@@ -141,6 +141,30 @@ describe("renderReview", () => {
     );
   });
 
+  it("1 条 AI 复盘 + 3 条通用话术，保持 1+3 结构", () => {
+    const date = "2026-11-13";
+    const aiItem =
+      "下次跟进林小满的作业时，可以提前把订正检查的时间定好，第二天上课前再核对一遍。";
+    const draft = draftWith({ richang: [aiItem] });
+    const text = renderReview(draft, date, {
+      ...DEFAULT_SETTINGS,
+      showFixedPhrase: true,
+    });
+
+    const richangBlock =
+      text.split("🍊【日常工作复盘】")[1]?.split("🍊【")[0] ?? "";
+    const items = richangBlock
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => /^(?:[1-9]️⃣|🔟|\d{1,2}\. )/.test(line));
+
+    expect(items).toHaveLength(4);
+    expect(items[0]).toContain(aiItem);
+    for (const phrase of pickDailyPhrases(date, draft, 3)) {
+      expect(richangBlock).toContain(phrase);
+    }
+  });
+
   it("教研相关只在开启且有内容时出现", () => {
     const draft = draftWith({ jiaoyan: ["参加学管部教研。"] });
 

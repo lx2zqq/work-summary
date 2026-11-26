@@ -2,7 +2,7 @@
 
 学管师每天要交固定格式的工作复盘，原始输入通常是「林小满作业写完了，错题讲了两道，跟她妈妈说了下」这类口语流水账，缺主语、缺结果、缺渠道。这个项目把「补全」和「成文」拆成两步：先追问补齐信息，再生成可以直接粘贴到钉钉的结构化正文。
 
-> **在线体验**：[打开 Demo](https://work-summary-nine.vercel.app/) — 免登录，工作台、历史、学生、记忆、设置五个页面均可操作。数据来自 `lib/demo-data.ts`，刷新后恢复初始状态。
+> **演示**：启动项目后访问 `/demo` — 免登录，工作台、历史、学生、记忆、设置五个页面均可操作。数据来自 `lib/demo-data.ts`，刷新后恢复初始状态。
 
 ## 一个真实例子
 
@@ -107,16 +107,22 @@ npm run eval:ai   # 在线：真实模型生成 + 规则检查，可选 LLM judg
 | 数据 | Drizzle ORM；本地 PGlite，生产 Supabase Postgres |
 | 模型 | DeepSeek OpenAI 兼容接口，默认 `deepseek-flash` |
 | 语音 | Web Speech API + SiliconFlow SenseVoiceSmall |
-| 测试与部署 | Vitest、Playwright 验证脚本；Vercel + Supabase |
+| 测试与部署 | Vitest、Playwright 验证脚本；腾讯云轻量服务器 + GitHub Actions + Supabase |
 
 ```bash
 npm install
-cp .env.example .env.local   # 填 REVIEW_DEEPSEEK_API_KEY、APP_PASSWORD、AUTH_SECRET
+cp .env.example .env.local   # 至少填 APP_PASSWORD、AUTH_SECRET；按需填 REVIEW_DEEPSEEK_API_KEY
 npm run db:migrate
 npm run dev
 ```
 
 本地默认 PGlite，不需要安装数据库。没配 `REVIEW_DEEPSEEK_API_KEY` 也能启动，会按原文拆分生成兜底草稿。打开 `http://localhost:3000`，输入 `APP_PASSWORD` 登录。
+
+## 部署
+
+生产环境部署在腾讯云轻量服务器：Node.js 常驻 + systemd，Nginx/Caddy 反向代理，Supabase 提供 Postgres。
+
+GitHub Actions 的 `Deploy production` 工作流在 `main` 的 CI 通过后自动触发，通过 SSH 执行 `scripts/deploy.sh`：拉取代码 → `npm ci` → `npm run db:migrate` → `npm run build` → 重启 systemd 服务 → 检查 `/login`。仓库 Secrets 需要配置 `SERVER_HOST`、`SERVER_USER`、`SERVER_SSH_KEY`、`SSH_KNOWN_HOSTS`；服务器环境变量按 `.env.example` 配置。HSTS 默认开启，如果由 Nginx/Caddy 统一添加，可设置 `DISABLE_HSTS=1` 关闭应用层重复头。
 
 <details>
 <summary>目录结构</summary>
@@ -141,18 +147,19 @@ docs/             架构、评测、部署、FAQ
 
 | 变量 | 必填 | 说明 |
 | --- | --- | --- |
-| `REVIEW_DEEPSEEK_API_KEY` | 是（不填走兜底） | DeepSeek Key，只在服务端读取 |
+| `REVIEW_DEEPSEEK_API_KEY` | 否（不填走兜底草稿） | DeepSeek Key，只在服务端读取 |
 | `REVIEW_DEEPSEEK_MODEL` | 否 | 默认 `deepseek-flash` |
 | `REVIEW_DEEPSEEK_BASE_URL` | 否 | 默认 `https://api.deepseek.com` |
+| `REVIEW_TOOLS_MODE` | 否 | `auto`（默认，模型自主查询，失败时降级）或 `off`（强制全量预注入） |
 | `REVIEW_ASR_API_KEY` | 否 | SiliconFlow Key，用于录音转写 |
 | `REVIEW_ASR_BASE_URL` | 否 | 默认 `https://api.siliconflow.cn/v1` |
 | `REVIEW_ASR_MODEL` | 否 | 默认 `FunAudioLLM/SenseVoiceSmall` |
 | `APP_PASSWORD` | 是 | 访问密码 |
-| `AUTH_SECRET` | 是 | Cookie 签名密钥 |
+| `AUTH_SECRET` | 是 | Cookie 签名密钥，至少 32 字节 |
 | `DATABASE_URL` | 生产必填 | Supabase 连接串；本地留空用 PGlite |
 | `PGLITE_DATA_DIR` | 否 | 本地 PGlite 目录，默认 `.data/pglite` |
 
-部署细节见 [docs/deploy.md](docs/deploy.md)。
+部署细节见 `scripts/deploy.sh` 与 `.github/workflows/deploy.yml`。
 
 </details>
 
@@ -188,7 +195,6 @@ docs/             架构、评测、部署、FAQ
 
 - [架构说明](docs/architecture.md)：状态机、工具循环、可靠性设计
 - [评测说明](docs/eval.md)：数据集、指标定义、历史结果
-- [部署指南](docs/deploy.md)：Supabase + Vercel
 - [常见问题](docs/faq.md)：配置、部署与使用
 
 ## License
