@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   draftSchema,
   generateRequestSchema,
+  memoryExtractionSchema,
+  memoryInputSchema,
+  memoryLifecycleActionSchema,
   saveReviewSchema,
   studentInputSchema,
 } from "@/lib/schema";
@@ -71,6 +74,98 @@ describe("draftSchema", () => {
     });
 
     expect(parsed.questions?.[0]?.section).toBe("richang");
+  });
+});
+
+describe("memoryExtractionSchema", () => {
+  it("兼容旧格式：没有生命周期字段也能通过", () => {
+    const parsed = memoryExtractionSchema.parse({
+      memories: [
+        {
+          scope: "general",
+          category: "工作流程",
+          content: "每周五汇总课时。",
+          importance: 2,
+        },
+      ],
+    });
+
+    expect(parsed.memories[0].lifecycle).toBeUndefined();
+    expect(parsed.memories[0].ttlDays).toBeUndefined();
+  });
+
+  it("接受阶段性记忆和有效天数", () => {
+    const parsed = memoryExtractionSchema.parse({
+      memories: [
+        {
+          scope: "student",
+          studentName: "陈一鸣",
+          category: "课时排课",
+          content: "周六数学课临时调到周日上午。",
+          importance: 2,
+          lifecycle: "ephemeral",
+          ttlDays: 7,
+        },
+      ],
+    });
+
+    expect(parsed.memories[0].lifecycle).toBe("ephemeral");
+    expect(parsed.memories[0].ttlDays).toBe(7);
+  });
+
+  it("拒绝超出范围的有效天数", () => {
+    expect(
+      memoryExtractionSchema.safeParse({
+        memories: [
+          { scope: "general", content: "内容", ttlDays: 91 },
+        ],
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe("memoryInputSchema", () => {
+  it("不传生命周期时保持 undefined，编辑不会误改长期/阶段性", () => {
+    const parsed = memoryInputSchema.parse({
+      scope: "general",
+      category: "工作流程",
+      content: "每天下班前发复盘。",
+      importance: 2,
+    });
+
+    expect(parsed.lifecycle).toBeUndefined();
+  });
+
+  it("接受阶段性记忆和有效天数", () => {
+    const parsed = memoryInputSchema.parse({
+      scope: "general",
+      category: "工作流程",
+      content: "本周五前提交名单。",
+      lifecycle: "ephemeral",
+      ttlDays: 3,
+    });
+
+    expect(parsed.lifecycle).toBe("ephemeral");
+    expect(parsed.ttlDays).toBe(3);
+  });
+});
+
+describe("memoryLifecycleActionSchema", () => {
+  it("只接受约定的四个动作", () => {
+    for (const action of [
+      "keep_permanent",
+      "extend_7d",
+      "archive",
+      "restore",
+    ]) {
+      expect(
+        memoryLifecycleActionSchema.safeParse({ action }).success,
+      ).toBe(true);
+    }
+
+    expect(
+      memoryLifecycleActionSchema.safeParse({ action: "delete" }).success,
+    ).toBe(false);
   });
 });
 

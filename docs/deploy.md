@@ -23,6 +23,7 @@
 | `DATABASE_URL` | 生产必填 | Supabase/Postgres 连接串；本地留空使用 PGlite |
 | `PGLITE_DATA_DIR` | 否 | 本地 PGlite 目录，默认 `.data/pglite` |
 | `DISABLE_HSTS` | 否 | 默认不设置（开启 HSTS）；设为 `1` 关闭应用层 HSTS，适用于反向代理统一添加 HSTS 的场景 |
+| `CRON_SECRET` | 否 | 可选，定时推进记忆生命周期的接口密钥；不配置时接口返回 503 |
 
 生成 `AUTH_SECRET`：
 
@@ -61,6 +62,15 @@ DATABASE_URL='postgresql://...' npm run db:migrate
 ```
 
 迁移成功后应看到 `reviews`、`students`、`settings`、`memories`、`usage_events` 五张表，以及 Drizzle 的迁移历史。
+
+本次升级包含 `drizzle/0004_serious_lord_hawal.sql`（`memories` 生命周期字段）。`npm run db:migrate` 会自动执行；存量记忆默认 `lifecycle=permanent`，不会被自动归档。如需对旧记忆做一次性分类：
+
+```bash
+npm run memories:classify             # 默认 dry-run，只打印建议，不写库
+npm run memories:classify -- --apply  # 确认 dry-run 结果后再写库
+```
+
+脚本每批 20 条调用 DeepSeek；`--apply` 只会把判定为阶段性的记忆推进到 `pending_archive`，保留 5 天宽限期，不会物理删除。
 
 生产库不要执行 `npm run db:push`；改表结构时用 `npm run db:generate` 生成迁移，再用 `npm run db:migrate` 应用。
 
@@ -177,7 +187,17 @@ ssh-keyscan -H <服务器域名或 IP>
 
 仓库公开时不要放入真实学生数据；演示页本身不依赖生产数据库。
 
-## 7. 常见部署问题
+## 7. 定时推进记忆生命周期（可选）
+
+不配置也能正常工作：生成、提取和记忆页读取前都会惰性推进，只是长时间不访问时状态不会提前变化。需要固定凌晨执行时，在服务器 `.env` 设置 `CRON_SECRET`，然后加一条 crontab：
+
+```bash
+0 3 * * * curl -fsS -X POST http://127.0.0.1:3000/api/cron/memories-lifecycle -H "Authorization: Bearer <CRON_SECRET>" > /dev/null
+```
+
+把 `<CRON_SECRET>` 换成与服务器 `.env` 相同的值。接口只执行 `syncMemoryLifecycle()` 并返回 `pending` / `archived` 条数；未配置 `CRON_SECRET` 时返回 503，不会暴露写接口。
+
+## 8. 常见部署问题
 
 详细排错见 [faq.md](faq.md)。高频问题：
 

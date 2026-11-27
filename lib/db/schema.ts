@@ -12,7 +12,9 @@ import {
 import type {
   CustomPhrase,
   MemoryCategory,
+  MemoryLifecycle,
   MemoryScope,
+  MemoryStatus,
   QAPair,
   ReviewDraft,
   ReviewStyle,
@@ -94,9 +96,19 @@ export const memories = pgTable(
     content: text("content").notNull(),
     importance: integer("importance").notNull().default(2),
     status: text("status")
-      .$type<"active" | "archived">()
+      .$type<MemoryStatus>()
       .notNull()
       .default("active"),
+    lifecycle: text("lifecycle")
+      .$type<MemoryLifecycle>()
+      .notNull()
+      .default("permanent"),
+    /** NULL 表示永不过期；阶段性记忆到期后进入待归档 */
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    /** 进入 pending_archive 后的宽限期截止时间 */
+    archiveAfter: timestamp("archive_after", { withTimezone: true }),
+    /** 展示在复盘页提示框里的归档原因 */
+    archiveReason: text("archive_reason"),
     sourceDate: date("source_date", { mode: "string" }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
@@ -109,6 +121,15 @@ export const memories = pgTable(
     index("memories_status_scope_idx").on(table.status, table.scope),
     index("memories_student_idx").on(table.studentId),
     index("memories_source_date_idx").on(table.sourceDate),
+    index("memories_lifecycle_status_idx").on(
+      table.lifecycle,
+      table.status,
+      table.expiresAt,
+    ),
+    index("memories_status_archive_after_idx").on(
+      table.status,
+      table.archiveAfter,
+    ),
   ],
 );
 

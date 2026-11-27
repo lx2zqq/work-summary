@@ -149,6 +149,9 @@ export const memoryInputSchema = z
       .min(1, "请填写记忆内容")
       .max(300, "记忆内容太长了"),
     importance: z.number().int().min(1).max(3).default(2),
+    // 不传时保持原生命周期，新建默认按长期处理
+    lifecycle: z.enum(["permanent", "ephemeral"]).optional(),
+    ttlDays: z.number().int().min(1).max(90).optional(),
   })
   .refine(
     (value) =>
@@ -156,6 +159,10 @@ export const memoryInputSchema = z
       Boolean(value.studentId || value.studentName?.trim()),
     { message: "请选择学生", path: ["studentId"] },
   );
+
+export const memoryLifecycleActionSchema = z.object({
+  action: z.enum(["keep_permanent", "extend_7d", "archive", "restore"]),
+});
 
 export const extractMemoriesRequestSchema = z.object({
   date: isoDateSchema,
@@ -173,6 +180,9 @@ export const memoryExtractionSchema = z.object({
           category: memoryCategorySchema.default("其他"),
           content: z.string().trim().min(1).max(300),
           importance: z.number().int().min(1).max(3).default(2),
+          // 旧输出没有这两个字段，按长期记忆兜底
+          lifecycle: z.enum(["permanent", "ephemeral"]).optional(),
+          ttlDays: z.number().int().min(1).max(90).optional(),
         })
         // 学生记忆必须带姓名，否则无法归属到具体学生
         .refine(
@@ -220,6 +230,9 @@ export type SaveReviewRequest = z.infer<typeof saveReviewSchema>;
 export type StudentInput = z.infer<typeof studentInputSchema>;
 export type SettingsPatch = z.infer<typeof settingsPatchSchema>;
 export type MemoryInputPayload = z.infer<typeof memoryInputSchema>;
+export type MemoryLifecycleAction = z.infer<
+  typeof memoryLifecycleActionSchema
+>["action"];
 export type ExtractedMemory = z.infer<
   typeof memoryExtractionSchema
 >["memories"][number];

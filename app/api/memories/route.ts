@@ -5,7 +5,10 @@ import {
   listMemories,
   listStudents,
 } from "@/lib/db/queries";
-import { resolveMemoryStudent } from "@/lib/memory";
+import {
+  resolveMemoryExpiry,
+  resolveMemoryStudent,
+} from "@/lib/memory";
 import { memoryInputSchema } from "@/lib/schema";
 
 export async function GET() {
@@ -49,6 +52,8 @@ export async function POST(request: Request) {
       );
     }
 
+    const lifecycle = parsed.data.lifecycle ?? "permanent";
+
     const memory = await createMemory({
       scope: parsed.data.scope,
       studentId: resolved.studentId,
@@ -56,6 +61,11 @@ export async function POST(request: Request) {
       category: parsed.data.category,
       content: parsed.data.content,
       importance: parsed.data.importance,
+      lifecycle,
+      expiresAt: resolveMemoryExpiry({
+        lifecycle,
+        ttlDays: parsed.data.ttlDays,
+      }),
       sourceDate: null,
     });
 

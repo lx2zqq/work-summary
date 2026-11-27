@@ -6,13 +6,19 @@ import { drizzle, type PgliteDatabase } from "drizzle-orm/pglite";
 import { migrate } from "drizzle-orm/pglite/migrator";
 import * as schema from "@/lib/db/schema";
 import {
+  archiveMemory,
   createMemory,
   createStudent,
+  findMemories,
+  keepMemory,
   listMemories,
+  listPendingArchiveMemories,
   listReviews,
   mutateCustomPhrases,
+  restoreMemory,
   saveExtractedMemories,
   saveReview,
+  syncMemoryLifecycle,
   updateMemory,
   updateStudent,
 } from "@/lib/db/queries";
@@ -223,5 +229,211 @@ describe("mutateCustomPhrases", () => {
     if (result.ok) {
       expect(result.phrases.map((item) => item.id)).toEqual(["phrase-test"]);
     }
+  });
+});
+
+describe("记忆生命周期", () => {
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  const baseInput = {
+    scope: "general" as const,
+    studentId: null,
+    studentName: null,
+    category: "工作流程" as const,
+    content: "本周五前提交续费名单。",
+    importance: 2,
+  };
+
+  it("阶段性记忆过期后进入待归档，宽限期结束自动归档", async () => {
+    const now = new Date("2026-11-27T10:00:00.000Z");
+    const expired = await createMemory({
+      ...baseInput,
+      lifecycle: "ephemeral",
+      expiresAt: new Date("2026-11-27T09:00:00.000Z").toISOString(),
+    });
+    const fresh = await createMemory({
+      ...baseInput,
+      content: "下周一开始新的排课周期。",
+      lifecycle: "ephemeral",
+      expiresAt: new Date("2026-11-30T09:00:00.000Z").toISOString(),
+    });
+
+    const first = await syncMemoryLifecycle(now);
+    expect(first.pending).toBe(1);
+    expect(first.archived).toBe(0);
+
+    let listed = await listMemories(20);
+    const pending = listed.find((item) => item.id === expired.id);
+    const stillActive = listed.find((item) => item.id === fresh.id);
+
+    expect(pending?.status).toBe("pending_archive");
+    expect(pending?.archiveReason).toBe("已过建议时效");
+    expect(pending?.archiveAfter).toBe(
+      new Date(now.getTime() + 5 * DAY_MS).toISOString(),
+    );
+    expect(stillActive?.status).toBe("active");
+
+    const later = new Date(now.getTime() + 6 * DAY_MS);
+    const second = await syncMemoryLifecycle(later);
+    expect(second.archived).toBe(1);
+
+    listed = await listMemories(20);
+    expect(listed.find((item) => item.id === expired.id)?.status).toBe(
+      "archived",
+    );
+    expect(listed.find((item) => item.id === fresh.id)?.status).toBe(
+      "pending_archive",
+    );
+  });
+
+  it("keepMemory 支持转为长期或顺延 7 天", async () => {
+    const now = new Date("2026-11-27T10:00:00.000Z");
+    const first = await createMemory({
+      ...baseInput,
+      lifecycle: "ephemeral",
+      expiresAt: new Date("2026-11-27T09:00:00.000Z").toISOString(),
+    });
+    const second = await createMemory({
+      ...baseInput,
+      content: "下周补课安排。",
+      lifecycle: "ephemeral",
+      expiresAt: new Date("2026-11-27T09:00:00.000Z").toISOString(),
+    });
+
+    await syncMemoryLifecycle(now);
+
+    const kept = await keepMemory(first.id, "permanent");
+    expect(kept?.status).toBe("active");
+    expect(kept?.lifecycle).toBe("permanent");
+    expect(kept?.expiresAt).toBeNull();
+    expect(kept?.archiveAfter).toBeNull();
+    expect(kept?.archiveReason).toBeNull();
+
+    const extended = await keepMemory(second.id, "extend_7d");
+    expect(extended?.status).toBe("active");
+    expect(extended?.lifecycle).toBe("ephemeral");
+    expect(extended?.expiresAt).not.toBeNull();
+    expect(new Date(extended?.expiresAt ?? 0).getTime()).toBeGreaterThan(
+      Date.now() + 6 * DAY_MS,
+    );
+  });
+
+  it("archiveMemory 立即归档，restoreMemory 恢复为长期", async () => {
+    const memory = await createMemory(baseInput);
+
+    const archived = await archiveMemory(memory.id);
+    expect(archived?.status).toBe("archived");
+    expect(archived?.archiveReason).toBe("手动归档");
+
+    const restored = await restoreMemory(memory.id);
+    expect(restored?.status).toBe("active");
+    expect(restored?.lifecycle).toBe("permanent");
+    expect(restored?.expiresAt).toBeNull();
+    expect(restored?.archiveReason).toBeNull();
+  });
+
+  it("findMemories 过滤已归档和已过期记忆", async () => {
+    const active = await createMemory(baseInput);
+    const archived = await createMemory({
+      ...baseInput,
+      content: "已归档记忆。",
+    });
+    const expired = await createMemory({
+      ...baseInput,
+      content: "已过期记忆。",
+      lifecycle: "ephemeral",
+      expiresAt: new Date(Date.now() - DAY_MS).toISOString(),
+    });
+
+    await archiveMemory(archived.id);
+
+    const ids = (await findMemories({ limit: 20 })).map((item) => item.id);
+    expect(ids).toContain(active.id);
+    expect(ids).not.toContain(archived.id);
+    expect(ids).not.toContain(expired.id);
+  });
+
+  it("提取阶段性记忆时写入过期时间", async () => {
+    const before = Date.now();
+    const result = await saveExtractedMemories({
+      date: "2026-11-27",
+      students: [],
+      items: [
+        {
+          scope: "general",
+          studentName: null,
+          category: "工作流程",
+          content: "本周五前提交续费名单。",
+          importance: 2,
+          lifecycle: "ephemeral",
+          ttlDays: 3,
+        },
+      ],
+    });
+
+    expect(result.created).toBe(1);
+
+    const [memory] = await listMemories(20);
+    expect(memory.lifecycle).toBe("ephemeral");
+    expect(memory.expiresAt).not.toBeNull();
+
+    const expiresAt = new Date(memory.expiresAt ?? 0).getTime();
+    expect(expiresAt).toBeGreaterThanOrEqual(before + 3 * DAY_MS - 1000);
+    expect(expiresAt).toBeLessThanOrEqual(Date.now() + 3 * DAY_MS + 1000);
+  });
+
+  it("提取更新为长期时清空过期时间与归档字段", async () => {
+    const memory = await createMemory({
+      ...baseInput,
+      lifecycle: "ephemeral",
+      expiresAt: new Date(Date.now() + 3 * DAY_MS).toISOString(),
+    });
+
+    await db
+      .update(schema.memories)
+      .set({
+        archiveAfter: new Date(Date.now() + DAY_MS),
+        archiveReason: "旧原因",
+      })
+      .where(eq(schema.memories.id, memory.id));
+
+    await saveExtractedMemories({
+      date: "2026-11-27",
+      students: [],
+      items: [
+        {
+          id: memory.id,
+          scope: "general",
+          studentName: null,
+          category: "工作流程",
+          content: "改成长期规范。",
+          importance: 3,
+          lifecycle: "permanent",
+        },
+      ],
+    });
+
+    const [updated] = await listMemories(20);
+    expect(updated.lifecycle).toBe("permanent");
+    expect(updated.expiresAt).toBeNull();
+    expect(updated.archiveAfter).toBeNull();
+    expect(updated.archiveReason).toBeNull();
+  });
+
+  it("listPendingArchiveMemories 只返回待归档记忆", async () => {
+    const now = new Date("2026-11-27T10:00:00.000Z");
+    const expired = await createMemory({
+      ...baseInput,
+      lifecycle: "ephemeral",
+      expiresAt: new Date("2026-11-27T09:00:00.000Z").toISOString(),
+    });
+    await createMemory({
+      ...baseInput,
+      content: "长期记忆。",
+    });
+
+    await syncMemoryLifecycle(now);
+
+    const pending = await listPendingArchiveMemories(20);
+    expect(pending.map((item) => item.id)).toEqual([expired.id]);
   });
 });

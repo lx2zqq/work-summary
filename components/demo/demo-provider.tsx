@@ -15,11 +15,13 @@ import {
   DEMO_SETTINGS,
   DEMO_STUDENTS,
 } from "@/lib/demo-data";
+import { resolveMemoryExpiry } from "@/lib/memory";
 import {
   emptyDraft,
   type AppSettings,
   type Memory,
   type MemoryInput,
+  type MemoryLifecycleAction,
   type ReviewDraft,
   type ReviewListItem,
   type ReviewStyle,
@@ -34,6 +36,10 @@ export type StudentStore = {
 export type MemoryStore = {
   save: (id: string | null, input: MemoryInput) => Promise<Memory>;
   remove: (id: string) => Promise<void>;
+  setLifecycle: (
+    id: string,
+    action: MemoryLifecycleAction,
+  ) => Promise<Memory>;
 };
 
 export type DemoStage = "idle" | "questions" | "draft";
@@ -137,11 +143,29 @@ export function DemoProvider({
         const existing = id
           ? memories.find((item) => item.id === id)
           : undefined;
+        const {
+          lifecycle: inputLifecycle,
+          ttlDays,
+          expiresAt: inputExpiresAt,
+          ...rest
+        } = input;
+        const lifecycle =
+          inputLifecycle ?? existing?.lifecycle ?? "permanent";
+        const expiresAt = inputLifecycle
+          ? resolveMemoryExpiry({ lifecycle, ttlDays })
+          : inputExpiresAt !== undefined
+            ? inputExpiresAt
+            : existing?.expiresAt ?? null;
+
         const next: Memory = {
           id: id ?? createId("demo-memory"),
-          ...input,
-          status: "active",
-          sourceDate: input.sourceDate ?? null,
+          ...rest,
+          status: existing?.status ?? "active",
+          lifecycle,
+          expiresAt,
+          archiveAfter: existing?.archiveAfter ?? null,
+          archiveReason: existing?.archiveReason ?? null,
+          sourceDate: rest.sourceDate ?? null,
           createdAt: existing?.createdAt ?? stamp,
           updatedAt: stamp,
         };
@@ -158,6 +182,62 @@ export function DemoProvider({
         setMemories((previous) =>
           previous.filter((item) => item.id !== id),
         );
+      },
+      setLifecycle: async (id, action) => {
+        const existing = memories.find((item) => item.id === id);
+        if (!existing) throw new Error("没有找到这条记忆");
+
+        const stamp = new Date().toISOString();
+        let next: Memory;
+
+        if (action === "keep_permanent") {
+          next = {
+            ...existing,
+            status: "active",
+            lifecycle: "permanent",
+            expiresAt: null,
+            archiveAfter: null,
+            archiveReason: null,
+            updatedAt: stamp,
+          };
+        } else if (action === "extend_7d") {
+          next = {
+            ...existing,
+            status: "active",
+            lifecycle: "ephemeral",
+            expiresAt: resolveMemoryExpiry({
+              lifecycle: "ephemeral",
+              ttlDays: 7,
+            }),
+            archiveAfter: null,
+            archiveReason: null,
+            updatedAt: stamp,
+          };
+        } else if (action === "archive") {
+          next = {
+            ...existing,
+            status: "archived",
+            archiveAfter: null,
+            archiveReason: "手动归档",
+            updatedAt: stamp,
+          };
+        } else {
+          next = {
+            ...existing,
+            status: "active",
+            lifecycle: "permanent",
+            expiresAt: null,
+            archiveAfter: null,
+            archiveReason: null,
+            updatedAt: stamp,
+          };
+        }
+
+        setMemories((previous) =>
+          previous.map((item) => (item.id === id ? next : item)),
+        );
+
+        return next;
       },
     }),
     [memories],

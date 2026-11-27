@@ -68,6 +68,8 @@ flowchart TD
 
 复制最终稿时按需抽取记忆：从未提取过，或正文在上次提取后有更新，才调用模型。模型返回 `id` 和新的 `content`；同一件事即使措辞变化，也必须返回旧 `id` 更新，避免「已报名」和「已交费」并存。模型没按 `id` 返回时，用字符二元组 Dice 相似度（同学生、同分类，阈值 0.42）合并。
 
+提取时同时区分生命周期：学生特点、家长长期偏好、固定工作规范记为长期；本周待办、某次补课或临时安排记为阶段性，默认 7 天有效。阶段性记忆到期后进入 5 天待归档宽限期，复盘页顶部会提示，可保留为长期或立即归档；不操作则自动软归档，不再进入生成和追问上下文，记忆页可随时恢复。存量记忆默认按长期保留，`npm run memories:classify` 可以先 dry-run 查看分类建议。
+
 没有引入向量库：记忆量在几百条以内，这个相似度足够覆盖措辞变化。工具模式下按需查询；降级模式按「通用记忆 + 今天提到的学生」预注入，最多 40 条。
 
 ### 语音与移动端
@@ -159,6 +161,7 @@ docs/             架构、评测、部署、FAQ
 | `DATABASE_URL` | 生产必填 | Supabase 连接串；本地留空用 PGlite |
 | `PGLITE_DATA_DIR` | 否 | 本地 PGlite 目录，默认 `.data/pglite` |
 | `DISABLE_HSTS` | 否 | 仅无 HTTPS 调试时设为 `1`，关闭应用层 HSTS |
+| `CRON_SECRET` | 否 | 可选，定时推进记忆生命周期的接口密钥；不配置时接口返回 503 |
 
 部署细节见 `scripts/deploy.sh` 与 `.github/workflows/deploy.yml`。
 
@@ -177,6 +180,7 @@ docs/             架构、评测、部署、FAQ
 | `npm run eval` | 离线评测 |
 | `npm run eval:ai` | 真实模型评测 |
 | `npm run stats` | 使用统计 |
+| `npm run memories:classify` | 存量记忆生命周期分类，默认 dry-run，加 `--apply` 才写库 |
 | `npm run db:generate` | 根据 schema 生成迁移 SQL |
 | `npm run db:migrate` | 应用迁移 |
 | `npm run db:push` | 推送 schema 到数据库（生产不要用） |

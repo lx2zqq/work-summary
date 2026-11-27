@@ -59,6 +59,28 @@ export type Student = {
 
 export type MemoryScope = "student" | "general";
 
+/** 长期记忆的生命周期：长期有效或阶段性有效 */
+export type MemoryLifecycle = "permanent" | "ephemeral";
+
+/** 记忆状态：活跃、待归档宽限期、已归档 */
+export type MemoryStatus = "active" | "pending_archive" | "archived";
+
+/** 记忆生命周期操作，接口和演示内存实现共用 */
+export type MemoryLifecycleAction =
+  | "keep_permanent"
+  | "extend_7d"
+  | "archive"
+  | "restore";
+
+/** 阶段性记忆过期后进入待归档状态的宽限天数 */
+export const MEMORY_ARCHIVE_GRACE_DAYS = 5;
+/** 用户选择“顺延”时新增的有效天数 */
+export const MEMORY_EXTEND_DAYS = 7;
+/** 阶段性记忆默认有效天数 */
+export const MEMORY_DEFAULT_TTL_DAYS = 7;
+/** 阶段性记忆允许的最长有效天数 */
+export const MEMORY_MAX_TTL_DAYS = 90;
+
 export const MEMORY_CATEGORIES = [
   "学习习惯",
   "成绩薄弱点",
@@ -81,7 +103,11 @@ export type Memory = {
   category: MemoryCategory;
   content: string;
   importance: number;
-  status: "active" | "archived";
+  status: MemoryStatus;
+  lifecycle: MemoryLifecycle;
+  expiresAt: string | null;
+  archiveAfter: string | null;
+  archiveReason: string | null;
   sourceDate: string | null;
   createdAt: string;
   updatedAt: string;
@@ -95,6 +121,10 @@ export type MemoryInput = {
   content: string;
   importance: number;
   sourceDate?: string | null;
+  lifecycle?: MemoryLifecycle;
+  expiresAt?: string | null;
+  /** 仅用于计算 expiresAt，不会写入数据库 */
+  ttlDays?: number | null;
 };
 
 export type MemoryPromptItem = {

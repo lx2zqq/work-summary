@@ -5,6 +5,7 @@ import {
   getSettings,
   listMemories,
   listStudents,
+  syncMemoryLifecycle,
 } from "@/lib/db/queries";
 
 export const dynamic = "force-dynamic";
@@ -14,6 +15,7 @@ export default async function MemoriesPage() {
   await requireSession();
 
   // 串行读取，避免 Supabase 连接池在并发查询时卡住
+  await syncMemoryLifecycle();
   const memories = await listMemories();
   const students = await listStudents();
   const settings = await getSettings();

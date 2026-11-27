@@ -125,14 +125,22 @@ describe("演示数据", () => {
     expect(reviews.filter((item) => item.finalText.trim())).toHaveLength(2);
   });
 
-  it("记忆列表包含学生记忆和通用记忆", () => {
+  it("记忆列表包含学生、通用、阶段性和已归档记忆", () => {
     const memories = buildDemoMemoryList("2026-11-18");
 
-    expect(memories).toHaveLength(3);
+    expect(memories).toHaveLength(5);
     expect(memories.some((item) => item.scope === "general")).toBe(true);
     expect(memories.filter((item) => item.scope === "student")).toHaveLength(
-      2,
+      3,
     );
+    expect(
+      memories.filter(
+        (item) => item.status === "active" && item.lifecycle === "ephemeral",
+      ),
+    ).toHaveLength(1);
+    expect(
+      memories.filter((item) => item.status === "archived"),
+    ).toHaveLength(1);
     expect(memories.every((item) => item.id.startsWith("demo-"))).toBe(true);
   });
 

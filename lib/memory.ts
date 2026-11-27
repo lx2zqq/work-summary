@@ -1,14 +1,41 @@
-import type {
-  Memory,
-  MemoryPromptItem,
-  MemoryScope,
-  Student,
+import { todayISO } from "./date";
+import {
+  MEMORY_DEFAULT_TTL_DAYS,
+  MEMORY_MAX_TTL_DAYS,
+  type Memory,
+  type MemoryLifecycle,
+  type MemoryPromptItem,
+  type MemoryScope,
+  type Student,
 } from "./types";
 
 // 同一件事的不同说法大致在这个相似度以上，直接合并更新
 export const MEMORY_MERGE_THRESHOLD = 0.42;
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
 const IMPORTANCE_LABELS = ["一般", "重要", "很重要"] as const;
+
+/**
+ * 根据生命周期计算过期时间。
+ * permanent 返回 null；ephemeral 按 ttlDays 往后推，默认 7 天，最长 90 天。
+ */
+export function resolveMemoryExpiry(input: {
+  lifecycle?: MemoryLifecycle;
+  ttlDays?: number | null;
+  now?: Date;
+}): string | null {
+  if ((input.lifecycle ?? "permanent") !== "ephemeral") return null;
+
+  const rawDays = input.ttlDays ?? MEMORY_DEFAULT_TTL_DAYS;
+  const days = Number.isFinite(rawDays)
+    ? Math.min(MEMORY_MAX_TTL_DAYS, Math.max(1, Math.round(rawDays)))
+    : MEMORY_DEFAULT_TTL_DAYS;
+
+  return new Date(
+    (input.now ?? new Date()).getTime() + days * DAY_MS,
+  ).toISOString();
+}
 
 /** 重要度统一展示：实心圆点 + 中文标签，避免 2/3 这种机械写法 */
 export function formatMemoryImportance(importance: number): {
@@ -59,6 +86,27 @@ export function isMemoryExtractionStale(input: {
   return updated > extracted;
 }
 
+/**
+ * 阶段性记忆剩余天数；无过期时间或格式异常时返回空串。
+ * 按上海时区的自然日计算，避免“3 天后到期”显示成“剩余 4 天”。
+ */
+export function formatMemoryRemaining(
+  expiresAt: string | null,
+  now: Date = new Date(),
+): string {
+  if (!expiresAt) return "";
+
+  const target = new Date(expiresAt);
+  if (!Number.isFinite(target.getTime())) return "";
+
+  const start = Date.parse(todayISO(now));
+  const end = Date.parse(todayISO(target));
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return "";
+
+  const days = Math.max(0, Math.round((end - start) / DAY_MS));
+  return days === 0 ? "今天到期" : `剩余 ${days} 天`;
+}
+
 export function normalizeMemoryText(value: string): string {
   return value
     .replace(/[\s，。！？、；：""''（）()【】《》]/g, "")
@@ -73,6 +121,7 @@ export function selectMemoriesForPrompt(
   options: { corpus: string; students: Student[]; limit?: number },
 ): MemoryPromptItem[] {
   const { corpus, students, limit = 40 } = options;
+  const now = Date.now();
   const mentionedStudents = students.filter((student) =>
     corpus.includes(student.name),
   );
@@ -82,6 +131,12 @@ export function selectMemoriesForPrompt(
 
   return memories
     .filter((memory) => memory.status === "active")
+    // 预注入路径的第二道保险：已过期但还没被惰性同步的记忆也不进 Prompt
+    .filter((memory) => {
+      if (!memory.expiresAt) return true;
+      const expiresAt = new Date(memory.expiresAt).getTime();
+      return Number.isFinite(expiresAt) && expiresAt > now;
+    })
     .filter(
       (memory) =>
         memory.scope === "general" ||

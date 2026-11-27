@@ -28,7 +28,7 @@
 | `students` | 学生名单 | `name`、`grade`、`subjects`、`status`、`note` |
 | `reviews` | 每天的复盘 | `review_date`（唯一）、`raw_input`、`draft`、`final_text`、`conversation`、`round` |
 | `settings` | 全局设置 | 默认文风、栏目开关、通用话术、长期记忆 |
-| `memories` | 长期记忆 | `scope`、`student_id`、`category`、`content`、`importance`、`status` |
+| `memories` | 长期记忆 | `scope`、`student_id`、`category`、`content`、`importance`、`status`、`lifecycle`、`expires_at`、`archive_after`、`archive_reason` |
 | `usage_events` | 使用埋点 | `event`、`review_date`、`properties`（只存数量/枚举/耗时） |
 
 `reviews.draft` 是整个生成链路的核心数据，结构为：
@@ -135,6 +135,7 @@
 3. **一次纠错重试**：格式错误时把错误信息回传模型，温度降到 0.1。
 4. **兜底草稿**：没有 Key 或模型持续失败时，按标点拆分原文生成草稿，页面不崩。
 5. **数据保护**：空正文、漏栏目、改文风条目数变化都不会静默覆盖用户内容。
+6. **记忆解析容错**：Markdown 围栏、裸数组、单条字段漂移都会先清洗；首次解析失败静默重试一次，两次都失败才记录截断预览并返回格式错误。
 
 ## 长期记忆
 
@@ -144,6 +145,7 @@
    ▼
 extractMemories（独立 prompt）
    │  返回 id / scope / studentName / category / content / importance
+   │      / lifecycle / ttlDays
    ▼
 resolveMemoryStudent（按 id 或姓名匹配学生）
    │
@@ -155,11 +157,38 @@ resolveMemoryStudent（按 id 或姓名匹配学生）
 
 相似度使用字符二元组 Dice 系数，只用于同学生、同分类的候选记忆。它不能替代语义检索，但足够处理「已报名 / 已经交费」这类措辞变化。
 
-工具模式下由 `search_memories` 按需查询。降级模式仍用 `selectMemoriesForPrompt` 预注入：
+提取时同步判断生命周期：学生特点、学习习惯、家长长期偏好、固定工作规范记为 `permanent`；本周待办、某次补课或临时安排记为 `ephemeral`，由 `ttlDays`（默认 7 天，最长 90 天）算出 `expires_at`。判断不确定时默认长期，避免误归档长期信息。
+
+工具模式下由 `search_memories` 按需查询，只返回 `active` 且未过期的记忆。降级模式仍用 `selectMemoriesForPrompt` 预注入：
 
 - 所有通用记忆；
 - 今天流水账/问答里提到的学生的记忆；
 - 按重要度和更新时间排序，限制 40 条。
+
+## 记忆生命周期
+
+`memories.status` 有三种状态，存量数据默认 `active`：
+
+```text
+active ──(阶段性记忆过期)──▶ pending_archive ──(宽限期结束)──▶ archived
+   ▲                                │
+   └──────── keep / restore ────────┘
+```
+
+- `lifecycle=permanent`：长期有效，`expires_at` 为空；
+- `lifecycle=ephemeral`：阶段性有效，提取时按 `ttlDays`（默认 7 天，最长 90 天）计算 `expires_at`；
+- 到期后 `syncMemoryLifecycle` 把记忆推进到 `pending_archive`，设置 `archive_after = now + 5 天`、`archive_reason = '已过建议时效'`；
+- 宽限期结束仍未被保留，则软归档为 `archived`。
+
+推进采用惰性方式：生成或提取读取记忆前、记忆页渲染前、`GET /api/memories/pending` 都会串行执行一次 `syncMemoryLifecycle`，不依赖定时任务。需要固定节奏时，可以配置 `CRON_SECRET` 后由外部在凌晨调用 `POST /api/cron/memories-lifecycle`；不配置不影响主流程。
+
+只有 `active` 且未过期的记忆会进入 Prompt，`archived` 永远不会注入。用户可以：
+
+- 保留：`keepMemory(id, "permanent")` 转为长期，或 `extend_7d` 顺延 7 天；
+- 立即归档：`archiveMemory`；
+- 恢复：`restoreMemory` 默认转回长期，避免恢复后立刻再次过期。
+
+选择软归档而不是物理删除，是因为记忆里可能有家长偏好、学生特点等不可再生的信息；删除不可逆，5 天宽限期让用户有机会纠正误判。物理删除仍然只由用户在记忆页手动触发。
 
 ## 通用复盘话术
 
@@ -225,4 +254,5 @@ resolveMemoryStudent（按 id 或姓名匹配学生）
 - 多轮工具调用会拉长延迟和累计 token，简单流水账也可能付出一次额外往返；
 - 单个实例的登录限流是内存 Map，Serverless 多实例下不严格；
 - 评测集只有 30 条，规则检查覆盖结构，不能完全替代人工评审；
-- 改文风依赖模型严格保持条目数，失败时会保留原稿并提示重试。
+- 改文风依赖模型严格保持条目数，失败时会保留原稿并提示重试；
+- 记忆生命周期靠惰性流转，长时间不访问时状态不会提前变化；需要固定节奏时用可选的定时接口。

@@ -9,7 +9,10 @@ import {
   listStudents,
   updateMemory,
 } from "@/lib/db/queries";
-import { resolveMemoryStudent } from "@/lib/memory";
+import {
+  resolveMemoryExpiry,
+  resolveMemoryStudent,
+} from "@/lib/memory";
 import { memoryInputSchema } from "@/lib/schema";
 
 type RouteParams = {
@@ -46,6 +49,8 @@ export async function PATCH(request: Request, context: RouteParams) {
       );
     }
 
+    const lifecycle = parsed.data.lifecycle;
+
     const memory = await updateMemory(id, {
       scope: parsed.data.scope,
       studentId: resolved.studentId,
@@ -53,6 +58,16 @@ export async function PATCH(request: Request, context: RouteParams) {
       category: parsed.data.category,
       content: parsed.data.content,
       importance: parsed.data.importance,
+      // 不传 lifecycle 时保留原生命周期，避免编辑内容把阶段性记忆改成长期
+      ...(lifecycle
+        ? {
+            lifecycle,
+            expiresAt: resolveMemoryExpiry({
+              lifecycle,
+              ttlDays: parsed.data.ttlDays,
+            }),
+          }
+        : {}),
     });
 
     if (!memory) {

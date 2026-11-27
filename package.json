@@ -14,6 +14,7 @@
     "db:migrate": "tsx scripts/migrate.ts",
     "db:push": "drizzle-kit push",
     "stats": "tsx scripts/stats.ts",
+    "memories:classify": "tsx scripts/backfill-memory-lifecycle.ts",
     "eval": "tsx scripts/eval.ts --mode=offline",
     "eval:ai": "tsx scripts/eval.ts --mode=ai"
   },

@@ -1,6 +1,14 @@
 "use client";
 
-import { Brain, Pencil, Plus, Trash2 } from "lucide-react";
+import {
+  Archive,
+  Brain,
+  ChevronDown,
+  ChevronRight,
+  Pencil,
+  Plus,
+  Trash2,
+} from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -14,12 +22,17 @@ import { SearchInput } from "@/components/ui/search-input";
 import { Segmented } from "@/components/ui/segmented";
 import { Select } from "@/components/ui/select";
 import { formatDateCN } from "@/lib/date";
-import { formatMemoryImportance } from "@/lib/memory";
+import {
+  formatMemoryImportance,
+  formatMemoryRemaining,
+} from "@/lib/memory";
 import {
   MEMORY_CATEGORIES,
   type Memory,
   type MemoryCategory,
   type MemoryInput,
+  type MemoryLifecycle,
+  type MemoryLifecycleAction,
   type MemoryScope,
   type Student,
 } from "@/lib/types";
@@ -29,6 +42,10 @@ import { cn } from "@/lib/utils";
 export type MemoryStore = {
   save: (id: string | null, input: MemoryInput) => Promise<Memory>;
   remove: (id: string) => Promise<void>;
+  setLifecycle: (
+    id: string,
+    action: MemoryLifecycleAction,
+  ) => Promise<Memory>;
 };
 
 type Props = {
@@ -45,6 +62,8 @@ type FormState = {
   category: MemoryCategory;
   content: string;
   importance: "1" | "2" | "3";
+  lifecycle: MemoryLifecycle;
+  ttlDays: "7" | "14";
 };
 
 type MemoryGroup = {
@@ -60,6 +79,8 @@ const EMPTY_FORM: FormState = {
   category: "其他",
   content: "",
   importance: "2",
+  lifecycle: "permanent",
+  ttlDays: "7",
 };
 
 const SCOPE_OPTIONS = [
@@ -71,6 +92,19 @@ const IMPORTANCE_OPTIONS = [
   { value: "1" as const, label: "一般" },
   { value: "2" as const, label: "重要" },
   { value: "3" as const, label: "很重要" },
+];
+
+const LIFECYCLE_OPTIONS: Array<{
+  value: MemoryLifecycle;
+  label: string;
+}> = [
+  { value: "permanent", label: "长期" },
+  { value: "ephemeral", label: "阶段性" },
+];
+
+const TTL_OPTIONS: Array<{ value: "7" | "14"; label: string }> = [
+  { value: "7", label: "7 天" },
+  { value: "14", label: "14 天" },
 ];
 
 type ScopeFilter = "all" | MemoryScope;
@@ -89,7 +123,8 @@ function groupMemories(memories: Memory[]): {
   const general: Memory[] = [];
 
   for (const memory of memories) {
-    if (memory.status !== "active") continue;
+    // 已归档记忆单独放在折叠区，不进主列表
+    if (memory.status === "archived") continue;
 
     if (memory.scope === "general") {
       general.push(memory);
@@ -119,6 +154,19 @@ function groupMemories(memories: Memory[]): {
   return { students, general: sortItems(general) };
 }
 
+function lifecycleMessage(action: MemoryLifecycleAction): string {
+  switch (action) {
+    case "keep_permanent":
+      return "已保留为长期记忆";
+    case "extend_7d":
+      return "已顺延 7 天";
+    case "archive":
+      return "已归档";
+    case "restore":
+      return "已恢复为长期记忆";
+  }
+}
+
 export function MemoryManager({
   initialMemories,
   students,
@@ -135,10 +183,15 @@ export function MemoryManager({
   const [saving, setSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Memory | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
+  const [lifecycleBusyId, setLifecycleBusyId] = useState<string | null>(
+    null,
+  );
 
   const mountedRef = useRef(true);
   const saveLockRef = useRef(false);
   const deleteLockRef = useRef(false);
+  const lifecycleLockRef = useRef(false);
   const saveAbortRef = useRef<AbortController | null>(null);
   const deleteAbortRef = useRef<AbortController | null>(null);
 
@@ -160,18 +213,26 @@ export function MemoryManager({
     setMemories(initialMemories);
   }
 
-  const activeMemories = useMemo(
-    () => memories.filter((memory) => memory.status === "active"),
+  const visibleMemories = useMemo(
+    () => memories.filter((memory) => memory.status !== "archived"),
+    [memories],
+  );
+
+  const archivedMemories = useMemo(
+    () =>
+      memories
+        .filter((memory) => memory.status === "archived")
+        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
     [memories],
   );
 
   // 只展示当前范围里真实存在条目的分类，避免一排空标签
   const scopeMemories = useMemo(
     () =>
-      activeMemories.filter(
+      visibleMemories.filter(
         (memory) => scope === "all" || memory.scope === scope,
       ),
-    [activeMemories, scope],
+    [visibleMemories, scope],
   );
 
   const availableCategories = useMemo(
@@ -191,7 +252,7 @@ export function MemoryManager({
   const filtered = useMemo(() => {
     const keyword = query.trim();
 
-    return memories.filter((memory) => {
+    return visibleMemories.filter((memory) => {
       if (scope !== "all" && memory.scope !== scope) return false;
       if (
         effectiveCategory !== "all" &&
@@ -207,7 +268,7 @@ export function MemoryManager({
         (value) => value.toLowerCase().includes(needle),
       );
     });
-  }, [memories, query, scope, effectiveCategory]);
+  }, [visibleMemories, query, scope, effectiveCategory]);
 
   const filtering =
     scope !== "all" ||
@@ -231,9 +292,7 @@ export function MemoryManager({
 
   const allGroups = useMemo(() => groupMemories(memories), [memories]);
   const groups = useMemo(() => groupMemories(filtered), [filtered]);
-  const activeCount = memories.filter(
-    (memory) => memory.status === "active",
-  ).length;
+  const visibleCount = visibleMemories.length;
 
   function openCreate() {
     setEditing(null);
@@ -259,6 +318,8 @@ export function MemoryManager({
           ? memory.importance
           : 2,
       ) as "1" | "2" | "3",
+      lifecycle: memory.lifecycle,
+      ttlDays: "7",
     });
     setOpen(true);
   }
@@ -293,6 +354,10 @@ export function MemoryManager({
     const controller = new AbortController();
     saveAbortRef.current = controller;
 
+    // 编辑时没改记忆周期就不提交，保留原来的有效期
+    const lifecycleChanged =
+      !editing || form.lifecycle !== editing.lifecycle;
+
     const payload = {
       scope: form.scope,
       studentId:
@@ -304,6 +369,14 @@ export function MemoryManager({
       category: form.category,
       content,
       importance: Number(form.importance),
+      ...(lifecycleChanged
+        ? {
+            lifecycle: form.lifecycle,
+            ...(form.lifecycle === "ephemeral"
+              ? { ttlDays: Number(form.ttlDays) }
+              : {}),
+          }
+        : {}),
     };
 
     try {
@@ -404,8 +477,64 @@ export function MemoryManager({
     }
   }
 
+  async function handleLifecycle(
+    memory: Memory,
+    action: MemoryLifecycleAction,
+  ) {
+    if (lifecycleLockRef.current) return;
+
+    lifecycleLockRef.current = true;
+    setLifecycleBusyId(memory.id);
+
+    try {
+      let updated: Memory;
+
+      if (store) {
+        updated = await store.setLifecycle(memory.id, action);
+      } else {
+        const response = await fetch(
+          `/api/memories/${memory.id}/lifecycle`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action }),
+          },
+        );
+        const data = (await response.json().catch(() => ({}))) as {
+          error?: string;
+          memory?: Memory;
+        };
+
+        if (!response.ok || !data.memory) {
+          throw new Error(data.error || "操作失败");
+        }
+
+        updated = data.memory;
+      }
+
+      if (!mountedRef.current) return;
+
+      setMemories((previous) =>
+        previous.map((item) =>
+          item.id === updated.id ? updated : item,
+        ),
+      );
+      toast.success(lifecycleMessage(action));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "操作失败");
+    } finally {
+      lifecycleLockRef.current = false;
+      if (mountedRef.current) setLifecycleBusyId(null);
+    }
+  }
+
+  const lifecycleBusy = lifecycleBusyId !== null;
+
   function renderMemoryCard(memory: Memory) {
     const importance = formatMemoryImportance(memory.importance);
+    const pending = memory.status === "pending_archive";
+    const ephemeral = memory.lifecycle === "ephemeral";
+    const remaining = formatMemoryRemaining(memory.expiresAt);
 
     return (
       <article key={memory.id} className="paper-card p-4">
@@ -413,6 +542,12 @@ export function MemoryManager({
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <Badge tone="blue">{memory.category}</Badge>
+              {pending ? <Badge tone="amber">待归档</Badge> : null}
+              {!pending && ephemeral ? (
+                <span className="text-[11px] text-ink-soft">
+                  阶段性{remaining ? ` · ${remaining}` : ""}
+                </span>
+              ) : null}
               <span
                 className="flex items-center gap-1 text-[11px] text-ink-soft"
                 title={`重要度：${importance.label}`}
@@ -427,12 +562,45 @@ export function MemoryManager({
             <p className="mt-2 text-[13px] leading-relaxed text-ink">
               {memory.content}
             </p>
+            {pending ? (
+              <p className="mt-1 text-[11px] text-warning-deep">
+                {memory.archiveReason ?? "已过建议时效"}
+                {memory.archiveAfter
+                  ? ` · ${formatMemoryRemaining(memory.archiveAfter)}后归档`
+                  : ""}
+              </p>
+            ) : null}
             <p className="mt-1 text-[11px] text-ink-soft">
               {memory.sourceDate ? formatDateCN(memory.sourceDate) : "手动添加"}
             </p>
           </div>
 
-          <div className="flex shrink-0 items-center gap-1">
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
+            {pending ? (
+              <>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    void handleLifecycle(memory, "keep_permanent");
+                  }}
+                  loading={lifecycleBusyId === memory.id}
+                  disabled={lifecycleBusy}
+                >
+                  保留
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    void handleLifecycle(memory, "archive");
+                  }}
+                  disabled={lifecycleBusy}
+                >
+                  归档
+                </Button>
+              </>
+            ) : null}
             <Button
               variant="ghost"
               size="icon"
@@ -457,6 +625,57 @@ export function MemoryManager({
     );
   }
 
+  function renderArchivedCard(memory: Memory) {
+    return (
+      <article
+        key={memory.id}
+        className="rounded-xl border border-line/70 bg-cream/60 p-3"
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge tone="stone">{memory.category}</Badge>
+              <span className="text-[11px] text-ink-soft">
+                {memory.studentName ?? "通用"}
+              </span>
+              {memory.archiveReason ? (
+                <span className="text-[11px] text-ink-soft">
+                  {memory.archiveReason}
+                </span>
+              ) : null}
+            </div>
+            <p className="mt-1.5 text-[13px] leading-relaxed text-ink-soft">
+              {memory.content}
+            </p>
+          </div>
+
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                void handleLifecycle(memory, "restore");
+              }}
+              loading={lifecycleBusyId === memory.id}
+              disabled={lifecycleBusy}
+            >
+              恢复
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              title="永久删除这条记忆"
+              aria-label="永久删除这条记忆"
+              onClick={() => setDeleteTarget(memory)}
+            >
+              <Trash2 className="h-4 w-4 text-danger" />
+            </Button>
+          </div>
+        </div>
+      </article>
+    );
+  }
+
   return (
     <div className="space-y-4">
       <section className="paper-card p-3 sm:p-4">
@@ -467,7 +686,10 @@ export function MemoryManager({
             </div>
             <h2 className="text-sm font-semibold text-ink">记忆库</h2>
             <span className="text-[11px] text-ink-soft">
-              共 {activeCount} 条 · 学生 {allGroups.students.length} 人
+              共 {visibleCount} 条 · 学生 {allGroups.students.length} 人
+              {archivedMemories.length > 0
+                ? ` · 已归档 ${archivedMemories.length}`
+                : ""}
             </span>
           </div>
           <Button size="sm" onClick={openCreate}>
@@ -554,12 +776,10 @@ export function MemoryManager({
         ) : null}
       </section>
 
-      {activeCount === 0 ? (
+      {visibleCount === 0 ? (
         <div className="paper-card border-dashed px-6 py-14 text-center">
           <UsagiMascot className="mx-auto h-20 w-20" mood="sad" />
-          <p className="mt-3 text-sm font-medium text-ink">
-            还没有长期记忆
-          </p>
+          <p className="mt-3 text-sm font-medium text-ink">还没有记忆</p>
           <Link
             href="/"
             className="mt-4 inline-flex h-10 items-center rounded-lg bg-brand-deep px-4 text-sm font-medium text-white transition-colors hover:bg-brand-strong"
@@ -583,9 +803,7 @@ export function MemoryManager({
         <div className="space-y-4">
           {groups.students.length > 0 ? (
             <section className="space-y-3">
-              <h2 className="text-sm font-semibold text-ink">
-                学生记忆
-              </h2>
+              <h2 className="text-sm font-semibold text-ink">学生记忆</h2>
               {groups.students.map((group) => (
                 <div key={group.key} className="space-y-2">
                   <h3 className="flex items-center gap-2 text-xs font-medium text-ink-soft">
@@ -603,14 +821,44 @@ export function MemoryManager({
 
           {groups.general.length > 0 ? (
             <section className="space-y-3">
-              <h2 className="text-sm font-semibold text-ink">
-                通用记忆
-              </h2>
+              <h2 className="text-sm font-semibold text-ink">通用记忆</h2>
               {groups.general.map((memory) => renderMemoryCard(memory))}
             </section>
           ) : null}
         </div>
       )}
+
+      {archivedMemories.length > 0 ? (
+        <section className="paper-card p-3 sm:p-4">
+          <button
+            type="button"
+            onClick={() => setShowArchived((value) => !value)}
+            className="flex w-full items-center justify-between gap-2 text-left"
+            aria-expanded={showArchived}
+          >
+            <span className="flex items-center gap-2 text-sm font-semibold text-ink">
+              <Archive className="h-4 w-4 text-ink-soft" />
+              已归档
+              <span className="text-[11px] font-normal text-ink-soft">
+                （{archivedMemories.length}）
+              </span>
+            </span>
+            {showArchived ? (
+              <ChevronDown className="h-4 w-4 text-ink-soft" />
+            ) : (
+              <ChevronRight className="h-4 w-4 text-ink-soft" />
+            )}
+          </button>
+
+          {showArchived ? (
+            <div className="mt-3 space-y-2">
+              {archivedMemories.map((memory) =>
+                renderArchivedCard(memory),
+              )}
+            </div>
+          ) : null}
+        </section>
+      ) : null}
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent title={editing ? "编辑记忆" : "新增记忆"}>
@@ -730,6 +978,32 @@ export function MemoryManager({
                 className="mt-1.5 w-full [&>button]:flex-1"
                 ariaLabel="重要度"
               />
+            </div>
+
+            <div>
+              <Label>记忆周期</Label>
+              <Segmented<MemoryLifecycle>
+                options={LIFECYCLE_OPTIONS}
+                value={form.lifecycle}
+                onChange={(lifecycle) =>
+                  setForm((current) => ({ ...current, lifecycle }))
+                }
+                className="mt-1.5 w-full [&>button]:flex-1"
+                ariaLabel="记忆周期"
+              />
+              {form.lifecycle === "ephemeral" ? (
+                <div className="mt-2 flex items-center gap-2">
+                  <span className="text-[11px] text-ink-soft">有效期</span>
+                  <Segmented<"7" | "14">
+                    options={TTL_OPTIONS}
+                    value={form.ttlDays}
+                    onChange={(ttlDays) =>
+                      setForm((current) => ({ ...current, ttlDays }))
+                    }
+                    ariaLabel="有效天数"
+                  />
+                </div>
+              ) : null}
             </div>
 
             <div className="flex justify-end gap-2 pt-1">

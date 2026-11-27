@@ -5,10 +5,13 @@ import {
   count,
   desc,
   eq,
+  gt,
   gte,
   ilike,
+  isNotNull,
   isNull,
   lt,
+  lte,
   ne,
   or,
   sql,
@@ -20,11 +23,14 @@ import {
   MEMORY_MERGE_THRESHOLD,
   hasSameMemoryContent,
   memorySimilarity,
+  resolveMemoryExpiry,
   resolveMemoryStudent,
 } from "@/lib/memory";
 import { renderReview } from "@/lib/template";
 import {
   DEFAULT_SETTINGS,
+  MEMORY_ARCHIVE_GRACE_DAYS,
+  MEMORY_EXTEND_DAYS,
   emptyDraft,
   hasDraftContent,
   type AppSettings,
@@ -72,10 +78,28 @@ function mapMemory(row: typeof memories.$inferSelect): Memory {
     content: row.content,
     importance: row.importance,
     status: row.status,
+    lifecycle: row.lifecycle,
+    expiresAt: row.expiresAt?.toISOString() ?? null,
+    archiveAfter: row.archiveAfter?.toISOString() ?? null,
+    archiveReason: row.archiveReason,
     sourceDate: row.sourceDate,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function addDays(now: Date, days: number): Date {
+  return new Date(now.getTime() + days * DAY_MS);
+}
+
+/** 可以注入 Prompt 的记忆：状态活跃且没有过期 */
+function activeMemoryWhere(now = new Date()) {
+  return and(
+    eq(memories.status, "active"),
+    or(isNull(memories.expiresAt), gt(memories.expiresAt, now)),
+  );
 }
 
 function mapStudent(row: typeof students.$inferSelect): Student {
@@ -443,12 +467,135 @@ export async function listMemories(limit = 300): Promise<Memory[]> {
   return rows.map(mapMemory);
 }
 
+/**
+ * 惰性推进记忆生命周期，避免依赖外部定时任务：
+ * 1. 阶段性记忆过期 → 进入 5 天待归档宽限期；
+ * 2. 宽限期结束 → 自动软归档。
+ * 两段串行执行，不并发占用 Supabase 连接。
+ */
+export async function syncMemoryLifecycle(
+  now = new Date(),
+): Promise<{ pending: number; archived: number }> {
+  const pendingRows = await getDb()
+    .update(memories)
+    .set({
+      status: "pending_archive",
+      archiveAfter: addDays(now, MEMORY_ARCHIVE_GRACE_DAYS),
+      archiveReason: "已过建议时效",
+      updatedAt: now,
+    })
+    .where(
+      and(
+        eq(memories.status, "active"),
+        eq(memories.lifecycle, "ephemeral"),
+        isNotNull(memories.expiresAt),
+        lte(memories.expiresAt, now),
+      ),
+    )
+    .returning({ id: memories.id });
+
+  const archivedRows = await getDb()
+    .update(memories)
+    .set({ status: "archived", updatedAt: now })
+    .where(
+      and(
+        eq(memories.status, "pending_archive"),
+        isNotNull(memories.archiveAfter),
+        lte(memories.archiveAfter, now),
+      ),
+    )
+    .returning({ id: memories.id });
+
+  return {
+    pending: pendingRows.length,
+    archived: archivedRows.length,
+  };
+}
+
+/** 用户主动保留：转为长期记忆，或顺延 7 天有效期 */
+export async function keepMemory(
+  id: string,
+  mode: "permanent" | "extend_7d",
+): Promise<Memory | null> {
+  const now = new Date();
+  const permanent = mode === "permanent";
+
+  const [row] = await getDb()
+    .update(memories)
+    .set({
+      status: "active",
+      lifecycle: permanent ? "permanent" : "ephemeral",
+      expiresAt: permanent ? null : addDays(now, MEMORY_EXTEND_DAYS),
+      archiveAfter: null,
+      archiveReason: null,
+      updatedAt: now,
+    })
+    .where(eq(memories.id, id))
+    .returning();
+
+  return row ? mapMemory(row) : null;
+}
+
+/** 用户立即归档，不再等待宽限期 */
+export async function archiveMemory(id: string): Promise<Memory | null> {
+  const now = new Date();
+
+  const [row] = await getDb()
+    .update(memories)
+    .set({
+      status: "archived",
+      archiveAfter: null,
+      archiveReason: "手动归档",
+      updatedAt: now,
+    })
+    .where(eq(memories.id, id))
+    .returning();
+
+  return row ? mapMemory(row) : null;
+}
+
+/** 从已归档恢复。默认转为长期记忆，避免恢复后立刻再次过期 */
+export async function restoreMemory(id: string): Promise<Memory | null> {
+  const now = new Date();
+
+  const [row] = await getDb()
+    .update(memories)
+    .set({
+      status: "active",
+      lifecycle: "permanent",
+      expiresAt: null,
+      archiveAfter: null,
+      archiveReason: null,
+      updatedAt: now,
+    })
+    .where(eq(memories.id, id))
+    .returning();
+
+  return row ? mapMemory(row) : null;
+}
+
 export async function listActiveMemories(limit = 200): Promise<Memory[]> {
+  await syncMemoryLifecycle();
+
   const rows = await getDb()
     .select()
     .from(memories)
-    .where(eq(memories.status, "active"))
+    .where(activeMemoryWhere())
     .orderBy(desc(memories.importance), desc(memories.updatedAt))
+    .limit(limit);
+
+  return rows.map(mapMemory);
+}
+
+/** 待归档记忆，按宽限期截止时间升序，最快过期的排前面 */
+export async function listPendingArchiveMemories(
+  limit = 50,
+): Promise<Memory[]> {
+  const rows = await getDb()
+    .select()
+    .from(memories)
+    .where(eq(memories.status, "pending_archive"))
+    .orderBy(memories.archiveAfter)
     .limit(limit);
 
   return rows.map(mapMemory);
@@ -464,6 +611,8 @@ export async function createMemory(input: MemoryInput): Promise<Memory> {
       category: input.category,
       content: input.content,
       importance: input.importance,
+      lifecycle: input.lifecycle ?? "permanent",
+      expiresAt: input.expiresAt ? new Date(input.expiresAt) : null,
       sourceDate: input.sourceDate ?? null,
     })
     .returning();
@@ -488,6 +637,10 @@ export async function updateMemory(
       importance: input.importance,
       // 不传 status 时保留数据库里的原值，避免把已归档的记忆重新激活
       ...(input.status ? { status: input.status } : {}),
+      ...(input.lifecycle ? { lifecycle: input.lifecycle } : {}),
+      ...(input.expiresAt !== undefined
+        ? { expiresAt: input.expiresAt ? new Date(input.expiresAt) : null }
+        : {}),
       updatedAt: new Date(),
       ...(input.sourceDate !== undefined
         ? { sourceDate: input.sourceDate }
@@ -544,7 +697,11 @@ export async function findMemories(input: {
   scope?: MemoryScope;
   limit?: number;
 }): Promise<MemoryPromptItem[]> {
-  const conditions = [eq(memories.status, "active")];
+  const now = new Date();
+  const conditions = [
+    eq(memories.status, "active"),
+    or(isNull(memories.expiresAt), gt(memories.expiresAt, now)),
+  ];
 
   if (input.studentName) {
     conditions.push(
@@ -687,10 +844,11 @@ export async function saveExtractedMemories(input: {
   students: Student[];
 }): Promise<{ created: number; updated: number; extractedAt: string }> {
   return getDb().transaction(async (tx) => {
+    const now = new Date();
     const rows = await tx
       .select()
       .from(memories)
-      .where(eq(memories.status, "active"))
+      .where(activeMemoryWhere(now))
       .orderBy(desc(memories.importance), desc(memories.updatedAt))
       .limit(200)
       .for("update");
@@ -720,6 +878,13 @@ export async function saveExtractedMemories(input: {
       item: ExtractedMemory,
       resolved: { studentId: string | null; studentName: string | null },
     ) => {
+      const lifecycle = item.lifecycle ?? "permanent";
+      const expiresAt = resolveMemoryExpiry({
+        lifecycle,
+        ttlDays: item.ttlDays,
+        now,
+      });
+
       const [row] = await tx
         .update(memories)
         .set({
@@ -729,6 +894,12 @@ export async function saveExtractedMemories(input: {
           category: item.category,
           content: item.content,
           importance: item.importance,
+          lifecycle,
+          expiresAt: expiresAt ? new Date(expiresAt) : null,
+          // 更新为长期后不应残留旧的归档倒计时
+          ...(lifecycle === "permanent"
+            ? { archiveAfter: null, archiveReason: null }
+            : {}),
           sourceDate: input.date,
           updatedAt: new Date(),
         })
@@ -781,6 +952,13 @@ export async function saveExtractedMemories(input: {
         continue;
       }
 
+      const lifecycle = item.lifecycle ?? "permanent";
+      const expiresAt = resolveMemoryExpiry({
+        lifecycle,
+        ttlDays: item.ttlDays,
+        now,
+      });
+
       const [created] = await tx
         .insert(memories)
         .values({
@@ -790,6 +968,8 @@ export async function saveExtractedMemories(input: {
           category: item.category,
           content: item.content,
           importance: item.importance,
+          lifecycle,
+          expiresAt: expiresAt ? new Date(expiresAt) : null,
           sourceDate: input.date,
         })
         .returning();

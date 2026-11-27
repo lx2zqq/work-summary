@@ -25,6 +25,7 @@ import {
   emptyDraft,
   hasDraftContent,
   type AppSettings,
+  type Memory,
   type MemoryPromptItem,
   type QAPair,
   type ReviewDraft,
@@ -37,6 +38,7 @@ import { DraftCard } from "./draft-card";
 import { DraftEditor } from "./draft-editor";
 import { QuestionsCard } from "./questions-card";
 import { RawInputCard } from "./raw-input-card";
+import { MemoryArchiveBanner } from "./memory-archive-banner";
 import { RecoveryBanner } from "./recovery-banner";
 import { useReviewGeneration } from "./use-review-generation";
 import { useWorkspaceAutosave } from "./use-workspace-autosave";
@@ -105,7 +107,11 @@ export function Workspace({
   const [memoryExtractedAt, setMemoryExtractedAt] = useState<
     string | null
   >(initialReview?.memoryExtractedAt ?? null);
-  const [extractingMemory, setExtractingMemory] = useState(false);
+  const [isExtractingMemories, setIsExtractingMemories] = useState(false);
+  const [pendingMemories, setPendingMemories] = useState<Memory[]>([]);
+  const [pendingMemoryBusyId, setPendingMemoryBusyId] = useState<
+    string | null
+  >(null);
   const [usedMemories, setUsedMemories] = useState<MemoryPromptItem[]>(
     jobForDate?.result?.memories ?? [],
   );
@@ -121,7 +127,8 @@ export function Workspace({
 
     return {};
   });
-  const extractingMemoryRef = useRef(false);
+  const isExtractingMemoriesRef = useRef(false);
+  const pendingMemoryLockRef = useRef(false);
   const dateRef = useRef(date);
   const mountedRef = useRef(false);
   const pageUnloadingRef = useRef(false);
@@ -153,6 +160,76 @@ export function Workspace({
       window.removeEventListener("beforeunload", markUnloading);
     };
   }, []);
+
+  // 进入复盘页时拉取待归档记忆；读取失败不影响写作，静默处理
+  useEffect(() => {
+    const controller = new AbortController();
+
+    void (async () => {
+      try {
+        const response = await fetch("/api/memories/pending", {
+          signal: controller.signal,
+        });
+
+        if (!response.ok) return;
+
+        const data = (await response.json().catch(() => ({}))) as {
+          memories?: Memory[];
+        };
+
+        if (!controller.signal.aborted) {
+          setPendingMemories(data.memories ?? []);
+        }
+      } catch {
+        // 提示条只是辅助信息，不打扰用户
+      }
+    })();
+
+    return () => controller.abort();
+  }, []);
+
+  const handlePendingMemoryAction = useCallback(
+    async (id: string, action: "keep_permanent" | "archive") => {
+      if (pendingMemoryLockRef.current) return;
+
+      pendingMemoryLockRef.current = true;
+      setPendingMemoryBusyId(id);
+
+      try {
+        const response = await fetch(`/api/memories/${id}/lifecycle`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action }),
+        });
+        const data = (await response.json().catch(() => ({}))) as {
+          error?: string;
+        };
+
+        if (!response.ok) {
+          throw new Error(data.error || "操作失败");
+        }
+
+        if (!mountedRef.current) return;
+
+        setPendingMemories((previous) =>
+          previous.filter((item) => item.id !== id),
+        );
+        toast.success(
+          action === "keep_permanent"
+            ? "已保留为长期记忆"
+            : "已归档",
+        );
+      } catch (error) {
+        toast.error(
+          error instanceof Error ? error.message : "操作失败",
+        );
+      } finally {
+        pendingMemoryLockRef.current = false;
+        if (mountedRef.current) setPendingMemoryBusyId(null);
+      }
+    },
+    [],
+  );
 
   const loading = loadingKind !== null;
   const questioning = draft.questions.length > 0;
@@ -279,6 +356,7 @@ export function Workspace({
   });
 
   const extractAbortRef = useRef<AbortController | null>(null);
+  const memoryToastIdRef = useRef<string | number | null>(null);
 
   const extractMemory = useCallback(
     async (
@@ -287,14 +365,20 @@ export function Workspace({
     ) => {
       if (
         !initialSettings.enableMemory ||
-        extractingMemoryRef.current
+        isExtractingMemoriesRef.current
       ) {
         return;
       }
 
       const targetDate = date;
-      extractingMemoryRef.current = true;
-      setExtractingMemory(true);
+      isExtractingMemoriesRef.current = true;
+      setIsExtractingMemories(true);
+
+      // 提取开始后旧的“复制后提取记忆”提示已无意义，直接收起
+      if (memoryToastIdRef.current) {
+        toast.dismiss(memoryToastIdRef.current);
+        memoryToastIdRef.current = null;
+      }
 
       // 切日或重复触发时中止旧提取
       extractAbortRef.current?.abort();
@@ -357,8 +441,8 @@ export function Workspace({
       } finally {
         if (extractAbortRef.current === controller) {
           extractAbortRef.current = null;
-          extractingMemoryRef.current = false;
-          if (mountedRef.current) setExtractingMemory(false);
+          isExtractingMemoriesRef.current = false;
+          if (mountedRef.current) setIsExtractingMemories(false);
         }
       }
     },
@@ -369,7 +453,6 @@ export function Workspace({
   // 用 ref 读取最新的保存和提取实现，避免闭包指向旧日期。
   const saveNowRef = useRef(saveNow);
   const extractMemoryRef = useRef(extractMemory);
-  const memoryToastIdRef = useRef<string | number | null>(null);
 
   useEffect(() => {
     saveNowRef.current = saveNow;
@@ -586,8 +669,8 @@ export function Workspace({
       // 切日后旧的记忆提取和提示都失效，先清理掉
       extractAbortRef.current?.abort();
       extractAbortRef.current = null;
-      extractingMemoryRef.current = false;
-      setExtractingMemory(false);
+      isExtractingMemoriesRef.current = false;
+      setIsExtractingMemories(false);
 
       if (memoryToastIdRef.current) {
         toast.dismiss(memoryToastIdRef.current);
@@ -694,6 +777,12 @@ export function Workspace({
       ),
     });
 
+    // 提取进行中只提示复制结果，避免用户重复触发记忆整理
+    if (isExtractingMemoriesRef.current) {
+      toast.success("已复制，去钉钉粘贴吧");
+      return true;
+    }
+
     // 复制只做纯文本；记忆提取改成显式操作，不再静默调模型
     const memoryAction = resolveMemoryCopyAction({
       enabled: initialSettings.enableMemory,
@@ -716,6 +805,12 @@ export function Workspace({
         label: memoryAction === "first" ? "提取记忆" : "更新记忆",
         onClick: () => {
           void (async () => {
+            // 主工具栏可能已经开始提取，这里再拦一次重复请求
+            if (isExtractingMemoriesRef.current) {
+              toast.info("正在提取记忆，请稍候");
+              return;
+            }
+
             // 按钮可能在 8 秒后、甚至在切日之后才被点击，
             // 这里读取最新实现，避免保存/提取到旧日期的数据
             const saved = await saveNowRef.current({ silent: true });
@@ -766,6 +861,19 @@ export function Workspace({
 
   return (
     <div className="space-y-4">
+      {pendingMemories.length > 0 ? (
+        <MemoryArchiveBanner
+          memories={pendingMemories}
+          busyId={pendingMemoryBusyId}
+          onKeep={(id) => {
+            void handlePendingMemoryAction(id, "keep_permanent");
+          }}
+          onArchive={(id) => {
+            void handlePendingMemoryAction(id, "archive");
+          }}
+        />
+      ) : null}
+
       {recoveryJob ? (
         <RecoveryBanner
           checking={checkingRecovery}
@@ -884,7 +992,7 @@ export function Workspace({
                 memoryEnabled={initialSettings.enableMemory}
                 memoryExtractedAt={memoryExtractedAt}
                 memoryStale={memoryStale}
-                extractingMemory={extractingMemory}
+                extractingMemory={isExtractingMemories}
                 sampleText={sampleText}
                 onCopy={handleCopy}
                 onEdit={() => setEditorOpen(true)}
