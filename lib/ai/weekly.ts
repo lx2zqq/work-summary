@@ -13,11 +13,11 @@ import {
 import {
   AiError,
   createClient,
-  extractJson,
   getAiModelName,
   type AiUsage,
 } from "./deepseek";
 import { createAbortError, isAbortError } from "./errors";
+import { parseJsonValue } from "./json";
 
 /** 单条日报各部分的上限，避免一周素材把上下文撑爆 */
 const MAX_FINAL_TEXT_CHARS = 2000;
@@ -27,13 +27,38 @@ const MAX_REVIEW_BLOCK_CHARS = 3500;
 const MAX_MEMORIES = 100;
 const RAW_PREVIEW_CHARS = 600;
 
-const WEEKLY_KEYS = [
-  "summary",
-  "metrics",
-  "reflection",
-  "nextWeek",
-  "supportNeeded",
-] as const;
+/** 兼容模型把英文 key 写成中文，或把字段换一种命名 */
+const ROOT_ALIASES = {
+  summary: ["summary", "本周工作总结", "工作总结"],
+  metrics: ["metrics", "本周数据汇总", "数据汇总"],
+  reflection: ["reflection", "本周工作心得", "工作心得"],
+  nextWeek: ["nextWeek", "next_week", "下周工作安排", "下周安排"],
+  supportNeeded: ["supportNeeded", "support_needed", "需要的支持", "支持需求"],
+} as const;
+
+const SUMMARY_ALIASES = {
+  miantan: ["miantan", "面谈"],
+  weixin: ["weixin", "微信"],
+} as const;
+
+const METRICS_ALIASES = {
+  qingjia: ["qingjia", "请假"],
+  yujing: ["yujing", "预警名单", "预警"],
+  tingke: ["tingke", "停课名单", "停课"],
+  jieke: ["jieke", "结课名单", "结课"],
+  kuoke: ["kuoke", "扩科"],
+  xinqian: ["xinqian", "新签"],
+  xufei: ["xufei", "续费"],
+} as const;
+
+const NEXT_WEEK_ALIASES = {
+  zhongdianHuifang: [
+    "zhongdianHuifang",
+    "zhongdian_huifang",
+    "重点回访",
+  ],
+  jiazhanghui: ["jiazhanghui", "家长会"],
+} as const;
 
 const OUTPUT_SCHEMA = `{
   "summary": {
@@ -216,21 +241,95 @@ function buildMessages(
   ];
 }
 
-/** 兼容 { summary: ... }、{ content: ... }、{ report: ... } 等包装 */
-function pickContentRecord(value: unknown): Record<string, unknown> | null {
-  const root = asRecord(value);
-  const candidates = [
-    root,
-    asRecord(root.content),
-    asRecord(root.report),
-    asRecord(root.data),
-  ];
+function hasRootFields(record: Record<string, unknown>): boolean {
+  return Object.values(ROOT_ALIASES).some((aliases) =>
+    aliases.some((key) => key in record),
+  );
+}
 
-  for (const candidate of candidates) {
-    if (WEEKLY_KEYS.some((key) => key in candidate)) return candidate;
+/**
+ * 兼容常见包装：{ weekly_report: ... }、{ data: { ... } }、数组、
+ * 以及把周报 JSON 再序列化进 content/data 字符串的情况。
+ */
+function findContentRecord(
+  value: unknown,
+  depth = 0,
+): Record<string, unknown> | null {
+  if (depth > 3) return null;
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = findContentRecord(item, depth + 1);
+      if (found) return found;
+    }
+    return null;
+  }
+
+  if (typeof value === "string" && value.trim().startsWith("{")) {
+    const parsed = parseJsonValue(value);
+    if (parsed.ok) return findContentRecord(parsed.value, depth + 1);
+    return null;
+  }
+
+  if (!value || typeof value !== "object") return null;
+
+  const record = value as Record<string, unknown>;
+  if (hasRootFields(record)) return record;
+
+  for (const child of Object.values(record)) {
+    if (child && typeof child === "object") {
+      const found = findContentRecord(child, depth + 1);
+      if (found) return found;
+      continue;
+    }
+
+    if (typeof child === "string" && child.trim().startsWith("{")) {
+      const parsed = parseJsonValue(child);
+      if (parsed.ok) {
+        const found = findContentRecord(parsed.value, depth + 1);
+        if (found) return found;
+      }
+    }
   }
 
   return null;
+}
+
+function readAliasedObject(
+  record: Record<string, unknown>,
+  aliases: readonly string[],
+): Record<string, unknown> {
+  for (const key of aliases) {
+    const value = record[key];
+    const direct = asRecord(value);
+    if (Object.keys(direct).length > 0) return direct;
+
+    if (typeof value === "string" && value.trim().startsWith("{")) {
+      const parsed = parseJsonValue(value);
+      if (parsed.ok) {
+        const nested = asRecord(parsed.value);
+        if (Object.keys(nested).length > 0) return nested;
+      }
+    }
+  }
+
+  return {};
+}
+
+function readAliasedText(
+  record: Record<string, unknown>,
+  aliases: readonly string[],
+  fallback: string,
+  max: number,
+): string {
+  for (const key of aliases) {
+    if (!(key in record)) continue;
+
+    const text = readText(record[key], "", max);
+    if (text) return text;
+  }
+
+  return fallback;
 }
 
 /**
@@ -241,34 +340,59 @@ export function normalizeWeeklyReportContent(
   value: unknown,
   activeStudentsByGrade: string,
 ): WeeklyReportContent | null {
-  const record = pickContentRecord(value);
+  const record = findContentRecord(value);
   if (!record) return null;
 
-  const summary = asRecord(record.summary);
-  const metrics = asRecord(record.metrics);
-  const nextWeek = asRecord(record.nextWeek);
+  const summary = readAliasedObject(record, ROOT_ALIASES.summary);
+  const metrics = readAliasedObject(record, ROOT_ALIASES.metrics);
+  const nextWeek = readAliasedObject(record, ROOT_ALIASES.nextWeek);
 
   return {
     summary: {
-      miantan: readText(summary.miantan, "无", 2000),
-      weixin: readText(summary.weixin, "无", 2000),
+      miantan: readAliasedText(
+        summary,
+        SUMMARY_ALIASES.miantan,
+        "无",
+        2000,
+      ),
+      weixin: readAliasedText(summary, SUMMARY_ALIASES.weixin, "无", 2000),
     },
     metrics: {
-      qingjia: readText(metrics.qingjia, "无", 1000),
-      yujing: readText(metrics.yujing, "无", 1000),
-      tingke: readText(metrics.tingke, "无", 1000),
-      jieke: readText(metrics.jieke, "无", 1000),
-      kuoke: readText(metrics.kuoke, "无", 1000),
-      xinqian: readText(metrics.xinqian, "无", 1000),
-      xufei: readText(metrics.xufei, "无", 1000),
+      qingjia: readAliasedText(metrics, METRICS_ALIASES.qingjia, "无", 1000),
+      yujing: readAliasedText(metrics, METRICS_ALIASES.yujing, "无", 1000),
+      tingke: readAliasedText(metrics, METRICS_ALIASES.tingke, "无", 1000),
+      jieke: readAliasedText(metrics, METRICS_ALIASES.jieke, "无", 1000),
+      kuoke: readAliasedText(metrics, METRICS_ALIASES.kuoke, "无", 1000),
+      xinqian: readAliasedText(metrics, METRICS_ALIASES.xinqian, "无", 1000),
+      xufei: readAliasedText(metrics, METRICS_ALIASES.xufei, "无", 1000),
       activeStudentsByGrade: activeStudentsByGrade.trim() || "暂无",
     },
-    reflection: readText(record.reflection, "暂无", 4000),
+    reflection: readAliasedText(
+      record,
+      ROOT_ALIASES.reflection,
+      "暂无",
+      4000,
+    ),
     nextWeek: {
-      zhongdianHuifang: readText(nextWeek.zhongdianHuifang, "无", 2000),
-      jiazhanghui: readText(nextWeek.jiazhanghui, "无", 2000),
+      zhongdianHuifang: readAliasedText(
+        nextWeek,
+        NEXT_WEEK_ALIASES.zhongdianHuifang,
+        "无",
+        2000,
+      ),
+      jiazhanghui: readAliasedText(
+        nextWeek,
+        NEXT_WEEK_ALIASES.jiazhanghui,
+        "无",
+        2000,
+      ),
     },
-    supportNeeded: readText(record.supportNeeded, "暂无", 2000),
+    supportNeeded: readAliasedText(
+      record,
+      ROOT_ALIASES.supportNeeded,
+      "暂无",
+      2000,
+    ),
   };
 }
 
@@ -276,15 +400,15 @@ export function parseWeeklyReportResponse(
   raw: string,
   activeStudentsByGrade: string,
 ): { content: WeeklyReportContent | null; error: string } {
-  let parsed: unknown;
-
-  try {
-    parsed = JSON.parse(extractJson(raw.trim()));
-  } catch {
-    return { content: null, error: "输出不是合法 JSON" };
+  const parsed = parseJsonValue(raw);
+  if (!parsed.ok) {
+    return { content: null, error: parsed.error };
   }
 
-  const content = normalizeWeeklyReportContent(parsed, activeStudentsByGrade);
+  const content = normalizeWeeklyReportContent(
+    parsed.value,
+    activeStudentsByGrade,
+  );
   if (!content) {
     return { content: null, error: "JSON 结构里没有周报字段" };
   }
@@ -302,6 +426,12 @@ export function parseWeeklyReportResponse(
   return { content: result.data, error: "" };
 }
 
+type WeeklyRequestResult = {
+  content: string;
+  finishReason: string | null;
+  completionTokens: number;
+};
+
 async function requestWeekly(input: {
   client: OpenAI;
   model: string;
@@ -309,7 +439,7 @@ async function requestWeekly(input: {
   temperature: number;
   signal?: AbortSignal;
   usage: AiUsage;
-}): Promise<string> {
+}): Promise<WeeklyRequestResult> {
   let completion;
 
   try {
@@ -318,7 +448,7 @@ async function requestWeekly(input: {
         model: input.model,
         messages: input.messages,
         temperature: input.temperature,
-        max_tokens: 4000,
+        max_tokens: 6000,
         response_format: { type: "json_object" },
         // 周报是整理任务，降低思考强度，避免正文被推理过程挤空
         reasoning_effort: "low",
@@ -341,18 +471,31 @@ async function requestWeekly(input: {
     );
   }
 
-  const content = completion.choices[0]?.message?.content?.trim() ?? "";
+  const choice = completion.choices[0];
+  const content = choice?.message?.content?.trim() ?? "";
+  const finishReason = choice?.finish_reason ?? null;
+  const completionTokens = completion.usage?.completion_tokens ?? 0;
 
-  if (!content) {
+  if (finishReason === "length") {
     console.warn(
-      "[ai:weekly] 模型返回空内容，finish_reason=",
-      completion.choices[0]?.finish_reason,
+      "[ai:weekly] 输出达到长度上限，可能被截断",
+      "completion_tokens=",
+      completionTokens,
       "usage=",
       JSON.stringify(completion.usage ?? null),
     );
   }
 
-  return content;
+  if (!content) {
+    console.warn(
+      "[ai:weekly] 模型返回空内容，finish_reason=",
+      finishReason,
+      "usage=",
+      JSON.stringify(completion.usage ?? null),
+    );
+  }
+
+  return { content, finishReason, completionTokens };
 }
 
 function previewRaw(raw: string): string {
@@ -385,7 +528,7 @@ export async function generateWeeklyReport(
   const messages = buildMessages(input);
 
   try {
-    const content = await requestWeekly({
+    const firstResponse = await requestWeekly({
       client,
       model,
       messages,
@@ -395,7 +538,7 @@ export async function generateWeeklyReport(
     });
 
     const first = parseWeeklyReportResponse(
-      content,
+      firstResponse.content,
       input.activeStudentsByGrade,
     );
     if (first.content) return first.content;
@@ -404,11 +547,16 @@ export async function generateWeeklyReport(
 
     // 首次解析失败属于可恢复抖动，不打印正文，只留一条简短记录
     console.info(
-      `[ai:weekly] 首次输出无法解析（${first.error}），自动重试一次`,
+      `[ai:weekly] 首次输出无法解析（${first.error}），自动重试一次；finish_reason=${firstResponse.finishReason ?? "unknown"}, completion_tokens=${firstResponse.completionTokens}`,
     );
     usage.retried = true;
 
-    const retryContent = await requestWeekly({
+    const retryInstruction =
+      firstResponse.finishReason === "length"
+        ? "上一次输出可能被截断，请压缩每条表述，优先保证 JSON 完整闭合。"
+        : "请只输出修正后的完整 JSON，不要输出解释或 Markdown 代码块。";
+
+    const retryResponse = await requestWeekly({
       client,
       model,
       temperature: 0.1,
@@ -416,24 +564,31 @@ export async function generateWeeklyReport(
       usage,
       messages: [
         ...messages,
-        { role: "assistant", content: content || "（空输出）" },
+        {
+          role: "assistant",
+          content: firstResponse.content || "（空输出）",
+        },
         {
           role: "user",
-          content: `上面的输出不能使用：${first.error}。请只输出修正后的完整 JSON，不要输出解释或 Markdown 代码块。`,
+          content: [
+            `上面的输出不能使用：${first.error}。`,
+            retryInstruction,
+            `字段必须严格使用下面的英文 key：\n${OUTPUT_SCHEMA}`,
+          ].join("\n\n"),
         },
       ],
     });
 
     const second = parseWeeklyReportResponse(
-      retryContent,
+      retryResponse.content,
       input.activeStudentsByGrade,
     );
     if (second.content) return second.content;
 
     // 两次都失败才打印原始输出预览，便于排查且不刷屏
     console.error(
-      `[ai:weekly] 两次解析均失败（${second.error}），最后一次输出预览：`,
-      previewRaw(retryContent),
+      `[ai:weekly] 两次解析均失败（${second.error}），finish_reason=${retryResponse.finishReason ?? "unknown"}, completion_tokens=${retryResponse.completionTokens}，最后一次输出预览：`,
+      previewRaw(retryResponse.content),
     );
 
     throw new AiError(

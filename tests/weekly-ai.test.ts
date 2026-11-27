@@ -117,6 +117,67 @@ describe("parseWeeklyReportResponse", () => {
     expect(parsed.content?.summary.weixin).toBe("微信沟通家长");
   });
 
+  it("兼容模型返回中文 key", () => {
+    const parsed = parseWeeklyReportResponse(
+      JSON.stringify({
+        本周工作总结: { 面谈: "与家长面谈", 微信: "微信沟通" },
+        本周数据汇总: { 请假: "1 人", 续费: "林小满" },
+        本周工作心得: "续费沟通先确认到店时间。",
+        下周工作安排: { 重点回访: "林小满", 家长会: "无" },
+        需要的支持: "暂无",
+      }),
+      ACTIVE,
+    );
+
+    expect(parsed.error).toBe("");
+    expect(parsed.content?.summary.miantan).toBe("与家长面谈");
+    expect(parsed.content?.summary.weixin).toBe("微信沟通");
+    expect(parsed.content?.metrics.qingjia).toBe("1 人");
+    expect(parsed.content?.metrics.xufei).toBe("林小满");
+    expect(parsed.content?.reflection).toBe(
+      "续费沟通先确认到店时间。",
+    );
+    expect(parsed.content?.nextWeek.zhongdianHuifang).toBe("林小满");
+    expect(parsed.content?.supportNeeded).toBe("暂无");
+  });
+
+  it("兼容 weekly_report 等更深层包装", () => {
+    const parsed = parseWeeklyReportResponse(
+      JSON.stringify({
+        data: {
+          weekly_report: {
+            summary: { miantan: "深层包装里的面谈" },
+          },
+        },
+      }),
+      ACTIVE,
+    );
+
+    expect(parsed.content?.summary.miantan).toBe("深层包装里的面谈");
+  });
+
+  it("兼容顶层数组", () => {
+    const parsed = parseWeeklyReportResponse(
+      JSON.stringify([{ summary: { weixin: "数组里的微信沟通" } }]),
+      ACTIVE,
+    );
+
+    expect(parsed.content?.summary.weixin).toBe("数组里的微信沟通");
+  });
+
+  it("兼容把周报 JSON 再序列化进字符串", () => {
+    const inner = JSON.stringify({
+      summary: { miantan: "字符串里的面谈" },
+    });
+
+    const parsed = parseWeeklyReportResponse(
+      JSON.stringify({ data: inner }),
+      ACTIVE,
+    );
+
+    expect(parsed.content?.summary.miantan).toBe("字符串里的面谈");
+  });
+
   it("名单字段返回数组时合并成文本", () => {
     const parsed = parseWeeklyReportResponse(
       JSON.stringify({
