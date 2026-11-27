@@ -2,6 +2,7 @@ import "./load-env";
 
 import { desc, eq } from "drizzle-orm";
 import type OpenAI from "openai";
+import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import { createClient, extractJson, getAiModelName } from "@/lib/ai/deepseek";
 import { getDb } from "@/lib/db/client";
 import { memories } from "@/lib/db/schema";
@@ -19,6 +20,7 @@ import {
 const BATCH_SIZE = 20;
 const DEFAULT_LIMIT = 1000;
 const MAX_REASON_CHARS = 30;
+const RAW_PREVIEW_CHARS = 600;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 type MemoryRow = typeof memories.$inferSelect;
@@ -111,6 +113,56 @@ function parseClassifications(
   return result;
 }
 
+function previewRaw(raw: string): string {
+  const compact = raw.replace(/\s+/g, " ").trim();
+  if (!compact) return "（空输出）";
+
+  const chars = Array.from(compact);
+  return chars.length > RAW_PREVIEW_CHARS
+    ? `${chars.slice(0, RAW_PREVIEW_CHARS).join("")}…`
+    : compact;
+}
+
+type BatchResponse = {
+  classifications: Classification[];
+  raw: string;
+  finishReason: string | null;
+  reasoningChars: number;
+  completionTokens: number;
+};
+
+async function requestBatch(
+  client: OpenAI,
+  model: string,
+  messages: ChatCompletionMessageParam[],
+  allowedIds: Set<string>,
+): Promise<BatchResponse> {
+  const completion = await client.chat.completions.create({
+    model,
+    messages,
+    temperature: 0.1,
+    max_tokens: 4000,
+    response_format: { type: "json_object" },
+    // deepseek-flash 默认思考强度会吃满 token，正文被挤成空字符串
+    reasoning_effort: "low",
+  });
+
+  const message = completion.choices[0]?.message;
+  const raw = message?.content?.trim() ?? "";
+  const reasoning = (
+    message as { reasoning_content?: unknown } | undefined
+  )?.reasoning_content;
+
+  return {
+    classifications: parseClassifications(raw, allowedIds),
+    raw,
+    finishReason: completion.choices[0]?.finish_reason ?? null,
+    reasoningChars:
+      typeof reasoning === "string" ? Array.from(reasoning).length : 0,
+    completionTokens: completion.usage?.completion_tokens ?? 0,
+  };
+}
+
 async function classifyBatch(
   client: OpenAI,
   model: string,
@@ -124,28 +176,42 @@ async function classifyBatch(
     return `- id=${row.id} | [${who}] | ${row.category} | ${row.content} | 更新于 ${updated}`;
   });
 
-  const completion = await client.chat.completions.create({
-    model,
-    messages: [
-      { role: "system", content: CLASSIFY_RULES },
-      { role: "user", content: lines.join("\n") },
-    ],
-    temperature: 0.1,
-    max_tokens: 1600,
-    response_format: { type: "json_object" },
-  });
+  const messages: ChatCompletionMessageParam[] = [
+    { role: "system", content: CLASSIFY_RULES },
+    { role: "user", content: lines.join("\n") },
+  ];
+  const allowedIds = new Set(rows.map((row) => row.id));
 
-  const raw = completion.choices[0]?.message?.content?.trim() ?? "";
-  const classifications = parseClassifications(
-    raw,
-    new Set(rows.map((row) => row.id)),
+  const first = await requestBatch(client, model, messages, allowedIds);
+  if (first.classifications.length > 0) return first.classifications;
+
+  console.warn(
+    `[batch] 首次分类输出不可用（finish_reason=${first.finishReason ?? "unknown"}，completion_tokens=${first.completionTokens}，reasoning=${first.reasoningChars} 字），自动重试一次`,
+  );
+  console.warn("[batch] 原始输出预览：", previewRaw(first.raw));
+
+  const retry = await requestBatch(
+    client,
+    model,
+    [
+      ...messages,
+      { role: "assistant", content: first.raw || "（空输出）" },
+      {
+        role: "user",
+        content:
+          '上面的输出不能使用：没有解析到有效分类。请只输出 {"items":[{"id":"...","lifecycle":"permanent|ephemeral","reason":"..."}]} 格式的完整 JSON，id 必须来自输入，不要输出解释或 Markdown。',
+      },
+    ],
+    allowedIds,
   );
 
-  if (classifications.length === 0) {
-    throw new Error("模型没有返回可用的分类结果");
-  }
+  if (retry.classifications.length > 0) return retry.classifications;
 
-  return classifications;
+  console.error(
+    `[batch] 两次分类均失败（finish_reason=${retry.finishReason ?? "unknown"}，completion_tokens=${retry.completionTokens}，reasoning=${retry.reasoningChars} 字），最后一次输出预览：`,
+    previewRaw(retry.raw),
+  );
+  throw new Error("模型没有返回可用的分类结果");
 }
 
 async function applyEphemeral(
@@ -196,6 +262,12 @@ async function main() {
       : `[dry-run] 共 ${rows.length} 条活跃记忆，只打印建议，不写数据库。`,
   );
   console.log("提示：确认分类结果后加 --apply 才会写库。\n");
+
+  if (apply) {
+    console.log(
+      "注意：apply 会重新调用模型分类，结果可能与刚才 dry-run 的建议略有差异。\n",
+    );
+  }
 
   const now = new Date();
   let permanentCount = 0;
