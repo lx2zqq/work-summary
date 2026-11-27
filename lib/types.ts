@@ -232,6 +232,16 @@ export type WeeklyReport = {
   updatedAt: string;
 };
 
+/** 周报读取与首屏初始化共用的数据结构 */
+export type WeeklyReportLoadResult = {
+  weekStart: string;
+  weekEnd: string;
+  isMondayDefaultLastWeek: boolean;
+  report: WeeklyReport | null;
+  sourceReviews: string[];
+  computedActiveStudentsByGrade: string;
+};
+
 /** 周报生成用的一条来源日报 */
 export type WeeklySourceReview = {
   reviewDate: string;

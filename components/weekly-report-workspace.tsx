@@ -14,7 +14,14 @@ import {
   Sparkles,
 } from "lucide-react";
 import type { ReactNode } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -44,8 +51,16 @@ import type {
   Student,
   WeeklyReport,
   WeeklyReportContent,
+  WeeklyReportLoadResult,
   WeeklyReportStatus,
 } from "@/lib/types";
+import {
+  clearWeeklyGeneration,
+  getWeeklyGenerationJob,
+  getWeeklyGenerationServerSnapshot,
+  startWeeklyGeneration,
+  subscribeWeeklyGeneration,
+} from "@/lib/weekly-generation-store";
 import {
   createEmptyWeeklyReportContent,
   formatWeeklyReportPlainText,
@@ -59,24 +74,27 @@ type Props = {
   mode: Mode;
   /** 服务端传入今天，避免服务端与浏览器时区不同导致水合不一致 */
   today?: string;
+  /** live 模式首屏数据，由服务端串行查好 */
+  initialData?: WeeklyReportLoadResult;
   /** demo 模式使用演示 Provider 里的学员 */
   demoStudents?: Student[];
   /** demo 模式可纳入汇总的日报日期 */
   demoReviewDates?: string[];
 };
 
-type WeeklyLoadResult = {
-  weekStart: string;
-  weekEnd: string;
-  isMondayDefaultLastWeek: boolean;
-  report: WeeklyReport | null;
-  sourceReviews: string[];
-  computedActiveStudentsByGrade: string;
-};
-
 type SaveOptions = {
   silent?: boolean;
 };
+
+// 统一输入框常态与只读态，避免 Chromium 对 disabled textarea 的底色差异
+const FIELD_BASE_CLASS =
+  "border-line bg-paper text-ink placeholder:text-ink-soft/60";
+const FIELD_READONLY_CLASS =
+  "border-line bg-cream-deep text-ink-soft focus:border-line focus:ring-0";
+
+function fieldClass(readOnly: boolean): string {
+  return cn(FIELD_BASE_CLASS, readOnly && FIELD_READONLY_CLASS);
+}
 
 /** 和空白模板逐字段比较，避免把默认的“无/暂无”误判成用户已填写 */
 function isPristineWeeklyContent(
@@ -112,15 +130,39 @@ function upsertDemoReport(
     : [...reports, next];
 }
 
-function downloadBlob(blob: Blob, filename: string): void {
-  const url = URL.createObjectURL(blob);
+/** 真实 HTTP GET，依赖接口的 Content-Disposition 触发原生下载 */
+function triggerHttpDownload(url: string): void {
   const link = document.createElement("a");
   link.href = url;
-  link.download = filename;
+  link.rel = "noopener";
   document.body.appendChild(link);
   link.click();
   link.remove();
-  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/** 演示导出用原生表单提交，避免微信不支持 blob: 下载 */
+function submitDemoExportForm(payload: string): void {
+  const form = document.createElement("form");
+  form.method = "POST";
+  form.action = "/api/demo/weekly-export";
+  form.style.display = "none";
+
+  const input = document.createElement("input");
+  input.type = "hidden";
+  input.name = "payload";
+  input.value = payload;
+  form.appendChild(input);
+
+  document.body.appendChild(form);
+  form.submit();
+  form.remove();
+}
+
+function isWeChatBrowser(): boolean {
+  return (
+    typeof navigator !== "undefined" &&
+    /MicroMessenger/i.test(navigator.userAgent)
+  );
 }
 
 /**
@@ -130,6 +172,7 @@ function downloadBlob(blob: Blob, filename: string): void {
 export function WeeklyReportWorkspace({
   mode,
   today = todayISO(),
+  initialData,
   demoStudents,
   demoReviewDates,
 }: Props) {
@@ -153,33 +196,52 @@ export function WeeklyReportWorkspace({
     [isDemo, baseToday],
   );
 
-  const [weekStart, setWeekStart] = useState(initialDefault.weekStart);
+  const [weekStart, setWeekStart] = useState(
+    initialData?.weekStart ?? initialDefault.weekStart,
+  );
   const [sourceStartDate, setSourceStartDate] = useState(
-    initialDefault.weekStart,
+    initialData?.weekStart ?? initialDefault.weekStart,
   );
   const [sourceEndDate, setSourceEndDate] = useState(
-    initialDefault.weekEnd,
+    initialData?.weekEnd ?? initialDefault.weekEnd,
   );
-  const [content, setContent] = useState<WeeklyReportContent>(() =>
-    createEmptyWeeklyReportContent(),
+  const [content, setContent] = useState<WeeklyReportContent>(
+    () =>
+      initialData?.report?.content ??
+      createEmptyWeeklyReportContent(
+        initialData?.computedActiveStudentsByGrade ?? "暂无",
+      ),
   );
-  const [report, setReport] = useState<WeeklyReport | null>(null);
-  const [status, setStatus] = useState<WeeklyReportStatus>("draft");
-  const [sourceReviews, setSourceReviews] = useState<string[]>([]);
+  const [report, setReport] = useState<WeeklyReport | null>(
+    initialData?.report ?? null,
+  );
+  const [status, setStatus] = useState<WeeklyReportStatus>(
+    initialData?.report?.status ?? "draft",
+  );
+  const [sourceReviews, setSourceReviews] = useState<string[]>(
+    initialData?.sourceReviews ?? [],
+  );
   const [computedActiveStudentsByGrade, setComputedActiveStudentsByGrade] =
-    useState("暂无");
-  const [loading, setLoading] = useState(true);
+    useState(initialData?.computedActiveStudentsByGrade ?? "暂无");
+  const [loading, setLoading] = useState(!initialData);
   const [refreshingSource, setRefreshingSource] = useState(false);
   const [saving, setSaving] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [dirty, setDirty] = useState(false);
-  const [manualEdited, setManualEdited] = useState(false);
+  const [manualEdited, setManualEdited] = useState(() =>
+    Boolean(
+      initialData?.report &&
+        (initialData.report.status === "finalized" ||
+          !initialData.report.generatedAt),
+    ),
+  );
   const [sourceExpanded, setSourceExpanded] = useState(false);
   const [customRangeOpen, setCustomRangeOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [showMondayHint, setShowMondayHint] = useState(
-    initialDefault.isMondayDefaultLastWeek,
+    initialData?.isMondayDefaultLastWeek ??
+      initialDefault.isMondayDefaultLastWeek,
   );
   const [sourceError, setSourceError] = useState("");
   const [loadError, setLoadError] = useState("");
@@ -189,7 +251,14 @@ export function WeeklyReportWorkspace({
   const savingRef = useRef(false);
   const generatingRef = useRef(false);
   const exportingRef = useRef(false);
-  const loadedWeekRef = useRef<string | null>(null);
+  const loadedWeekRef = useRef<string | null>(
+    initialData?.weekStart ?? null,
+  );
+  const initialLoadKeyRef = useRef<string | null>(
+    initialData
+      ? `${initialData.weekStart}|${initialData.weekStart}|${initialData.weekEnd}`
+      : null,
+  );
   const requestIdRef = useRef(0);
   const demoReportsRef = useRef<WeeklyReport[]>(initialDemoReports);
 
@@ -209,10 +278,32 @@ export function WeeklyReportWorkspace({
         computedActiveStudentsByGrade,
       ),
   );
-  const busy = loading || refreshingSource || saving || isGenerating;
-  const editorDisabled = loading || isGenerating;
+  const weeklyGenerationJob = useSyncExternalStore(
+    subscribeWeeklyGeneration,
+    () => getWeeklyGenerationJob(weekStart),
+    getWeeklyGenerationServerSnapshot,
+  );
+  const generationRunning =
+    weeklyGenerationJob?.status === "running";
+  const busy =
+    loading ||
+    refreshingSource ||
+    saving ||
+    isGenerating ||
+    generationRunning;
   const isCustomSourceRange =
     sourceStartDate !== weekStart || sourceEndDate !== weekEnd;
+
+  const markDirty = useCallback(() => {
+    dirtyRef.current = true;
+    setDirty(true);
+    setManualEdited(true);
+  }, []);
+
+  const clearDirty = useCallback(() => {
+    dirtyRef.current = false;
+    setDirty(false);
+  }, []);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -235,16 +326,70 @@ export function WeeklyReportWorkspace({
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [dirty]);
 
-  function markDirty() {
-    dirtyRef.current = true;
-    setDirty(true);
-    setManualEdited(true);
-  }
+  // 订阅后台生成任务；切页回来时在订阅回调里同步已完成的结果
+  useEffect(() => {
+    let cancelled = false;
 
-  function clearDirty() {
-    dirtyRef.current = false;
-    setDirty(false);
-  }
+    const handleJob = () => {
+      if (cancelled) return;
+
+      const job = getWeeklyGenerationJob(weekStart);
+      if (!job) return;
+
+      if (job.status === "running") {
+        generatingRef.current = true;
+        return;
+      }
+
+      if (job.status === "succeeded") {
+        const generated = job.report;
+
+        if (generated && job.weekStart === weekStart) {
+          if (isDemo) {
+            demoReportsRef.current = upsertDemoReport(
+              demoReportsRef.current,
+              generated,
+            );
+          }
+
+          setReport(generated);
+          setContent(generated.content);
+          setStatus(generated.status);
+          setManualEdited(false);
+          clearDirty();
+          setLoadError("");
+          loadedWeekRef.current = generated.weekStart;
+          toast.success(
+            isDemo ? "演示周报已生成" : "周报已生成并保存",
+          );
+        }
+
+        clearWeeklyGeneration(job.weekStart);
+        generatingRef.current = false;
+        setIsGenerating(false);
+        return;
+      }
+
+      if (job.status === "failed") {
+        if (job.weekStart === weekStart) {
+          toast.error(job.error || "生成周报失败");
+        }
+
+        clearWeeklyGeneration(job.weekStart);
+        generatingRef.current = false;
+        setIsGenerating(false);
+      }
+    };
+
+    // 挂载时可能已有任务完成或正在运行，异步处理一次
+    queueMicrotask(handleJob);
+    const unsubscribe = subscribeWeeklyGeneration(handleJob);
+
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, [weekStart, isDemo, clearDirty]);
 
   function updateSummary(field: "miantan" | "weixin", value: string) {
     setContent((current) => ({
@@ -323,7 +468,7 @@ export function WeeklyReportWorkspace({
     else setRefreshingSource(true);
 
     try {
-      let data: WeeklyLoadResult;
+      let data: WeeklyReportLoadResult;
 
       if (isDemo) {
         const demoReport =
@@ -354,7 +499,7 @@ export function WeeklyReportWorkspace({
           { signal: options.signal },
         );
         const payload = (await response.json().catch(() => ({}))) as
-          | (WeeklyLoadResult & { error?: string })
+          | (WeeklyReportLoadResult & { error?: string })
           | { error?: string };
 
         if (!response.ok) {
@@ -363,7 +508,7 @@ export function WeeklyReportWorkspace({
           );
         }
 
-        data = payload as WeeklyLoadResult;
+        data = payload as WeeklyReportLoadResult;
       }
 
       if (
@@ -420,6 +565,16 @@ export function WeeklyReportWorkspace({
   });
 
   useEffect(() => {
+    const currentKey = `${weekStart}|${sourceStartDate}|${sourceEndDate}`;
+
+    // 服务端首屏数据对应的周次不再发重复请求；
+    // 保留 key 不立即清空，兼容 StrictMode 下的二次 effect
+    if (initialLoadKeyRef.current === currentKey) {
+      return;
+    }
+
+    initialLoadKeyRef.current = null;
+
     const controller = new AbortController();
     const weekChanged = loadedWeekRef.current !== weekStart;
     // 只改汇总日期时，如果还有未保存修改，就只刷新来源篇数，不覆盖正文
@@ -516,50 +671,55 @@ export function WeeklyReportWorkspace({
     setSourceEndDate(target.weekEnd);
   }
 
-  async function runGenerate() {
-    if (generatingRef.current) return;
+  function runGenerate() {
+    if (generatingRef.current || generationRunning) return;
 
     generatingRef.current = true;
     setConfirmOpen(false);
     setIsGenerating(true);
     setLoadError("");
 
-    try {
-      let nextReport: WeeklyReport;
+    const targetWeekStart = weekStart;
+    const targetWeekEnd = weekEnd;
+    const targetSourceStart = sourceStartDate;
+    const targetSourceEnd = sourceEndDate;
+    const customRange = isCustomSourceRange;
+    const currentReport = report;
+    const currentReviewCount = sourceReviews.length;
+    const activeGrades = computedActiveStudentsByGrade;
 
-      if (isDemo) {
-        await new Promise((resolve) =>
-          window.setTimeout(resolve, DEMO_THINKING_MS),
-        );
-        const stamp = new Date().toISOString();
-        const generated = buildDemoWeeklyGeneratedContent(
-          computedActiveStudentsByGrade,
-        );
-        nextReport = {
-          id: report?.id ?? `demo-weekly-${weekStart}`,
-          weekStart,
-          weekEnd,
-          content: generated,
-          status: "draft",
-          sourceReviewCount: sourceReviews.length,
-          generatedAt: stamp,
-          createdAt: report?.createdAt ?? stamp,
-          updatedAt: stamp,
-        };
-        demoReportsRef.current = upsertDemoReport(
-          demoReportsRef.current,
-          nextReport,
-        );
-      } else {
+    void startWeeklyGeneration({
+      weekStart: targetWeekStart,
+      request: async () => {
+        if (isDemo) {
+          await new Promise((resolve) =>
+            window.setTimeout(resolve, DEMO_THINKING_MS),
+          );
+          const stamp = new Date().toISOString();
+          const generated = buildDemoWeeklyGeneratedContent(activeGrades);
+
+          return {
+            id: currentReport?.id ?? `demo-weekly-${targetWeekStart}`,
+            weekStart: targetWeekStart,
+            weekEnd: targetWeekEnd,
+            content: generated,
+            status: "draft",
+            sourceReviewCount: currentReviewCount,
+            generatedAt: stamp,
+            createdAt: currentReport?.createdAt ?? stamp,
+            updatedAt: stamp,
+          } satisfies WeeklyReport;
+        }
+
         const body: {
           weekStart: string;
           sourceStartDate?: string;
           sourceEndDate?: string;
-        } = { weekStart };
+        } = { weekStart: targetWeekStart };
 
-        if (isCustomSourceRange) {
-          body.sourceStartDate = sourceStartDate;
-          body.sourceEndDate = sourceEndDate;
+        if (customRange) {
+          body.sourceStartDate = targetSourceStart;
+          body.sourceEndDate = targetSourceEnd;
         }
 
         const response = await fetch("/api/weekly-reports/generate", {
@@ -576,33 +736,13 @@ export function WeeklyReportWorkspace({
           throw new Error(payload.error || "生成周报失败");
         }
 
-        nextReport = payload.report;
-      }
-
-      if (!mountedRef.current) return;
-
-      setReport(nextReport);
-      setContent(nextReport.content);
-      setStatus(nextReport.status);
-      clearDirty();
-      setManualEdited(false);
-      toast.success(
-        isDemo ? "演示周报已生成" : "周报已生成并保存",
-      );
-    } catch (error) {
-      if (mountedRef.current) {
-        toast.error(
-          error instanceof Error ? error.message : "生成周报失败",
-        );
-      }
-    } finally {
-      generatingRef.current = false;
-      if (mountedRef.current) setIsGenerating(false);
-    }
+        return payload.report;
+      },
+    });
   }
 
   function requestGenerate() {
-    if (generatingRef.current || loading || refreshingSource || saving) {
+    if (busy || generatingRef.current) {
       return;
     }
     if (sourceError) {
@@ -623,7 +763,14 @@ export function WeeklyReportWorkspace({
   }
 
   async function handleExport() {
-    if (exportingRef.current || isGenerating || saving) return;
+    if (
+      exportingRef.current ||
+      isGenerating ||
+      generationRunning ||
+      saving
+    ) {
+      return;
+    }
 
     exportingRef.current = true;
     setIsExporting(true);
@@ -641,38 +788,24 @@ export function WeeklyReportWorkspace({
       }
 
       if (isDemo) {
-        const response = await fetch("/api/demo/weekly-export", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ weekStart, weekEnd, content }),
-        });
-
-        if (!response.ok) {
-          const payload = (await response.json().catch(() => ({}))) as {
-            error?: string;
-          };
-          throw new Error(payload.error || "导出失败");
-        }
-
-        const blob = await response.blob();
-        downloadBlob(blob, `周报_${weekStart}_${weekEnd}.xlsx`);
+        // 原生表单提交，避免微信内置浏览器不支持 blob: 下载
+        submitDemoExportForm(
+          JSON.stringify({ weekStart, weekEnd, content }),
+        );
       } else {
-        const response = await fetch(
+        // 真实 HTTP GET，依赖接口的 Content-Disposition 与 Cookie 鉴权
+        triggerHttpDownload(
           `/api/weekly-reports/${weekStart}/export`,
         );
-
-        if (!response.ok) {
-          const payload = (await response.json().catch(() => ({}))) as {
-            error?: string;
-          };
-          throw new Error(payload.error || "导出失败");
-        }
-
-        const blob = await response.blob();
-        downloadBlob(blob, `周报_${weekStart}_${weekEnd}.xlsx`);
       }
 
-      toast.success("Excel 已导出");
+      if (isWeChatBrowser()) {
+        toast.info(
+          "微信内若未自动保存文件，请点右上角『···』选择在浏览器中打开后导出",
+        );
+      } else {
+        toast.success("已开始导出 Excel");
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "导出失败");
     } finally {
@@ -805,13 +938,6 @@ export function WeeklyReportWorkspace({
 
             <Badge tone={statusInfo.tone}>{statusInfo.text}</Badge>
 
-            {loading ? (
-              <span className="flex items-center gap-1 text-[11px] text-ink-soft">
-                <Spinner className="h-3 w-3" />
-                读取中
-              </span>
-            ) : null}
-
             <button
               type="button"
               onClick={() => setSourceExpanded((value) => !value)}
@@ -886,7 +1012,8 @@ export function WeeklyReportWorkspace({
         ) : null}
 
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
-          <section className="paper-card overflow-hidden">
+          <div className="relative">
+            <section className="paper-card overflow-hidden">
             <div className="flex items-center justify-between gap-2 border-b border-line/70 px-4 py-3 sm:px-5">
               <h2 className="text-sm font-semibold tracking-tight text-ink">
                 周报内容
@@ -906,7 +1033,8 @@ export function WeeklyReportWorkspace({
                   <Textarea
                     id="weekly-miantan"
                     value={content.summary.miantan}
-                    disabled={editorDisabled}
+                    readOnly={busy}
+                    className={fieldClass(busy)}
                     onChange={(event) =>
                       updateSummary("miantan", event.target.value)
                     }
@@ -918,7 +1046,8 @@ export function WeeklyReportWorkspace({
                   <Textarea
                     id="weekly-weixin"
                     value={content.summary.weixin}
-                    disabled={editorDisabled}
+                    readOnly={busy}
+                    className={fieldClass(busy)}
                     onChange={(event) =>
                       updateSummary("weixin", event.target.value)
                     }
@@ -948,7 +1077,7 @@ export function WeeklyReportWorkspace({
                         field as keyof WeeklyReportContent["metrics"]
                       ]
                     }
-                    disabled={editorDisabled}
+                    busy={busy}
                     onChange={(value) =>
                       updateMetric(
                         field as keyof WeeklyReportContent["metrics"],
@@ -970,7 +1099,7 @@ export function WeeklyReportWorkspace({
                   <Button
                     variant="ghost"
                     size="sm"
-                    disabled={editorDisabled}
+                    disabled={busy}
                     onClick={handleSyncGrades}
                   >
                     <RefreshCw className="h-3.5 w-3.5" />
@@ -980,7 +1109,7 @@ export function WeeklyReportWorkspace({
                 <Textarea
                   id="weekly-active-grades"
                   value={content.metrics.activeStudentsByGrade}
-                  disabled={editorDisabled}
+                  readOnly={busy}
                   onChange={(event) =>
                     updateMetric(
                       "activeStudentsByGrade",
@@ -989,7 +1118,7 @@ export function WeeklyReportWorkspace({
                   }
                   rows={4}
                   placeholder={"高一：3人\n高二：2人\n合计：5人"}
-                  className="mt-1.5"
+                  className={cn(fieldClass(busy), "mt-1.5")}
                 />
               </div>
             </EditorSection>
@@ -999,7 +1128,8 @@ export function WeeklyReportWorkspace({
                 id="weekly-reflection"
                 aria-label="本周工作心得"
                 value={content.reflection}
-                disabled={editorDisabled}
+                readOnly={busy}
+                className={fieldClass(busy)}
                 onChange={(event) =>
                   updateReflection(event.target.value)
                 }
@@ -1017,7 +1147,8 @@ export function WeeklyReportWorkspace({
                   <Textarea
                     id="weekly-zhongdian-huifang"
                     value={content.nextWeek.zhongdianHuifang}
-                    disabled={editorDisabled}
+                    readOnly={busy}
+                    className={fieldClass(busy)}
                     onChange={(event) =>
                       updateNextWeek(
                         "zhongdianHuifang",
@@ -1032,7 +1163,8 @@ export function WeeklyReportWorkspace({
                   <Textarea
                     id="weekly-jiazhanghui"
                     value={content.nextWeek.jiazhanghui}
-                    disabled={editorDisabled}
+                    readOnly={busy}
+                    className={fieldClass(busy)}
                     onChange={(event) =>
                       updateNextWeek("jiazhanghui", event.target.value)
                     }
@@ -1048,7 +1180,8 @@ export function WeeklyReportWorkspace({
                 id="weekly-support"
                 aria-label="需要的支持"
                 value={content.supportNeeded}
-                disabled={editorDisabled}
+                readOnly={busy}
+                className={fieldClass(busy)}
                 onChange={(event) =>
                   updateSupport(event.target.value)
                 }
@@ -1058,6 +1191,16 @@ export function WeeklyReportWorkspace({
             </EditorSection>
             </div>
           </section>
+
+          {loading ? (
+            <div className="absolute inset-0 z-10 flex items-center justify-center rounded-2xl bg-paper/70 backdrop-blur-[1px]">
+              <span className="flex items-center gap-2 rounded-full bg-paper px-3.5 py-2 text-xs text-ink-soft shadow-sm ring-1 ring-line">
+                <Spinner className="h-3.5 w-3.5" />
+                正在切换周次…
+              </span>
+            </div>
+          ) : null}
+          </div>
 
           <aside className="order-first space-y-3 lg:order-last lg:sticky lg:top-20">
             <div className="paper-card space-y-3 p-4">
@@ -1071,11 +1214,9 @@ export function WeeklyReportWorkspace({
               <div className="space-y-1.5">
                 <Button
                   className="w-full"
-                  loading={isGenerating}
+                  loading={isGenerating || generationRunning}
                   disabled={
-                    loading ||
-                    refreshingSource ||
-                    saving ||
+                    busy ||
                     Boolean(sourceError) ||
                     !sourceReviews.length
                   }
@@ -1089,14 +1230,16 @@ export function WeeklyReportWorkspace({
                   <Sparkles className="h-4 w-4" />
                   {report || hasContent ? "重新生成周报" : "AI 生成周报"}
                 </Button>
-                {isGenerating || sourceError ? (
+                {isGenerating || generationRunning || sourceError ? (
                   <p
                     className={cn(
                       "text-center text-[11px] leading-relaxed",
                       sourceError ? "text-danger" : "text-ink-soft",
                     )}
                   >
-                    {isGenerating ? "正在整理本周日报…" : sourceError}
+                    {isGenerating || generationRunning
+                      ? "正在整理本周日报…"
+                      : sourceError}
                   </p>
                 ) : null}
               </div>
@@ -1130,13 +1273,14 @@ export function WeeklyReportWorkspace({
                           type="date"
                           value={sourceStartDate}
                           max={sourceEndDate}
-                          disabled={busy}
+                          readOnly={busy}
                           onChange={(event) => {
+                            if (busy) return;
                             if (event.target.value) {
                               setSourceStartDate(event.target.value);
                             }
                           }}
-                          className="h-9 text-xs"
+                          className={cn(fieldClass(busy), "h-9 text-xs")}
                         />
                       </label>
                       <label className="space-y-1">
@@ -1147,13 +1291,14 @@ export function WeeklyReportWorkspace({
                           type="date"
                           value={sourceEndDate}
                           min={sourceStartDate}
-                          disabled={busy}
+                          readOnly={busy}
                           onChange={(event) => {
+                            if (busy) return;
                             if (event.target.value) {
                               setSourceEndDate(event.target.value);
                             }
                           }}
-                          className="h-9 text-xs"
+                          className={cn(fieldClass(busy), "h-9 text-xs")}
                         />
                       </label>
                     </div>
@@ -1224,7 +1369,7 @@ export function WeeklyReportWorkspace({
                 <Button
                   variant="secondary"
                   className="w-full"
-                  disabled={isGenerating}
+                  disabled={busy}
                   onClick={() => {
                     void handleCopy();
                   }}
@@ -1315,12 +1460,12 @@ function Field({
 function MetricField({
   label,
   value,
-  disabled,
+  busy,
   onChange,
 }: {
   label: string;
   value: string;
-  disabled: boolean;
+  busy: boolean;
   onChange: (value: string) => void;
 }) {
   return (
@@ -1330,11 +1475,11 @@ function MetricField({
       </span>
       <Input
         value={value}
-        disabled={disabled}
+        readOnly={busy}
         aria-label={label}
         placeholder="无"
         onChange={(event) => onChange(event.target.value)}
-        className="h-9 text-sm"
+        className={cn(fieldClass(busy), "h-9 text-sm")}
       />
     </label>
   );

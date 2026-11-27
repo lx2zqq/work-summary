@@ -112,6 +112,19 @@ function jsonRequest(url: string, body: unknown, ip: string): Request {
   });
 }
 
+function formRequest(url: string, payload: unknown, ip: string): Request {
+  return new Request(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      "x-real-ip": ip,
+    },
+    body: new URLSearchParams({
+      payload: JSON.stringify(payload),
+    }).toString(),
+  });
+}
+
 describe("GET /api/weekly-reports", () => {
   it("归一到周一，返回来源日期和在读人数", async () => {
     await seedStudent("林小满", "高一");
@@ -488,6 +501,42 @@ describe("POST /api/demo/weekly-export", () => {
     );
     const buffer = await response.arrayBuffer();
     expect(buffer.byteLength).toBeGreaterThan(0);
+  });
+
+  it("接受表单 payload 并返回 xlsx", async () => {
+    const response = await demoWeeklyExport(
+      formRequest(
+        "http://localhost/api/demo/weekly-export",
+        {
+          weekStart: "2026-11-23",
+          weekEnd: "2026-11-29",
+          content: buildContent(),
+        },
+        "10.0.3.4",
+      ),
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toContain(
+      "spreadsheetml.sheet",
+    );
+    const buffer = await response.arrayBuffer();
+    expect(buffer.byteLength).toBeGreaterThan(1000);
+  });
+
+  it("表单 payload 不是合法 JSON 时返回 400", async () => {
+    const response = await demoWeeklyExport(
+      new Request("http://localhost/api/demo/weekly-export", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          "x-real-ip": "10.0.3.5",
+        },
+        body: "payload=not-json",
+      }),
+    );
+
+    expect(response.status).toBe(400);
   });
 
   it("拒绝不是完整自然周的区间", async () => {

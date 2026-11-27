@@ -230,6 +230,12 @@ upsert weekly_reports → PUT 保存 → Excel 导出
 - `POST /api/weekly-reports/generate` 严格串行查询日报正文、当前活跃的长期记忆和在读学员；区间内没有日报时返回 400，不调用模型。
 - 自定义区间必须同时传开始和结束，开始不晚于结束，最长 14 天；不传时默认 `[weekStart, weekEnd]`。
 
+**前端状态**
+
+- live 首屏由 `app/(app)/weekly/page.tsx` 串行查好默认周数据，通过 `initialData` 传入，首屏不再发重复请求；切换周次时在表单区域显示柔和加载遮罩。
+- AI 生成任务放在模块级 `weekly-generation-store`，按 `weekStart` 去重并保留 running / succeeded / failed 状态；切去其他页面不会取消请求，回来时会同步结果并提示。
+- live 导出用真实 GET 链接，demo 导出用隐藏表单 POST；两者都走 `Content-Disposition` 原生下载，不依赖 `blob:` URL，兼容微信内置浏览器。
+
 **AI 汇总**
 
 - `lib/ai/weekly.ts` 输入日报的最终稿、栏目草稿、原始流水账、活跃记忆和程序统计的年级人数。
@@ -245,13 +251,13 @@ upsert weekly_reports → PUT 保存 → Excel 导出
 - 模板导出保留宋体、边框和原有合并单元格；写入 C3（面谈/微信）、C17-C24（数据汇总）、C31（心得）、C32-C33（下周安排）、C34（需要的支持）。
 - 安全补充合并 `C17:N17` 到 `C23:N23`，跳过已存在的相交区域；清空模板里 J20 的孤立冒号；对写入单元格开启 `wrapText`，按内容行数估算并调高行高。
 - `next.config.ts` 把 `exceljs` 放进 `serverExternalPackages`，避免打包器改写 Node 文件系统调用。
-- 下载响应使用 `Content-Disposition: attachment; filename="..."; filename*=UTF-8''...`，前端 `fetch → blob → a[download]` 使用同源请求和本地 blob，不依赖外部资源。
+- 下载响应使用 `Content-Disposition: attachment; filename="..."; filename*=UTF-8''...`；live 模式用隐藏 GET 链接触发原生下载，demo 模式用隐藏表单 POST 提交，避免微信内置浏览器不支持 `blob:` 下载。
 
 **演示**
 
 - `/demo/weekly` 使用 `WeeklyReportWorkspace mode="demo"`，样例包含上一周、本周两份已保存样例和模拟 AI 生成结果，数据来自 `lib/demo-data.ts` 的内存状态。
-- 演示的 AI 生成只做短暂 loading 后填充样例，不调用模型；导出仍调用真实 `POST /api/demo/weekly-export`，所以下载的是套用模板的真实 `.xlsx`。
-- demo 导出接口免登录，但接入限流并用 `weeklyReportContentSchema` + 自然周校验，字段长度受限，不读写数据库。
+- 演示的 AI 生成只做短暂 loading 后填充样例，不调用模型；导出仍通过隐藏表单调用真实 `POST /api/demo/weekly-export`，所以下载的是套用模板的真实 `.xlsx`。
+- demo 导出接口免登录，同时兼容 JSON 和表单 `payload`，并接入限流和 `weeklyReportContentSchema` + 自然周校验，字段长度受限，不读写数据库。
 
 ## 通用复盘话术
 
