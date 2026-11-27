@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { isValidISODate } from "./date";
+import { addDaysISO, isValidISODate } from "./date";
 import { MAX_FOLLOW_UP_ROUNDS, MEMORY_CATEGORIES } from "./types";
 
 // 手动重新生成会重置追问轮次但保留历史问答，所以不能按单次 3×3 来限制
@@ -194,6 +194,92 @@ export const memoryExtractionSchema = z.object({
     .max(10)
     .default([]),
 });
+
+export const weeklyReportStatusSchema = z.enum(["draft", "finalized"]);
+
+const weeklyText = (max: number) => z.string().trim().max(max);
+
+/** 周报正文，字段与模板单元格一一对应；新增字段时同步改 Excel 导出 */
+export const weeklyReportContentSchema = z.object({
+  summary: z.object({
+    miantan: weeklyText(2000),
+    weixin: weeklyText(2000),
+  }),
+  metrics: z.object({
+    qingjia: weeklyText(1000),
+    yujing: weeklyText(1000),
+    tingke: weeklyText(1000),
+    jieke: weeklyText(1000),
+    kuoke: weeklyText(1000),
+    xinqian: weeklyText(1000),
+    xufei: weeklyText(1000),
+    activeStudentsByGrade: weeklyText(2000),
+  }),
+  reflection: weeklyText(4000),
+  nextWeek: z.object({
+    zhongdianHuifang: weeklyText(2000),
+    jiazhanghui: weeklyText(2000),
+  }),
+  supportNeeded: weeklyText(2000),
+});
+
+/** 手动保存周报：只提交正文和状态，周次由路径参数决定 */
+export const weeklyReportSaveSchema = z.object({
+  content: weeklyReportContentSchema,
+  status: weeklyReportStatusSchema.default("draft"),
+});
+
+/** 生成周报：可选自定义汇总区间，默认使用周报本身的那一周 */
+export const weeklyReportGenerateRequestSchema = z
+  .object({
+    weekStart: isoDateSchema,
+    sourceStartDate: isoDateSchema.optional(),
+    sourceEndDate: isoDateSchema.optional(),
+  })
+  .superRefine((value, ctx) => {
+    const hasStart = value.sourceStartDate !== undefined;
+    const hasEnd = value.sourceEndDate !== undefined;
+
+    if (hasStart !== hasEnd) {
+      ctx.addIssue({
+        code: "custom",
+        message: "sourceStartDate 和 sourceEndDate 需要同时传",
+        path: [hasStart ? "sourceEndDate" : "sourceStartDate"],
+      });
+      return;
+    }
+
+    if (!value.sourceStartDate || !value.sourceEndDate) return;
+
+    if (value.sourceStartDate > value.sourceEndDate) {
+      ctx.addIssue({
+        code: "custom",
+        message: "开始日期不能晚于结束日期",
+        path: ["sourceEndDate"],
+      });
+      return;
+    }
+
+    if (value.sourceEndDate > addDaysISO(value.sourceStartDate, 13)) {
+      ctx.addIssue({
+        code: "custom",
+        message: "汇总区间不能超过 14 天",
+        path: ["sourceEndDate"],
+      });
+    }
+  });
+
+/** 演示页导出：不读库，只允许导出一个完整自然周 */
+export const demoWeeklyExportRequestSchema = z
+  .object({
+    weekStart: isoDateSchema,
+    weekEnd: isoDateSchema,
+    content: weeklyReportContentSchema,
+  })
+  .refine((value) => value.weekEnd === addDaysISO(value.weekStart, 6), {
+    message: "周报日期区间必须是一个完整自然周",
+    path: ["weekEnd"],
+  });
 
 export const phrasePreviewSchema = z.object({
   text: z

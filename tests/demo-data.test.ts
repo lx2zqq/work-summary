@@ -2,6 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   buildDemoMemoryList,
   buildDemoReviews,
+  buildDemoWeeklyGeneratedContent,
+  buildDemoWeeklyReports,
+  buildDemoWeeklyReviewDates,
+  demoWeeklyActiveGrades,
   DEMO_DRAFT_CONCISE,
   DEMO_DRAFT_DETAILED,
   DEMO_MEMORIES,
@@ -10,7 +14,7 @@ import {
   DEMO_SETTINGS,
   DEMO_STUDENTS,
 } from "@/lib/demo-data";
-import { addDaysISO } from "@/lib/date";
+import { addDaysISO, getWeekRange, shiftWeek } from "@/lib/date";
 import { renderReview } from "@/lib/template";
 import type { SectionKey } from "@/lib/types";
 
@@ -151,5 +155,65 @@ describe("演示数据", () => {
     for (const memory of DEMO_MEMORIES) {
       expect(memory.id.startsWith("demo-")).toBe(true);
     }
+  });
+
+  it("演示周报包含上一周定稿和本周草稿", () => {
+    const today = "2026-11-18";
+    const current = getWeekRange(today);
+    const last = shiftWeek(current.weekStart, -1);
+    const reports = buildDemoWeeklyReports(today);
+
+    expect(reports).toHaveLength(2);
+
+    const lastReport = reports.find(
+      (item) => item.weekStart === last.weekStart,
+    );
+    const currentReport = reports.find(
+      (item) => item.weekStart === current.weekStart,
+    );
+
+    expect(lastReport?.status).toBe("finalized");
+    expect(currentReport?.status).toBe("draft");
+    expect(currentReport?.generatedAt).toBeNull();
+  });
+
+  it("演示周报的年级人数与演示学员一致", () => {
+    const active = demoWeeklyActiveGrades();
+    const reports = buildDemoWeeklyReports("2026-11-18");
+
+    expect(active).toContain("初三：1人");
+    expect(active).toContain("高一：1人");
+    expect(active).toContain("合计：2人");
+    expect(
+      reports.every(
+        (item) =>
+          item.content.metrics.activeStudentsByGrade === active,
+      ),
+    ).toBe(true);
+  });
+
+  it("演示周报关联日期覆盖上一周和本周到今天", () => {
+    const today = "2026-11-18";
+    const current = getWeekRange(today);
+    const last = shiftWeek(current.weekStart, -1);
+    const dates = buildDemoWeeklyReviewDates(today);
+
+    expect(dates).toContain(last.weekStart);
+    expect(dates).toContain(current.weekStart);
+    expect(dates).toContain(today);
+    expect(dates).not.toContain(addDaysISO(today, 1));
+    expect([...dates].sort()).toEqual(dates);
+  });
+
+  it("模拟 AI 结果呼应演示学员和本周事项", () => {
+    const content = buildDemoWeeklyGeneratedContent();
+
+    expect(content.summary.miantan).toContain("林小满");
+    expect(content.summary.weixin).toContain("陈一鸣妈妈");
+    expect(content.metrics.xufei).toContain("林小满");
+    expect(content.metrics.activeStudentsByGrade).toBe(
+      demoWeeklyActiveGrades(),
+    );
+    expect(content.reflection).toContain("排课调整");
   });
 });

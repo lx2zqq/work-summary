@@ -7,6 +7,7 @@ import { usePathname } from "next/navigation";
 const APP_PATHS: Record<string, string> = {
   "/demo": "/",
   "/demo/history": "/history",
+  "/demo/weekly": "/weekly",
   "/demo/memories": "/memories",
   "/demo/students": "/students",
   "/demo/settings": "/settings",

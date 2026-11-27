@@ -64,8 +64,9 @@ const nextConfig: NextConfig = {
       },
     ];
   },
-  // PGlite 内含 WASM，交给 Node 运行时按需加载，避免被打包器改写
-  serverExternalPackages: ["@electric-sql/pglite", "postgres"],
+  // PGlite 内含 WASM，交给 Node 运行时按需加载，避免被打包器改写；
+  // exceljs 依赖 Node 文件系统读取模板，同样保持外部依赖
+  serverExternalPackages: ["@electric-sql/pglite", "postgres", "exceljs"],
   turbopack: {
     rules: {
       "*.css": {

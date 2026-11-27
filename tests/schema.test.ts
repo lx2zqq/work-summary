@@ -4,10 +4,40 @@ import {
   generateRequestSchema,
   memoryExtractionSchema,
   memoryInputSchema,
+  demoWeeklyExportRequestSchema,
   memoryLifecycleActionSchema,
   saveReviewSchema,
   studentInputSchema,
+  weeklyReportContentSchema,
+  weeklyReportGenerateRequestSchema,
+  weeklyReportSaveSchema,
+  weeklyReportStatusSchema,
 } from "@/lib/schema";
+
+function buildWeeklyContent() {
+  return {
+    summary: {
+      miantan: "面谈内容",
+      weixin: "微信内容",
+    },
+    metrics: {
+      qingjia: "无",
+      yujing: "无",
+      tingke: "无",
+      jieke: "无",
+      kuoke: "无",
+      xinqian: "无",
+      xufei: "无",
+      activeStudentsByGrade: "高一：2人\n合计：2人",
+    },
+    reflection: "心得",
+    nextWeek: {
+      zhongdianHuifang: "无",
+      jiazhanghui: "无",
+    },
+    supportNeeded: "暂无",
+  };
+}
 
 describe("generateRequestSchema", () => {
   it("接受最小请求并补默认值", () => {
@@ -165,6 +195,192 @@ describe("memoryLifecycleActionSchema", () => {
 
     expect(
       memoryLifecycleActionSchema.safeParse({ action: "delete" }).success,
+    ).toBe(false);
+  });
+});
+
+describe("weeklyReportContentSchema", () => {
+  const content = {
+    summary: {
+      miantan: " 面谈内容 ",
+      weixin: "微信内容",
+    },
+    metrics: {
+      qingjia: "无",
+      yujing: "无",
+      tingke: "无",
+      jieke: "无",
+      kuoke: "无",
+      xinqian: "无",
+      xufei: "无",
+      activeStudentsByGrade: "高一：2人\n合计：2人",
+    },
+    reflection: "心得",
+    nextWeek: {
+      zhongdianHuifang: "无",
+      jiazhanghui: "无",
+    },
+    supportNeeded: "暂无",
+  };
+
+  it("接受完整结构并 trim 文本", () => {
+    const parsed = weeklyReportContentSchema.parse(content);
+
+    expect(parsed.summary.miantan).toBe("面谈内容");
+    expect(parsed.metrics.activeStudentsByGrade).toBe("高一：2人\n合计：2人");
+  });
+
+  it("拒绝缺少 metrics 的结构", () => {
+    expect(
+      weeklyReportContentSchema.safeParse({ ...content, metrics: undefined })
+        .success,
+    ).toBe(false);
+  });
+
+  it("拒绝超长心得", () => {
+    expect(
+      weeklyReportContentSchema.safeParse({
+        ...content,
+        reflection: "字".repeat(4001),
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe("weeklyReportStatusSchema", () => {
+  it("只接受草稿和定稿", () => {
+    expect(weeklyReportStatusSchema.safeParse("draft").success).toBe(true);
+    expect(weeklyReportStatusSchema.safeParse("finalized").success).toBe(true);
+    expect(weeklyReportStatusSchema.safeParse("archived").success).toBe(false);
+  });
+});
+
+describe("weeklyReportGenerateRequestSchema", () => {
+  it("允许不传自定义汇总区间", () => {
+    const parsed = weeklyReportGenerateRequestSchema.safeParse({
+      weekStart: "2026-11-25",
+    });
+
+    expect(parsed.success).toBe(true);
+  });
+
+  it("要求 sourceStartDate 和 sourceEndDate 同时传", () => {
+    expect(
+      weeklyReportGenerateRequestSchema.safeParse({
+        weekStart: "2026-11-23",
+        sourceStartDate: "2026-11-01",
+      }).success,
+    ).toBe(false);
+
+    expect(
+      weeklyReportGenerateRequestSchema.safeParse({
+        weekStart: "2026-11-23",
+        sourceEndDate: "2026-11-10",
+      }).success,
+    ).toBe(false);
+  });
+
+  it("拒绝开始日期晚于结束日期", () => {
+    const parsed = weeklyReportGenerateRequestSchema.safeParse({
+      weekStart: "2026-11-23",
+      sourceStartDate: "2026-11-20",
+      sourceEndDate: "2026-11-10",
+    });
+
+    expect(parsed.success).toBe(false);
+    if (!parsed.success) {
+      expect(parsed.error.issues[0]?.message).toContain("开始日期");
+    }
+  });
+
+  it("拒绝超过 14 天的汇总区间", () => {
+    const parsed = weeklyReportGenerateRequestSchema.safeParse({
+      weekStart: "2026-11-23",
+      sourceStartDate: "2026-11-01",
+      sourceEndDate: "2026-11-15",
+    });
+
+    expect(parsed.success).toBe(false);
+    if (!parsed.success) {
+      expect(parsed.error.issues[0]?.message).toContain("14 天");
+    }
+  });
+
+  it("允许正好 14 天", () => {
+    expect(
+      weeklyReportGenerateRequestSchema.safeParse({
+        weekStart: "2026-11-23",
+        sourceStartDate: "2026-11-01",
+        sourceEndDate: "2026-11-14",
+      }).success,
+    ).toBe(true);
+  });
+
+  it("拒绝不存在的日历日期", () => {
+    expect(
+      weeklyReportGenerateRequestSchema.safeParse({
+        weekStart: "2026-02-30",
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe("weeklyReportSaveSchema", () => {
+  it("接受完整内容，status 缺省为 draft", () => {
+    const parsed = weeklyReportSaveSchema.parse({
+      content: buildWeeklyContent(),
+    });
+
+    expect(parsed.status).toBe("draft");
+  });
+
+  it("接受 finalized 状态", () => {
+    const parsed = weeklyReportSaveSchema.parse({
+      content: buildWeeklyContent(),
+      status: "finalized",
+    });
+
+    expect(parsed.status).toBe("finalized");
+  });
+
+  it("拒绝缺少 content 的请求", () => {
+    expect(
+      weeklyReportSaveSchema.safeParse({ status: "draft" }).success,
+    ).toBe(false);
+  });
+});
+
+describe("demoWeeklyExportRequestSchema", () => {
+  it("接受完整自然周", () => {
+    expect(
+      demoWeeklyExportRequestSchema.safeParse({
+        weekStart: "2026-11-23",
+        weekEnd: "2026-11-29",
+        content: buildWeeklyContent(),
+      }).success,
+    ).toBe(true);
+  });
+
+  it("拒绝不是完整自然周的区间", () => {
+    expect(
+      demoWeeklyExportRequestSchema.safeParse({
+        weekStart: "2026-11-23",
+        weekEnd: "2026-11-28",
+        content: buildWeeklyContent(),
+      }).success,
+    ).toBe(false);
+  });
+
+  it("拒绝超长字段，防止公开接口被滥用", () => {
+    expect(
+      demoWeeklyExportRequestSchema.safeParse({
+        weekStart: "2026-11-23",
+        weekEnd: "2026-11-29",
+        content: {
+          ...buildWeeklyContent(),
+          reflection: "字".repeat(4001),
+        },
+      }).success,
     ).toBe(false);
   });
 });

@@ -187,6 +187,59 @@ export type ReviewSnippet = {
   finalText: string;
 };
 
+/** 周报状态：草稿可反复编辑，定稿后作为当周最终版本 */
+export type WeeklyReportStatus = "draft" | "finalized";
+
+/** 周报结构，字段与 Excel 模板的单元格一一对应 */
+export type WeeklyReportContent = {
+  summary: {
+    miantan: string;
+    weixin: string;
+  };
+  metrics: {
+    qingjia: string;
+    yujing: string;
+    tingke: string;
+    jieke: string;
+    kuoke: string;
+    xinqian: string;
+    xufei: string;
+    activeStudentsByGrade: string;
+  };
+  reflection: string;
+  nextWeek: {
+    zhongdianHuifang: string;
+    jiazhanghui: string;
+  };
+  supportNeeded: string;
+};
+
+/** 周次信息，纯文本标题、Excel 文档属性共用 */
+export type WeeklyReportMeta = {
+  weekStart: string;
+  weekEnd: string;
+};
+
+export type WeeklyReport = {
+  id: string;
+  weekStart: string;
+  weekEnd: string;
+  content: WeeklyReportContent;
+  status: WeeklyReportStatus;
+  sourceReviewCount: number;
+  generatedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/** 周报生成用的一条来源日报 */
+export type WeeklySourceReview = {
+  reviewDate: string;
+  finalText: string;
+  draft: ReviewDraft;
+  rawInput: string;
+};
+
 export type SectionMeta = {
   title: string;
   short: string;

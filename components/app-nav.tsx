@@ -2,6 +2,7 @@
 
 import {
   Brain,
+  CalendarRange,
   ClipboardList,
   History,
   Settings,
@@ -29,6 +30,7 @@ type NavItem = {
 const NAV: NavItem[] = [
   { href: "/", label: "今日复盘", icon: ClipboardList },
   { href: "/history", label: "历史", icon: History },
+  { href: "/weekly", label: "周报", icon: CalendarRange },
   { href: "/memories", label: "记忆", icon: Brain },
   { href: "/students", label: "学生", icon: Users },
   { href: "/settings", label: "设置", icon: Settings },
@@ -91,7 +93,7 @@ export function DesktopNav({ basePath = "" }: { basePath?: string }) {
   const { isActive, hrefFor } = useNavState(basePath);
 
   return (
-    <nav className="hidden items-center gap-1 md:flex">
+    <nav className="hidden items-center gap-0.5 md:flex">
       {NAV.map((item) => {
         const Icon = item.icon;
         const active = isActive(item.href);
@@ -102,7 +104,7 @@ export function DesktopNav({ basePath = "" }: { basePath?: string }) {
             href={hrefFor(item.href)}
             aria-current={active ? "page" : undefined}
             className={cn(
-              "flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+              "flex items-center gap-2 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors",
               active
                 ? "bg-brand-soft text-brand-deep"
                 : "text-ink-soft hover:bg-cream-deep/60 hover:text-ink",
@@ -122,7 +124,7 @@ export function MobileNav({ basePath = "" }: { basePath?: string }) {
 
   return (
     <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-line/70 bg-paper/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md md:hidden">
-      <div className="grid grid-cols-5">
+      <div className="grid grid-cols-6">
         {NAV.map((item) => {
           const Icon = item.icon;
           const active = isActive(item.href);

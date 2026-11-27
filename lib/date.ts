@@ -80,3 +80,46 @@ export function relativeDateLabel(iso: string): string {
 export function isToday(iso: string): boolean {
   return iso === todayISO();
 }
+
+export type WeekRange = {
+  weekStart: string;
+  weekEnd: string;
+};
+
+/** ISO 日期所在星期的数字：0=周日、1=周一……6=周六 */
+function weekdayIndex(iso: string): number {
+  // 12:00 +08:00 对应同一天的 04:00 UTC，getUTCDay 与上海时区星期一致
+  return new Date(`${iso}T12:00:00+08:00`).getUTCDay();
+}
+
+/** 指定日期所在自然周，周一到周日；非法日期按今天处理 */
+export function getWeekRange(dateStr?: string): WeekRange {
+  const base = dateStr && isValidISODate(dateStr) ? dateStr : todayISO();
+  const offsetFromMonday = (weekdayIndex(base) + 6) % 7;
+  const weekStart = addDaysISO(base, -offsetFromMonday);
+
+  return { weekStart, weekEnd: addDaysISO(weekStart, 6) };
+}
+
+/**
+ * 周报默认周次：周一默认上一周，方便周一补上周的周报；
+ * 周二到周日默认本周。
+ */
+export function getDefaultWeeklyReportRange(now: Date = new Date()): WeekRange & {
+  isMondayDefaultLastWeek: boolean;
+} {
+  const today = todayISO(now);
+  const isMondayDefaultLastWeek = weekdayIndex(today) === 1;
+  const base = isMondayDefaultLastWeek ? addDaysISO(today, -7) : today;
+
+  return { ...getWeekRange(base), isMondayDefaultLastWeek };
+}
+
+/** 以周一为基准前后移动整周；非法输入按本周处理 */
+export function shiftWeek(weekStart: string, offsetWeeks: number): WeekRange {
+  const { weekStart: normalized } = getWeekRange(weekStart);
+  const weeks = Number.isFinite(offsetWeeks) ? Math.trunc(offsetWeeks) : 0;
+  const start = addDaysISO(normalized, weeks * 7);
+
+  return { weekStart: start, weekEnd: addDaysISO(start, 6) };
+}

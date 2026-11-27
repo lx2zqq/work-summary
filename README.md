@@ -2,7 +2,7 @@
 
 学管师每天要交固定格式的工作复盘，原始输入通常是「林小满作业写完了，错题讲了两道，跟她妈妈说了下」这类口语流水账，缺主语、缺结果、缺渠道。这个项目把「补全」和「成文」拆成两步：先追问补齐信息，再生成可以直接粘贴到钉钉的结构化正文。
 
-> **演示**：启动项目后访问 `/demo` — 免登录，工作台、历史、学生、记忆、设置五个页面均可操作。数据来自 `lib/demo-data.ts`，刷新后恢复初始状态。
+> **演示**：启动项目后访问 `/demo` — 免登录，工作台、历史、周报、记忆、学生、设置六个页面均可操作。数据来自 `lib/demo-data.ts`，刷新后恢复初始状态。
 
 ## 一个真实例子
 
@@ -72,6 +72,16 @@ flowchart TD
 
 没有引入向量库：记忆量在几百条以内，这个相似度足够覆盖措辞变化。工具模式下按需查询；降级模式按「通用记忆 + 今天提到的学生」预注入，最多 40 条。
 
+### 周报
+
+每周把 7 天（或自定义 14 天以内）的日报汇总成一份可以直接提交的周报，保存在 `weekly_reports` 表，`week_start` 唯一，支持自动保存、手工编辑和导出。
+
+周次统一按 `Asia/Shanghai` 计算，周一到周日。**周一打开时默认定位上一周**，避免把还没过完的本周当成完整周；周二到周日默认本周。顶部可以切上一周 / 本周 / 下一周，也可以任选一天自动归一到所在自然周。右侧可以展开「自定义汇总日期范围」，用于周五收口或跨到周一补录，区间最长 14 天。
+
+生成时串行读取区间内日报、当前活跃的长期记忆和在读学员，先由程序统计各年级人数，再让模型只做归纳：严禁编造未出现的学生、数量或业务事件，日报没提到的请假/预警/停课/结课/扩科/新签/续费统一填「无」，没有求助填「暂无」，年级人数始终以程序统计为准。模型结果经过 `extractJson` + Zod 校验，首次失败静默重试一次；已有内容或人工修改时，重新生成会先弹确认框。AI 生成后自动保存，编辑后可直接导出；导出前如果有未保存修改，会先自动保存。界面只区分「未生成 / 有改动 / 已保存」，不再要求手动定稿。
+
+导出走 `templates/weekly-report-template.xlsx`，用 `exceljs` 填充模板，保留宋体、边框和合并单元格；模板随仓库部署，缺失时导出会失败并在服务端日志里给出模板路径。接口包括 `GET /api/weekly-reports`（读取周次与来源日报）、`POST /api/weekly-reports/generate`（生成并落库）、`PUT /api/weekly-reports/[weekStart]`（保存编辑）、`GET /api/weekly-reports/[weekStart]/export`（导出），演示导出走 `POST /api/demo/weekly-export`。`/weekly` 是正式工作台，`/demo/weekly` 用内存样例演示同样的切周、模拟生成、编辑、复制和真实 `.xlsx` 导出。接口细节与单元格映射见 [docs/architecture.md](docs/architecture.md)。
+
 ### 语音与移动端
 
 支持 Web Speech API 的浏览器直接用浏览器识别；不支持的环境（安卓微信等）自动切到录音上传，服务端转发 SiliconFlow SenseVoiceSmall 转写，音频不写库。PWA manifest 支持添加到主屏幕。
@@ -108,6 +118,7 @@ npm run eval:ai   # 在线：真实模型生成 + 规则检查，可选 LLM judg
 | 后端 | Route Handlers、Zod、OpenAI SDK |
 | 数据 | Drizzle ORM；本地 PGlite，生产 Supabase Postgres |
 | 模型 | DeepSeek OpenAI 兼容接口，默认 `deepseek-flash` |
+| 导出 | `exceljs` 填充 Excel 模板，保留宋体、边框和合并单元格 |
 | 语音 | Web Speech API + SiliconFlow SenseVoiceSmall |
 | 测试与部署 | Vitest、Playwright 验证脚本；腾讯云轻量服务器 + GitHub Actions + Supabase |
 
@@ -131,13 +142,14 @@ GitHub Actions 的 `Deploy production` 工作流在 `main` 的 CI 通过后自�
 
 ```text
 app/              页面与 Route Handlers（含 /demo）
-components/       工作台、历史、学生、记忆、设置与基础 UI
-lib/ai/           DeepSeek 调用、Prompt、工具循环、记忆抽取
+components/       工作台、历史、周报、学生、记忆、设置与基础 UI
+lib/ai/           DeepSeek 调用、Prompt、工具循环、记忆抽取、周报聚合
 lib/db/           Drizzle schema、连接与查询
 lib/eval/         评测规则检查和 judge
 eval/             评测数据集与基线
 drizzle/          迁移 SQL
 scripts/          迁移、评测、统计、UI 验证脚本
+templates/        周报 Excel 模板
 tests/            Vitest 单元测试
 docs/             架构、评测、部署、FAQ
 ```

@@ -1,4 +1,4 @@
-import { addDaysISO } from "./date";
+import { addDaysISO, getWeekRange, shiftWeek } from "./date";
 import {
   DEFAULT_SETTINGS,
   emptySections,
@@ -9,7 +9,10 @@ import {
   type ReviewDraft,
   type ReviewListItem,
   type Student,
+  type WeeklyReport,
+  type WeeklyReportContent,
 } from "./types";
+import { summarizeActiveStudentsByGrade } from "./weekly-report";
 
 /**
  * 演示页面用的固定数据。
@@ -281,6 +284,162 @@ export function buildDemoReviews(today: string): ReviewListItem[] {
       finalText: "",
       questions: 2,
       updatedAt: `${addDaysISO(today, -3)}T18:40:00.000Z`,
+    },
+  ];
+}
+
+/** 演示周报里程序统计好的在读年级人数 */
+export function demoWeeklyActiveGrades(): string {
+  return summarizeActiveStudentsByGrade(DEMO_STUDENTS);
+}
+
+/** 演示页的模拟 AI 生成结果 */
+export function buildDemoWeeklyGeneratedContent(
+  activeStudentsByGrade: string = demoWeeklyActiveGrades(),
+): WeeklyReportContent {
+  return {
+    summary: {
+      miantan: [
+        "林小满：沟通本周排课，确认周四晚数学课。",
+        "陈一鸣：电话沟通感冒请假，确认周六补课。",
+      ].join("\n"),
+      weixin: [
+        "林小满妈妈：微信同步作业完成情况。",
+        "陈一鸣妈妈：微信确认补课时间。",
+      ].join("\n"),
+    },
+    metrics: {
+      qingjia: "陈一鸣（感冒请假 1 天）",
+      yujing: "无",
+      tingke: "无",
+      jieke: "无",
+      kuoke: "无",
+      xinqian: "无",
+      xufei: "林小满（续费 1 单）",
+      activeStudentsByGrade,
+    },
+    reflection: [
+      "1. 排课调整先确认到课，再同步家长，最后核对课消，顺序固定后不容易漏。",
+      "2. 请假补课当天就写进课表，第二天不用再重复确认。",
+    ].join("\n"),
+    nextWeek: {
+      zhongdianHuifang: [
+        "陈一鸣：确认周六补课到课情况。",
+        "林小满：跟进续费后的课消进度。",
+      ].join("\n"),
+      jiazhanghui: "无",
+    },
+    supportNeeded: "暂无",
+  };
+}
+
+function buildDemoWeeklyFinalizedContent(
+  activeStudentsByGrade: string,
+): WeeklyReportContent {
+  return {
+    summary: {
+      miantan:
+        "陈一鸣：沟通数学错题订正计划，家长确认每周检查一次。",
+      weixin:
+        "林小满妈妈：微信沟通本周排课，确认周四晚有空位。",
+    },
+    metrics: {
+      qingjia: "无",
+      yujing: "陈一鸣（数学基础较弱）",
+      tingke: "无",
+      jieke: "无",
+      kuoke: "无",
+      xinqian: "无",
+      xufei: "无",
+      activeStudentsByGrade,
+    },
+    reflection: [
+      "1. 错题订正计划要让家长知道检查节点，不能只发一句“多关注”。",
+      "2. 排课确认后当天更新课表，避免家长第二天再问。",
+    ].join("\n"),
+    nextWeek: {
+      zhongdianHuifang: "陈一鸣：跟进错题订正执行情况。",
+      jiazhanghui: "周六下午，提前准备本周学情汇总。",
+    },
+    supportNeeded: "暂无",
+  };
+}
+
+function buildDemoWeeklyDraftContent(
+  activeStudentsByGrade: string,
+): WeeklyReportContent {
+  const generated = buildDemoWeeklyGeneratedContent(activeStudentsByGrade);
+
+  return {
+    ...generated,
+    summary: {
+      miantan: "林小满：沟通本周排课，确认周四晚数学课。",
+      weixin: "",
+    },
+    reflection: "排课确认后当天更新课表，避免家长第二天再问。",
+    nextWeek: {
+      zhongdianHuifang: "",
+      jiazhanghui: "无",
+    },
+  };
+}
+
+/** 演示周报可关联的日报日期：上周工作日 + 本周到今天 + 历史页已有日报 */
+export function buildDemoWeeklyReviewDates(today: string): string[] {
+  const current = getWeekRange(today);
+  const last = shiftWeek(current.weekStart, -1);
+  const dates = new Set<string>();
+
+  for (let index = 0; index < 5; index += 1) {
+    dates.add(addDaysISO(last.weekStart, index));
+  }
+
+  for (let index = 0; index < 7; index += 1) {
+    const date = addDaysISO(current.weekStart, index);
+    if (date > today) break;
+    dates.add(date);
+  }
+
+  for (const review of buildDemoReviews(today)) {
+    dates.add(review.reviewDate);
+  }
+
+  return [...dates].sort();
+}
+
+/** 演示页初始周报：上一周已定稿，本周草稿 */
+export function buildDemoWeeklyReports(today: string): WeeklyReport[] {
+  const current = getWeekRange(today);
+  const last = shiftWeek(current.weekStart, -1);
+  const active = demoWeeklyActiveGrades();
+  const reviewDates = buildDemoWeeklyReviewDates(today);
+  const countIn = (start: string, end: string) =>
+    reviewDates.filter((date) => date >= start && date <= end).length;
+  const stamp = `${today}T10:00:00.000Z`;
+
+  return [
+    {
+      id: "demo-weekly-last",
+      weekStart: last.weekStart,
+      weekEnd: last.weekEnd,
+      content: buildDemoWeeklyFinalizedContent(active),
+      status: "finalized",
+      sourceReviewCount: countIn(last.weekStart, last.weekEnd),
+      generatedAt: `${last.weekEnd}T10:00:00.000Z`,
+      createdAt: `${last.weekStart}T10:00:00.000Z`,
+      updatedAt: `${last.weekEnd}T10:00:00.000Z`,
+    },
+    {
+      id: "demo-weekly-current",
+      weekStart: current.weekStart,
+      weekEnd: current.weekEnd,
+      content: buildDemoWeeklyDraftContent(active),
+      status: "draft",
+      sourceReviewCount: countIn(current.weekStart, current.weekEnd),
+      // 当前草稿视为人工写过的版本，重新生成前会弹确认框
+      generatedAt: null,
+      createdAt: stamp,
+      updatedAt: stamp,
     },
   ];
 }

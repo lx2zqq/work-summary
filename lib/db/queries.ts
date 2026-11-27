@@ -46,6 +46,10 @@ import {
   type ReviewStyle,
   type Student,
   type StudentStatus,
+  type WeeklyReport,
+  type WeeklyReportContent,
+  type WeeklyReportStatus,
+  type WeeklySourceReview,
 } from "@/lib/types";
 import { getDb } from "./index";
 import {
@@ -53,6 +57,7 @@ import {
   reviews,
   settings as settingsTable,
   students,
+  weeklyReports,
 } from "./schema";
 
 function mapSettings(
@@ -110,6 +115,22 @@ function mapStudent(row: typeof students.$inferSelect): Student {
     subjects: row.subjects,
     status: row.status,
     note: row.note,
+  };
+}
+
+function mapWeeklyReport(
+  row: typeof weeklyReports.$inferSelect,
+): WeeklyReport {
+  return {
+    id: row.id,
+    weekStart: row.weekStart,
+    weekEnd: row.weekEnd,
+    content: row.content,
+    status: row.status,
+    sourceReviewCount: row.sourceReviewCount,
+    generatedAt: row.generatedAt?.toISOString() ?? null,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
   };
 }
 
@@ -407,6 +428,117 @@ export async function getRecentReviews(
     .filter((row) => row.finalText.trim().length > 0)
     .map((row) => ({ date: row.reviewDate, text: row.finalText }))
     .reverse();
+}
+
+/** 周报面板只需要来源日期，避免把整篇正文拉回来 */
+export async function listReviewDatesInRange(
+  startDate: string,
+  endDate: string,
+): Promise<string[]> {
+  const rows = await getDb()
+    .select({ reviewDate: reviews.reviewDate })
+    .from(reviews)
+    .where(
+      and(
+        gte(reviews.reviewDate, startDate),
+        lte(reviews.reviewDate, endDate),
+      ),
+    )
+    .orderBy(reviews.reviewDate);
+
+  return rows.map((row) => row.reviewDate);
+}
+
+/** 周报生成需要完整日报内容，按日期升序，保证模型按时间线归纳 */
+export async function listWeeklySourceReviews(
+  startDate: string,
+  endDate: string,
+): Promise<WeeklySourceReview[]> {
+  const rows = await getDb()
+    .select({
+      reviewDate: reviews.reviewDate,
+      finalText: reviews.finalText,
+      draft: reviews.draft,
+      rawInput: reviews.rawInput,
+    })
+    .from(reviews)
+    .where(
+      and(
+        gte(reviews.reviewDate, startDate),
+        lte(reviews.reviewDate, endDate),
+      ),
+    )
+    .orderBy(reviews.reviewDate);
+
+  return rows.map((row) => ({
+    reviewDate: row.reviewDate,
+    finalText: row.finalText,
+    draft: row.draft ? normalizeDraft(row.draft) : emptyDraft(),
+    rawInput: row.rawInput,
+  }));
+}
+
+/** 周报只统计在读学员，和记忆、复盘查询分开，避免把停课学生算进去 */
+export async function listActiveStudents(): Promise<Student[]> {
+  const rows = await getDb()
+    .select()
+    .from(students)
+    .where(eq(students.status, "在读"))
+    .orderBy(students.createdAt);
+
+  return rows.map(mapStudent);
+}
+
+export async function getWeeklyReport(
+  weekStart: string,
+): Promise<WeeklyReport | null> {
+  const [row] = await getDb()
+    .select()
+    .from(weeklyReports)
+    .where(eq(weeklyReports.weekStart, weekStart))
+    .limit(1);
+
+  return row ? mapWeeklyReport(row) : null;
+}
+
+/** 生成和手动保存共用同一个 upsert，week_start 唯一约束保证一周只有一条 */
+export async function saveWeeklyReport(input: {
+  weekStart: string;
+  weekEnd: string;
+  content: WeeklyReportContent;
+  status: WeeklyReportStatus;
+  sourceReviewCount: number;
+  generatedAt: Date | null;
+}): Promise<WeeklyReport> {
+  const now = new Date();
+
+  const [row] = await getDb()
+    .insert(weeklyReports)
+    .values({
+      weekStart: input.weekStart,
+      weekEnd: input.weekEnd,
+      content: input.content,
+      status: input.status,
+      sourceReviewCount: input.sourceReviewCount,
+      generatedAt: input.generatedAt,
+      updatedAt: now,
+    })
+    .onConflictDoUpdate({
+      target: weeklyReports.weekStart,
+      set: {
+        weekEnd: input.weekEnd,
+        content: input.content,
+        status: input.status,
+        sourceReviewCount: input.sourceReviewCount,
+        generatedAt: input.generatedAt,
+        updatedAt: now,
+      },
+    })
+    .returning();
+
+  if (!row) throw new Error("保存周报失败");
+
+  return mapWeeklyReport(row);
 }
 
 export async function saveReview(input: {

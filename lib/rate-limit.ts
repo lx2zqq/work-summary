@@ -121,14 +121,17 @@ export function resetLoginRateLimit(key: string): void {
   loginLimiter.reset(key);
 }
 
-/** AI 计费接口的限流窗口 */
+/** 消耗模型额度或公开接口的限流窗口 */
 const AI_WINDOW_MS = 5 * 60 * 1000;
+const DEMO_WINDOW_MS = 10 * 60 * 1000;
 
 export type AiRateLimitScope =
   | "generate"
   | "transcribe"
   | "memoryExtract"
-  | "phrasePreview";
+  | "phrasePreview"
+  | "weeklyGenerate"
+  | "demoWeeklyExport";
 
 // 各接口独立计数，避免追问/成稿频率互相挤占额度
 const aiLimiters: Record<AiRateLimitScope, RateLimiter> = {
@@ -146,6 +149,15 @@ const aiLimiters: Record<AiRateLimitScope, RateLimiter> = {
   }),
   phrasePreview: createRateLimiter({
     windowMs: AI_WINDOW_MS,
+    maxAttempts: 20,
+  }),
+  weeklyGenerate: createRateLimiter({
+    windowMs: AI_WINDOW_MS,
+    maxAttempts: 8,
+  }),
+  // 公开演示接口不登录，限流更保守
+  demoWeeklyExport: createRateLimiter({
+    windowMs: DEMO_WINDOW_MS,
     maxAttempts: 20,
   }),
 };

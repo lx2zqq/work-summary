@@ -19,6 +19,8 @@ import type {
   ReviewDraft,
   ReviewStyle,
   StudentStatus,
+  WeeklyReportContent,
+  WeeklyReportStatus,
 } from "@/lib/types";
 
 export const students = pgTable("students", {
@@ -133,6 +135,26 @@ export const memories = pgTable(
   ],
 );
 
+/** 每周一条周报，week_start 为周一，天然防止重复生成 */
+export const weeklyReports = pgTable("weekly_reports", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  weekStart: date("week_start", { mode: "string" }).notNull().unique(),
+  weekEnd: date("week_end", { mode: "string" }).notNull(),
+  content: jsonb("content").$type<WeeklyReportContent>().notNull(),
+  status: text("status")
+    .$type<WeeklyReportStatus>()
+    .notNull()
+    .default("draft"),
+  sourceReviewCount: integer("source_review_count").notNull().default(0),
+  generatedAt: timestamp("generated_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
 /** 只记录数量、枚举和耗时，不记录复盘原文、学生姓名或问题内容 */
 export const usageEvents = pgTable(
   "usage_events",
@@ -161,4 +183,5 @@ export type StudentRow = typeof students.$inferSelect;
 export type ReviewRow = typeof reviews.$inferSelect;
 export type SettingsRow = typeof settings.$inferSelect;
 export type MemoryRow = typeof memories.$inferSelect;
+export type WeeklyReportRow = typeof weeklyReports.$inferSelect;
 export type UsageEventRow = typeof usageEvents.$inferSelect;

@@ -37,3 +37,21 @@ export function rateLimitExceeded(retryAfter: number): NextResponse {
     },
   );
 }
+
+/** 周报 Excel 下载响应：同时提供 ASCII 兜底名和 UTF-8 中文名 */
+export function xlsxResponse(
+  buffer: Buffer,
+  range: { weekStart: string; weekEnd: string },
+): Response {
+  const filename = `周报_${range.weekStart}_${range.weekEnd}.xlsx`;
+  const fallback = `weekly-report_${range.weekStart}_${range.weekEnd}.xlsx`;
+
+  return new Response(new Uint8Array(buffer), {
+    headers: {
+      "Content-Type":
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "Content-Disposition": `attachment; filename="${fallback}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
+      "Cache-Control": "no-store",
+    },
+  });
+}

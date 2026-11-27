@@ -14,6 +14,8 @@
         ├── /api/reviews       保存、读取与删除复盘
         ├── /api/export        数据备份（JSON / Markdown）
         ├── /api/memories      长期记忆 CRUD 与抽取
+        ├── /api/weekly-reports 周报读取、生成、保存与 Excel 导出
+        ├── /api/demo/weekly-export 演示周报导出（免登录）
         ├── /api/students      学生管理
         ├── /api/settings      设置
         ├── /api/transcribe    录音转写
@@ -29,6 +31,7 @@
 | `reviews` | 每天的复盘 | `review_date`（唯一）、`raw_input`、`draft`、`final_text`、`conversation`、`round` |
 | `settings` | 全局设置 | 默认文风、栏目开关、通用话术、长期记忆 |
 | `memories` | 长期记忆 | `scope`、`student_id`、`category`、`content`、`importance`、`status`、`lifecycle`、`expires_at`、`archive_after`、`archive_reason` |
+| `weekly_reports` | 每周周报 | `week_start`（唯一，周一）、`week_end`、`content`（JSONB）、`status`、`source_review_count`、`generated_at` |
 | `usage_events` | 使用埋点 | `event`、`review_date`、`properties`（只存数量/枚举/耗时） |
 
 `reviews.draft` 是整个生成链路的核心数据，结构为：
@@ -136,6 +139,7 @@
 4. **兜底草稿**：没有 Key 或模型持续失败时，按标点拆分原文生成草稿，页面不崩。
 5. **数据保护**：空正文、漏栏目、改文风条目数变化都不会静默覆盖用户内容。
 6. **记忆解析容错**：Markdown 围栏、裸数组、单条字段漂移都会先清洗；首次解析失败静默重试一次，两次都失败才记录截断预览并返回格式错误。
+7. **周报解析容错**：周报输出先清掉 Markdown 围栏再截取 JSON，缺字段补「无/暂无」；首次失败静默重试一次，年级人数始终覆盖为程序统计值。
 
 ## 长期记忆
 
@@ -189,6 +193,65 @@ active ──(阶段性记忆过期)──▶ pending_archive ──(宽限期�
 - 恢复：`restoreMemory` 默认转回长期，避免恢复后立刻再次过期。
 
 选择软归档而不是物理删除，是因为记忆里可能有家长偏好、学生特点等不可再生的信息；删除不可逆，5 天宽限期让用户有机会纠正误判。物理删除仍然只由用户在记忆页手动触发。
+
+## 周报
+
+周报把一周（或自定义 14 天以内）的日报汇总成一份可以直接提交的文档。数据流：
+
+```text
+选择周次 / 自定义汇总区间
+        │
+        ▼
+GET /api/weekly-reports
+  │ 串行：weekly_reports → reviews 日期 → 在读学员
+  ▼
+编辑 / AI 生成
+        │
+        ▼
+POST /api/weekly-reports/generate
+  │ 串行：区间内日报 → 活跃长期记忆 → 在读学员
+  ▼
+lib/ai/weekly.ts（归纳 + extractJson + Zod + 一次重试）
+  │ 程序统计的 activeStudentsByGrade 强制覆盖模型结果
+  ▼
+upsert weekly_reports → PUT 保存 → Excel 导出
+```
+
+**周次计算**
+
+- `getWeekRange(date)` 把任意日期归一到所在自然周，周一到周日，统一按 `Asia/Shanghai`。
+- `getDefaultWeeklyReportRange()` 在周一时默认上一周，返回 `isMondayDefaultLastWeek: true`；周二到周日默认本周。
+- `shiftWeek(weekStart, ±1)` 计算上一周/下一周，跨月跨年沿用同一套字符串日期运算。
+
+**数据组装**
+
+- `GET /api/weekly-reports` 支持可选 `weekStart` 和自定义 `sourceStartDate` / `sourceEndDate`；未传时使用默认周次和整周。
+- 严格串行查询：周报记录 → 区间内日报日期 → 在读学员，返回 `report`、`sourceReviews`、`computedActiveStudentsByGrade`。
+- `POST /api/weekly-reports/generate` 严格串行查询日报正文、当前活跃的长期记忆和在读学员；区间内没有日报时返回 400，不调用模型。
+- 自定义区间必须同时传开始和结束，开始不晚于结束，最长 14 天；不传时默认 `[weekStart, weekEnd]`。
+
+**AI 汇总**
+
+- `lib/ai/weekly.ts` 输入日报的最终稿、栏目草稿、原始流水账、活跃记忆和程序统计的年级人数。
+- Prompt 明确禁止编造：日报没提到的请假/预警/停课/结课/扩科/新签/续费统一填「无」，没有求助填「暂无」，年级人数原样采用程序统计。
+- `summary.miantan` 和 `summary.weixin` 分渠道归纳；`reflection` 要求 2~4 条有具体落脚点的心得；`nextWeek.zhongdianHuifang` 结合未闭环问题和长期记忆。
+- 解析复用 `extractJson` + `weeklyReportContentSchema`，缺字段补默认值，首次失败静默重试一次；两次失败返回 502。
+
+**保存与导出**
+
+- `PUT /api/weekly-reports/[weekStart]` 保存手工编辑内容，`week_start` 归一为周一；已有记录保留 `source_review_count` 和 `generated_at`。
+- `weekly_reports.status` 保留用于兼容历史数据和 API；当前界面只区分「未生成 / 有改动 / 已保存」，不再要求手动定稿，导出前有未保存修改会先自动保存。
+- `GET /api/weekly-reports/[weekStart]/export` 读取已保存周报，用 `exceljs` 填充 `templates/weekly-report-template.xlsx`，返回 `.xlsx` 二进制流。
+- 模板导出保留宋体、边框和原有合并单元格；写入 C3（面谈/微信）、C17-C24（数据汇总）、C31（心得）、C32-C33（下周安排）、C34（需要的支持）。
+- 安全补充合并 `C17:N17` 到 `C23:N23`，跳过已存在的相交区域；清空模板里 J20 的孤立冒号；对写入单元格开启 `wrapText`，按内容行数估算并调高行高。
+- `next.config.ts` 把 `exceljs` 放进 `serverExternalPackages`，避免打包器改写 Node 文件系统调用。
+- 下载响应使用 `Content-Disposition: attachment; filename="..."; filename*=UTF-8''...`，前端 `fetch → blob → a[download]` 使用同源请求和本地 blob，不依赖外部资源。
+
+**演示**
+
+- `/demo/weekly` 使用 `WeeklyReportWorkspace mode="demo"`，样例包含上一周、本周两份已保存样例和模拟 AI 生成结果，数据来自 `lib/demo-data.ts` 的内存状态。
+- 演示的 AI 生成只做短暂 loading 后填充样例，不调用模型；导出仍调用真实 `POST /api/demo/weekly-export`，所以下载的是套用模板的真实 `.xlsx`。
+- demo 导出接口免登录，但接入限流并用 `weeklyReportContentSchema` + 自然周校验，字段长度受限，不读写数据库。
 
 ## 通用复盘话术
 
@@ -244,6 +307,9 @@ active ──(阶段性记忆过期)──▶ pending_archive ──(宽限期�
 
 模板话术长度控制在 45~60 字；AI 优化建议推荐 30~70 字，至少 25 字，不强行对齐模板长度。扩写时只增加具体动作和可验证结果，不堆形容词——否则字数是够了，但读起来更像套话。
 
+**为什么周报用 Excel 模板而不是代码画表**
+周报要直接交给主管，格式固定且需要保留宋体和合并单元格。用代码逐格画表很难和线下模板完全一致，所以把模板放仓库，`exceljs` 只负责填值、补合并和行高；模板调整不需要改代码，代价是单元格坐标和列结构耦合，模板改动时必须同步 `lib/weekly-export.ts`。
+
 **为什么埋点不存内容**
 复盘里包含学生姓名和家长沟通细节。分析只需要数量和比率，存原文会让分析表变成第二份隐私副本。
 
@@ -255,4 +321,6 @@ active ──(阶段性记忆过期)──▶ pending_archive ──(宽限期�
 - 单个实例的登录限流是内存 Map，Serverless 多实例下不严格；
 - 评测集只有 30 条，规则检查覆盖结构，不能完全替代人工评审；
 - 改文风依赖模型严格保持条目数，失败时会保留原稿并提示重试；
-- 记忆生命周期靠惰性流转，长时间不访问时状态不会提前变化；需要固定节奏时用可选的定时接口。
+- 记忆生命周期靠惰性流转，长时间不访问时状态不会提前变化；需要固定节奏时用可选的定时接口；
+- 周报导出依赖仓库内的 Excel 模板，模板缺失或列结构变化会导致导出失败；单元格映射目前固定在 C3、C17-C24、C31-C34；
+- 周报一次最多汇总 14 天日报，超长日报会按块截断；生成不流式，长周报需要等待完整返回。
