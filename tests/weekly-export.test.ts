@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
+import path from "node:path";
 import ExcelJS from "exceljs";
 import { createEmptyWeeklyReportContent } from "@/lib/weekly-report";
-import { buildWeeklyReportXlsx } from "@/lib/weekly-export";
+import {
+  buildWeeklyReportXlsx,
+  fitRowHeight,
+} from "@/lib/weekly-export";
 import type { WeeklyReportContent, WeeklyReportMeta } from "@/lib/types";
 
 const meta: WeeklyReportMeta = {
@@ -155,6 +159,27 @@ describe("buildWeeklyReportXlsx", () => {
     );
 
     expect(worksheet.getRow(3).height).toBeGreaterThan(14);
+  });
+
+  it("合并块按真实行高计算容量，避免撑出多余空白", async () => {
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.readFile(
+      path.join(process.cwd(), "templates", "weekly-report-template.xlsx"),
+    );
+    const worksheet = workbook.getWorksheet("Sheet1");
+    if (!worksheet) throw new Error("缺少 Sheet1");
+
+    // C3:N16 的最后一行在模板里自带较大行高
+    worksheet.getRow(16).height = 200;
+    const text = Array.from(
+      { length: 19 },
+      (_, index) => `第 ${index + 1} 行`,
+    ).join("\n");
+
+    fitRowHeight(worksheet, 3, text, 14);
+
+    // 真实合计高度已经足够，锚点行不应再被撑高
+    expect(worksheet.getRow(3).height ?? 14).toBe(14);
   });
 
   it("重复导出不会重复合并或报错", async () => {

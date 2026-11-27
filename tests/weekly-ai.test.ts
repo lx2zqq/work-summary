@@ -7,18 +7,27 @@ import {
 } from "@/lib/ai/weekly";
 import { emptyDraft } from "@/lib/types";
 
-function completion(content: string) {
+function completion(content: string, finishReason = "stop") {
   return {
-    choices: [{ message: { content }, finish_reason: "stop" }],
+    choices: [{ message: { content }, finish_reason: finishReason }],
     usage: { prompt_tokens: 100, completion_tokens: 50 },
   };
 }
 
-function fakeClient(responses: string[]) {
+type FakeResponse = string | { content: string; finishReason?: string };
+
+function fakeClient(responses: FakeResponse[]) {
   const create = vi.fn();
 
-  for (const content of responses) {
-    create.mockResolvedValueOnce(completion(content));
+  for (const response of responses) {
+    if (typeof response === "string") {
+      create.mockResolvedValueOnce(completion(response));
+      continue;
+    }
+
+    create.mockResolvedValueOnce(
+      completion(response.content, response.finishReason ?? "stop"),
+    );
   }
 
   return {
@@ -237,6 +246,31 @@ describe("generateWeeklyReport 重试", () => {
     expect(content.summary.weixin).toContain("微信");
     expect(create).toHaveBeenCalledTimes(2);
     expect(retried).toBe(true);
+  });
+
+  it("首次输出因长度截断时不回传完整超长内容", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => {});
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const truncatedContent = `{"summary":{"miantan":"${"很长的内容".repeat(
+      200,
+    )}`;
+    const { client, create } = fakeClient([
+      { content: truncatedContent, finishReason: "length" },
+      { content: VALID_RESPONSE, finishReason: "stop" },
+    ]);
+
+    const content = await generateWeeklyReport(INPUT, { client });
+
+    expect(content.summary.miantan).toContain("林小满");
+    expect(create).toHaveBeenCalledTimes(2);
+
+    const retryMessages = JSON.stringify(
+      create.mock.calls[1][0].messages,
+    );
+    expect(retryMessages).not.toContain("很长的内容");
+    expect(retryMessages).toContain("内容过长被截断");
+    expect(retryMessages).toContain("精简");
   });
 
   it("请求里带上程序统计的年级人数", async () => {

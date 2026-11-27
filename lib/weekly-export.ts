@@ -99,11 +99,19 @@ function estimateLineCount(text: string, charsPerLine: number): number {
   }, 0);
 }
 
+function readRowHeight(
+  worksheet: ExcelJS.Worksheet,
+  rowNumber: number,
+): number {
+  return worksheet.getRow(rowNumber).height || DEFAULT_ROW_HEIGHT;
+}
+
 /**
  * Excel 不会自动调整合并单元格的行高，这里按内容估算需要的总高度。
- * 合并区域的高度是块内所有行之和，只加高锚点行即可补足差额。
+ * 合并区域的高度是块内所有行之和；用量块内真实行高计算，
+ * 避免模板某一行本身较高时把锚点行撑出多余空白。
  */
-function fitRowHeight(
+export function fitRowHeight(
   worksheet: ExcelJS.Worksheet,
   rowNumber: number,
   text: string,
@@ -113,14 +121,23 @@ function fitRowHeight(
 
   const lines = estimateLineCount(text, CHARS_PER_LINE);
   const needed = lines * LINE_HEIGHT + ROW_PADDING;
-  const blockCapacity = blockRows * DEFAULT_ROW_HEIGHT;
+
+  let blockCapacity = 0;
+  let otherRowsHeight = 0;
+
+  for (let offset = 0; offset < blockRows; offset += 1) {
+    const height = readRowHeight(worksheet, rowNumber + offset);
+    blockCapacity += height;
+    if (offset > 0) otherRowsHeight += height;
+  }
+
   if (needed <= blockCapacity) return;
 
   const row = worksheet.getRow(rowNumber);
-  const current = row.height ?? DEFAULT_ROW_HEIGHT;
+  const current = readRowHeight(worksheet, rowNumber);
   const target = Math.min(
     MAX_ROW_HEIGHT,
-    Math.max(current, needed - (blockRows - 1) * DEFAULT_ROW_HEIGHT),
+    Math.max(current, needed - otherRowsHeight),
   );
 
   if (target > current) row.height = target;

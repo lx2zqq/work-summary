@@ -201,6 +201,14 @@ export function WeeklyReportWorkspace({
     content,
     computedActiveStudentsByGrade,
   );
+  // 已保存周报是否非空；重新打开页面后也要拦住误覆盖
+  const hasSavedReport = Boolean(
+    report &&
+      !isPristineWeeklyContent(
+        report.content,
+        computedActiveStudentsByGrade,
+      ),
+  );
   const busy = loading || refreshingSource || saving || isGenerating;
   const editorDisabled = loading || isGenerating;
   const isCustomSourceRange =
@@ -213,6 +221,19 @@ export function WeeklyReportWorkspace({
       mountedRef.current = false;
     };
   }, []);
+
+  // 有未保存修改时，刷新/关闭页面前让浏览器弹出确认
+  useEffect(() => {
+    if (!dirty) return;
+
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [dirty]);
 
   function markDirty() {
     dirtyRef.current = true;
@@ -592,7 +613,8 @@ export function WeeklyReportWorkspace({
       toast.info("该日期范围内暂无日报，可先手动填写");
       return;
     }
-    if (manualEdited || dirty) {
+    // 已保存的非空周报、本次会话的编辑或未保存修改都要先确认
+    if (hasSavedReport || manualEdited || dirty) {
       setConfirmOpen(true);
       return;
     }

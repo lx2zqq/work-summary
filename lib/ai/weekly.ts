@@ -551,10 +551,36 @@ export async function generateWeeklyReport(
     );
     usage.retried = true;
 
-    const retryInstruction =
-      firstResponse.finishReason === "length"
-        ? "上一次输出可能被截断，请压缩每条表述，优先保证 JSON 完整闭合。"
-        : "请只输出修正后的完整 JSON，不要输出解释或 Markdown 代码块。";
+    const truncated = firstResponse.finishReason === "length";
+
+    // 截断时不把完整超长输出塞回上下文，避免重试再次被挤爆
+    const retryMessages: ChatCompletionMessageParam[] = truncated
+      ? [
+          ...messages,
+          {
+            role: "user",
+            content: [
+              "上一次输出因为内容过长被截断，没有形成完整 JSON。",
+              "请大幅精简 summary、reflection 和 nextWeek 的每条内容，控制总长度，优先保证输出完整闭合的 JSON。",
+              `字段必须严格使用下面的英文 key：\n${OUTPUT_SCHEMA}`,
+            ].join("\n\n"),
+          },
+        ]
+      : [
+          ...messages,
+          {
+            role: "assistant",
+            content: firstResponse.content || "（空输出）",
+          },
+          {
+            role: "user",
+            content: [
+              `上面的输出不能使用：${first.error}。`,
+              "请只输出修正后的完整 JSON，不要输出解释或 Markdown 代码块。",
+              `字段必须严格使用下面的英文 key：\n${OUTPUT_SCHEMA}`,
+            ].join("\n\n"),
+          },
+        ];
 
     const retryResponse = await requestWeekly({
       client,
@@ -562,21 +588,7 @@ export async function generateWeeklyReport(
       temperature: 0.1,
       signal: options?.signal,
       usage,
-      messages: [
-        ...messages,
-        {
-          role: "assistant",
-          content: firstResponse.content || "（空输出）",
-        },
-        {
-          role: "user",
-          content: [
-            `上面的输出不能使用：${first.error}。`,
-            retryInstruction,
-            `字段必须严格使用下面的英文 key：\n${OUTPUT_SCHEMA}`,
-          ].join("\n\n"),
-        },
-      ],
+      messages: retryMessages,
     });
 
     const second = parseWeeklyReportResponse(
